@@ -74,6 +74,7 @@ def inspect_program_readiness(
     runtime_write_probe_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
+    freshness_status_path: str | Path | None = None,
     scheduled_task_status_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """以既有服務建立整體唯讀 readiness report。"""
@@ -137,6 +138,7 @@ def inspect_program_readiness(
                 / "data_update_quick"
                 / "latest_status.json"
             ),
+            _optional_path(freshness_status_path),
             _optional_path(scheduled_task_status_path),
         ),
         "performance": _inspect_performance_lane(
@@ -167,6 +169,11 @@ def inspect_program_readiness(
             "evidence_db_path": str(resolved_evidence_db),
             "research_db_path": str(resolved_research_db),
             "training_as_of": training_as_of,
+            "freshness_status_path": (
+                str(_optional_path(freshness_status_path))
+                if freshness_status_path is not None
+                else None
+            ),
         },
         "safety": {
             "side_effect_free": True,
@@ -463,6 +470,7 @@ def _inspect_runtime_lane(
 def _inspect_update_history_lane(
     history_path: Path,
     latest_status_path: Path,
+    freshness_status_path: Path | None = None,
     scheduled_task_status_path: Path | None = None,
 ) -> dict[str, Any]:
     history = read_update_status_history(history_path)
@@ -470,6 +478,11 @@ def _inspect_update_history_lane(
     records = [item for item in history.get("records", []) if isinstance(item, Mapping)]
     latest = history.get("latest") if isinstance(history.get("latest"), Mapping) else None
     latest_status = _read_optional_json_mapping(latest_status_path)
+    freshness_status = (
+        _read_optional_json_mapping(freshness_status_path)
+        if freshness_status_path is not None
+        else None
+    )
     scheduled_status = (
         _read_optional_json_mapping(scheduled_task_status_path)
         if scheduled_task_status_path is not None
@@ -485,6 +498,22 @@ def _inspect_update_history_lane(
                 "scheduled_tasks_missing_or_unavailable:"
                 f"{max(available_count, 0)}/{max(task_count, 0)}"
             )
+    freshness_issue = False
+    freshness_status_value = ""
+    if freshness_status_path is not None and freshness_status is None:
+        diagnostics.append("freshness_status_missing_or_invalid")
+        freshness_issue = True
+    elif freshness_status is not None:
+        freshness_status_value = str(freshness_status.get("status") or "").strip().lower()
+        if freshness_status_value in {"degraded", "passed_with_warnings"}:
+            diagnostics.append("data_freshness_degraded")
+            freshness_issue = True
+        elif freshness_status_value in {"failed", "error"}:
+            diagnostics.append("data_freshness_failed")
+            freshness_issue = True
+        elif freshness_status_value not in {"passed", "ok", "success", "current"}:
+            diagnostics.append("freshness_status_unknown")
+            freshness_issue = True
     if latest_status is not None and latest is not None:
         latest_status_run = str(latest_status.get("run_id") or "").strip()
         latest_history_run = str(latest.get("run_id") or "").strip()
@@ -510,6 +539,33 @@ def _inspect_update_history_lane(
         "latest_status_path": str(latest_status_path),
         "history": history,
         "latest_status": latest_status,
+        "freshness_status_path": (
+            str(freshness_status_path) if freshness_status_path is not None else None
+        ),
+        "freshness_status": freshness_status,
+        "freshness_projection": {
+            "status": freshness_status_value or None,
+            "checked_at": (
+                str(freshness_status.get("checked_at"))
+                if freshness_status is not None and freshness_status.get("checked_at") is not None
+                else None
+            ),
+            "warnings": (
+                _string_list(freshness_status.get("warnings"))
+                if freshness_status is not None
+                else []
+            ),
+            "errors": (
+                _string_list(freshness_status.get("errors"))
+                if freshness_status is not None
+                else []
+            ),
+            "read_only": (
+                freshness_status.get("read_only") is True
+                if freshness_status is not None
+                else None
+            ),
+        },
         "size_bytes": size_bytes,
         "max_bytes": MAX_STATUS_HISTORY_BYTES,
         "retention_status": (
@@ -536,6 +592,10 @@ def _inspect_update_history_lane(
         # 排程未註冊是可立即處理的 host 狀態，不應被誤標成單純等待
         # 下一次自然週期；即使 history 尚未建立，下一步也是先註冊 task。
         status = "action_required"
+    elif freshness_issue:
+        # 明確指定的 freshness artifact 若失敗、降級或缺漏，不能被
+        # history 尚未累積的 waiting 狀態掩蓋；資料新鮮度是獨立的可修復輸入。
+        status = "action_required"
     elif history_status in {"invalid", "missing"}:
         status = "action_required" if history_status == "invalid" else "waiting_for_external_input"
     elif history_status in {"not_configured", "empty"}:
@@ -549,12 +609,20 @@ def _inspect_update_history_lane(
     else:
         status = "ready"
     if status == "action_required":
+        action_items: list[str] = []
         if scheduler_missing:
-            actions = (
-                "由 owner 在正確 Windows 帳號下受控重新註冊 13 個 baldr task，再觀察下一次真實 running／terminal history；不可用舊 latest status 回填。",
+            action_items.append(
+                "由 owner 在正確 Windows 帳號下受控重新註冊 13 個 baldr task，再觀察下一次真實 running／terminal history；不可用舊 latest status 回填。"
             )
-        else:
-            actions = ("修正 history JSONL／latest status 的 schema 或 run identity；禁止用舊 latest status 回填 history。",)
+        if freshness_issue:
+            action_items.append(
+                "檢查明確指定的 data_freshness latest_status.json 與 warnings／errors，修正資料或輸出 ACL 後重新執行唯讀 freshness probe；不可用檔案修改時間冒充 checked_at。"
+            )
+        if not action_items:
+            action_items.append(
+                "修正 history JSONL／latest status 的 schema 或 run identity；禁止用舊 latest status 回填 history。"
+            )
+        actions = tuple(action_items)
     elif status == "waiting_for_external_input":
         actions = ("等待下一次真實 Data Update 排程自然產生 running 與 terminal history，再觀察 retention 與 UI live refresh。",)
     else:
@@ -859,6 +927,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
     parser.add_argument(
+        "--freshness-status-path",
+        type=Path,
+        help="唯讀 data_freshness latest_status.json；指定後會把 freshness 與 update history 分開投影",
+    )
+    parser.add_argument(
         "--scheduled-task-status",
         type=Path,
         help="唯讀 schtasks 註冊摘要 JSON；缺少時不會掃描或修改 task",
@@ -896,6 +969,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         runtime_write_probe_path=args.runtime_write_probe,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
+        freshness_status_path=args.freshness_status_path,
         scheduled_task_status_path=args.scheduled_task_status,
     )
     rendered = (

@@ -633,6 +633,78 @@ def test_program_readiness_projects_scheduler_registration_diagnostics(tmp_path:
     assert "重新註冊 13 個 baldr task" in lane["next_actions"][0]
 
 
+def test_program_readiness_projects_explicit_freshness_status(tmp_path: Path) -> None:
+    freshness_path = tmp_path / "freshness" / "latest_status.json"
+    freshness_path.parent.mkdir(parents=True, exist_ok=True)
+    freshness_path.write_text(
+        json.dumps(
+            {
+                "task": "baldr-data-freshness-check-daily",
+                "status": "passed",
+                "read_only": True,
+                "checked_at": "2026-08-28T05:00:00+08:00",
+                "checks": {
+                    "daily_prices_latest_date": "20260828",
+                    "technical_indicators_latest_date": "20260828",
+                },
+                "warnings": [],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        freshness_status_path=freshness_path,
+    )
+    lane = report["workstreams"]["update_history"]
+
+    assert lane["status"] == "waiting_for_external_input"
+    assert "data_freshness_failed" not in lane["blockers"]
+    assert lane["details"]["freshness_projection"] == {
+        "status": "passed",
+        "checked_at": "2026-08-28T05:00:00+08:00",
+        "warnings": [],
+        "errors": [],
+        "read_only": True,
+    }
+    assert report["inputs"]["freshness_status_path"] == str(freshness_path.resolve())
+
+
+def test_program_readiness_does_not_hide_freshness_failure_behind_empty_history(
+    tmp_path: Path,
+) -> None:
+    freshness_path = tmp_path / "freshness" / "latest_status.json"
+    freshness_path.parent.mkdir(parents=True, exist_ok=True)
+    freshness_path.write_text(
+        json.dumps(
+            {
+                "task": "baldr-data-freshness-check-daily",
+                "status": "failed",
+                "read_only": True,
+                "checked_at": "2026-08-28T05:00:00+08:00",
+                "checks": {},
+                "warnings": [],
+                "errors": ["sqlite_read_failed"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        freshness_status_path=freshness_path,
+    )
+    lane = report["workstreams"]["update_history"]
+
+    assert lane["status"] == "action_required"
+    assert "data_freshness_failed" in lane["blockers"]
+    assert any("freshness latest_status.json" in item for item in lane["next_actions"])
+
+
 def test_program_readiness_forwards_explicit_weekly_collection_sidecar(tmp_path: Path) -> None:
     sidecar = tmp_path / "sidecar" / "evidence_scheduler.db"
     sidecar.parent.mkdir(parents=True, exist_ok=True)
