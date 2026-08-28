@@ -1182,6 +1182,27 @@ calculator 的 staging process-pool 形狀通過；worker crash recovery、長�
 single-writer integration 與 broker HTTP rate-limit／retry 仍未完成，因此 production
 worker 數維持 1。
 
+若要驗證券商 HTTP fetch 的 bounded queue、global rate-limit、retry、duplicate 與
+single-writer 契約，可使用離線 transport probe：
+
+```powershell
+New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_analysis_broker_fetch_stage -Force
+.\.venv\Scripts\python.exe scripts\qa_broker_bounded_fetch_acceptance.py `
+  --staging-root C:\Users\archi\AppData\Local\Temp\technical_analysis_broker_fetch_stage `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --confirm-broker-fetch-probe --max-tasks 9 --workers 2 --max-in-flight 4 `
+  --max-retries 1 --rate-limit-seconds 0.005 --response-delay-seconds 0.02 `
+  --output-json <TEMP_OUTPUT>
+```
+
+此 probe 不連線、不啟動 Selenium，使用假的 response 但實際呼叫既有
+`BrokerBranchUpdateService._fetch_metric_records_http`／parser；9 個 submission 含
+duplicate、transient 與預期 permanent failure，結果只由父程序寫入 ephemeral CSV。
+`status=measured` 代表離線工程契約通過，不能當成 MoneyDJ 真實來源、授權或
+canary 成功；真實 HTTP canary、rate-limit 觀測、Selenium driver recovery 與 production
+broker worker 仍需另行取得環境／owner 允許。
+
 若要驗證未來 technical compute-only worker 的 bounded queue 契約，可使用 synthetic probe：
 
 ```powershell

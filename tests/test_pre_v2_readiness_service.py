@@ -693,3 +693,48 @@ def test_program_readiness_accepts_real_staging_process_pool_worker_contract(
     blockers = report["workstreams"]["performance"]["blockers"]
     assert "technical_bounded_worker_acceptance_invalid" not in blockers
     assert "technical_bounded_worker_acceptance_not_completed" not in blockers
+    assert "technical_worker_crash_recovery_not_completed" in blockers
+    assert "technical_worker_cancel_acceptance_not_completed" in blockers
+    assert "technical_production_single_writer_integration_not_completed" in blockers
+
+
+def test_program_readiness_accepts_bounded_broker_fetch_contract(tmp_path: Path) -> None:
+    broker_path = tmp_path / "broker-fetch.json"
+    broker_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "broker-bounded-fetch-acceptance.v1",
+                "status": "measured",
+                "production_write_attempted": False,
+                "staging_fetch_pool_enabled": True,
+                "production_fetch_pool_enabled": False,
+                "bounded_fetch_acceptance": {
+                    "status": "measured",
+                    "checks": {
+                        "bounded_in_flight": True,
+                        "global_rate_limit_respected": True,
+                        "retry_budget_respected": True,
+                        "expected_permanent_failure_isolated": True,
+                        "unexpected_failure_absent": True,
+                        "duplicate_idempotency": True,
+                        "parent_single_writer": True,
+                        "worker_did_not_write": True,
+                        "selenium_fallback_not_parallelized": True,
+                        "source_identity_preserved": True,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        broker_performance_path=broker_path,
+    )
+
+    blockers = report["workstreams"]["performance"]["blockers"]
+    assert "broker_bounded_fetch_acceptance_not_completed" not in blockers
+    assert "broker_bounded_fetch_acceptance_invalid" not in blockers
+    assert "broker_real_http_canary_not_completed" in blockers

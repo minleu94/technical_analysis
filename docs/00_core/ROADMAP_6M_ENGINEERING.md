@@ -483,7 +483,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## 更新記錄
 
-- 2026-08-28：新增唯讀 `scripts/qa_technical_indicator_latency.py`、full-batch／isolated writer 與 real calculator staging process-pool probes；Broker CSV writer 加上 process-local single-writer lock。technical process pool 目前只在 protected-root 外的 staging 以 bounded in-flight、transient retry、parent single writer 與 input hash 證明形狀，未啟用 production worker、broker／Selenium 平行抓取；後續須補 worker crash recovery／取消／integration 與 broker rate-limit evidence。
+- 2026-08-28：新增唯讀 `scripts/qa_technical_indicator_latency.py`、full-batch／isolated writer、real calculator staging process-pool 與 broker 離線 bounded-fetch acceptance probes；Broker CSV writer 加上 process-local single-writer lock。technical／broker pool 目前只在 protected-root 外 staging 以 bounded in-flight、retry、parent single writer 與 fail-closed checks 證明形狀，未啟用 production worker、真實 broker／Selenium 平行抓取；後續須補 worker recovery／取消／integration、真實 broker canary 與 rate-limit evidence。
 - 2026-08-28：Data Update quick runner 新增 `data-update-status-history.v1` append-only JSONL（`--history-path`，預設與 latest status 同目錄），UpdateView 時間軸新增最近執行歷史表；只保存真實 runner 的 running／terminal status 摘要，既有 latest 不回填，未改資料、Evidence、Formal、scheduler 或 broker 邊界。
 - 2026-08-27：新增 `scripts/append_source_acceptance_decision.py` 的 preview／明確確認 append foundation；applying decision 必須綁定 `ready_for_owner_review` intake 與 evidence ids，registry 只能位於 `DATA_ROOT` 之外，且 append 不改變 downstream／formal／scheduler／broker fail-closed 邊界。
 - 2026-08-27：Update 大型每日合併與 SQLite CSV 匯出改用 `ProgressTaskWorker` 與批次進度回報；合併回報檔案／讀取批次／整合檔 chunk，匯出先以 query-only count 建立預估筆數並回報已處理筆數。取消仍維持檔案／資料批次安全邊界，不改變原子提交與既有資料保留規則；合併新增單檔內讀取批次取消檢查，仍不做逐列中斷。

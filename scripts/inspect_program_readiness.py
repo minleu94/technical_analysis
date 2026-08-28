@@ -575,27 +575,60 @@ def _inspect_performance_lane(
                 blockers.append("technical_bounded_worker_acceptance_invalid")
         if payload.get("parallelism_enabled") is True:
             blockers.append(f"{label}_parallelism_claim_requires_single_writer_review")
-    if (
-        not any(
-            isinstance(artifacts.get(key), Mapping)
-            and artifacts[key].get("status") == "measured"
-            for key in ("technical_worker",)
-        )
+    technical_worker_payload = artifacts.get("technical_worker")
+    if not (
+        isinstance(technical_worker_payload, Mapping)
+        and technical_worker_payload.get("status") == "measured"
     ):
         blockers.append("technical_bounded_worker_acceptance_not_completed")
+    elif technical_worker_payload.get("staging_process_pool_enabled") is not True:
+        blockers.append("technical_real_process_pool_not_completed")
+    else:
+        for recovery_key, blocker in (
+            ("crash_recovery", "technical_worker_crash_recovery_not_completed"),
+            ("cancellation", "technical_worker_cancel_acceptance_not_completed"),
+            (
+                "production_single_writer_integration",
+                "technical_production_single_writer_integration_not_completed",
+            ),
+        ):
+            recovery_payload = technical_worker_payload.get(recovery_key)
+            if not (
+                isinstance(recovery_payload, Mapping)
+                and recovery_payload.get("status") == "measured"
+            ):
+                blockers.append(blocker)
     # No broker worker artifact is accepted as a proxy for technical worker proof.
     broker_payload = artifacts.get("broker")
-    broker_acceptance = (
-        isinstance(broker_payload, Mapping)
-        and isinstance(broker_payload.get("bounded_fetch_acceptance"), Mapping)
-        and broker_payload["bounded_fetch_acceptance"].get("status") == "measured"
+    broker_contract_raw: object = (
+        broker_payload.get("bounded_fetch_acceptance")
+        if isinstance(broker_payload, Mapping)
+        else None
     )
-    if not broker_acceptance:
+    if not isinstance(broker_payload, Mapping) or not isinstance(broker_contract_raw, Mapping):
         blockers.append("broker_bounded_fetch_acceptance_not_completed")
+    else:
+        broker_contract = broker_contract_raw
+        if broker_contract.get("status") != "measured":
+            blockers.append("broker_bounded_fetch_acceptance_not_completed")
+        broker_checks = broker_contract.get("checks")
+        broker_checks_passed = isinstance(broker_checks, Mapping) and bool(broker_checks) and all(
+            value is True for value in broker_checks.values()
+        )
+        if (
+            broker_contract.get("status") != "measured"
+            or broker_payload.get("staging_fetch_pool_enabled") is not True
+            or broker_payload.get("production_fetch_pool_enabled") is not False
+            or broker_payload.get("production_write_attempted") is not False
+            or not broker_checks_passed
+        ):
+            blockers.append("broker_bounded_fetch_acceptance_invalid")
+        if broker_payload.get("network_enabled") is not True:
+            blockers.append("broker_real_http_canary_not_completed")
     return _lane(
         "partial",
         blockers=tuple(blockers),
-        next_actions=("已具備 full-batch 與 isolated CSV／SQLite writer timing；接著定義券商 fetch concurrency、取消／retry 與 technical single-writer 邊界，再做 bounded worker proof。",),
+        next_actions=("已具備 technical full-batch、real staging process-pool 與 isolated writer timing；接著補 bounded worker recovery／integration，並以離線契約後的受控 canary 驗收券商 fetch。",),
         external_input_required=True,
         details={
             "technical_path": str(technical_path) if technical_path else None,
@@ -616,7 +649,7 @@ def _execution_order(workstreams: Mapping[str, Mapping[str, Any]]) -> list[dict[
         (2, "evidence", "持續累積真實週期，並由 owner/reviewer 審核 weekly history；projection 不授予 Formal credit。"),
         (3, "paper", "補真實 fills／partial-fill／reject／override／Decimal cost／execution gap，再計算成本後 weekly。"),
         (4, "formal_ml", "由 owner 發布當前三項 formal inputs；禁止用 prospective 或歷史 shadow artifact 冒充。"),
-        (5, "performance", "已量測 full batch 與 isolated writer contention；接著設計 bounded worker／single writer。"),
+        (5, "performance", "已量測 full batch、isolated writer contention 與 real staging bounded worker；接著補 recovery／integration，再驗收 broker bounded fetch。"),
         (6, "update_history", "等真實排程產生 history，執行 live refresh、retention 與狀態投影 QA。"),
     )
     result: list[dict[str, Any]] = []

@@ -146,6 +146,28 @@ SHA-256=`C662A26E0937363547022FEB30ADAFD0185875AFBBDD7A3FD08AEF9323765FFF`。
 `production_sqlite_write_attempted=false`。仍未涵蓋 worker crash recovery、長時間取消
 與正式 single-writer integration，也不能替代 broker HTTP rate-limit／retry acceptance。
 
+### 2026-08-28 09:50 UTC broker bounded fetch acceptance probe（本輪新增）
+
+新增 `scripts\qa_broker_bounded_fetch_acceptance.py`。它以完全離線的 deterministic
+transport 呼叫既有 `BrokerBranchUpdateService._fetch_metric_records_http` 與 MoneyDJ
+HTML parser，再由 bounded `ThreadPoolExecutor(max_workers=2,max_in_flight=4)` 模擬
+HTTP I/O；父程序才寫入 ephemeral staging CSV。9 個 task submission（含 1 個 duplicate）、
+1 個 transient failure、1 個預期 permanent failure，另以 global rate limiter 控制每次
+transport call 間隔；Selenium fallback 不啟動且保持 serialized policy。
+
+實測結果：`max_observed_in_flight=4`、2 個 worker thread、10 次 transport call、
+最小開始間隔=`5.114 ms`（要求 5 ms）、retry=`1`、duplicate suppression=`1`、
+預期 permanent failure 未寫入，7 筆 record 由父程序寫 staging CSV；10/10 checks
+通過，fetch dispatch=`111.723 ms`、parent CSV=`4.337 ms`、total=`117.348 ms`。
+artifact 暫存於
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_bounded_fetch_20260828.json`，
+SHA-256=`A3B203805559AF5B136441EBB6D31290F9ACACFA32E0533B7C91C29CE5AAE4B7`。
+
+這是「現有 parser／fetch method＋離線 bounded transport」的工程契約證據，不是
+MoneyDJ 真實連線品質或授權證明；`network_enabled=false`、`production_fetch_pool_enabled=false`、
+`production_write_attempted=false`。正式 HTTP canary、真實 rate-limit、Selenium driver
+重建／fallback QA 與 production writer integration 仍需另外取得 owner／環境允許後驗收。
+
 ### 2026-08-28 09:30 UTC bounded worker contract probe（本輪新增）
 
 新增 `scripts\qa_bounded_worker_acceptance.py`，以 deterministic synthetic tasks 驗證
@@ -173,9 +195,10 @@ rate-limit 仍未完成，因此 production worker 仍維持關閉。
 
 ## 現行寫入與平行化事實
 
-- Broker ingestion 目前依 branch/date 順序抓取；lots 與 amount 依序請求。HTTP
-  失敗才進 Selenium fallback，而 fallback 使用共用 driver，不能把同一 driver
-  放進多執行緒。
+- Broker production ingestion 目前仍依 branch/date 順序抓取；lots 與 amount 依序請求。
+  HTTP 失敗才進 Selenium fallback，而 fallback 使用共用 driver，不能把同一 driver
+  放進多執行緒。上一節的離線 acceptance 已先證明現有 HTTP parser 可放入 bounded
+  fetch orchestration，但沒有把 production 網路／driver 打開。
 - Broker CSV mutation 現在由 `BrokerBranchWriteCoordinator` 統一包住，並以
   process-local single-writer lock 序列化 daily／merged CSV 寫入與 backup；這只
   建立安全邊界，沒有偷偷開啟 fetch concurrency。
@@ -193,9 +216,10 @@ rate-limit 仍未完成，因此 production worker 仍維持關閉。
 1. 以 real process-pool staging probe 為基礎，補 worker crash recovery、長時間取消、
    partial result discard 與正式 single-writer integration；保留每段 row count、error、
    cancel 與 file hash，未通過前不開 production worker。
-2. Broker 只考慮 bounded HTTP fetch pool；每個 task 必須含 global rate-limit、retry
-   budget、source/date identity，Selenium fallback 維持 serialized，結果交給上述
-   single writer。
+2. Broker 只在 owner／環境允許的真實 canary 中考慮 bounded HTTP fetch pool；每個 task
+   必須含 global rate-limit、retry budget、source/date identity，Selenium fallback 維持
+   serialized，結果交給上述 single writer。離線 parser／queue acceptance 已完成，
+   不得把它當成真實來源成功。
 3. Technical indicators 維持 worker 只回傳 immutable result、CSV／SQLite 由單一
    writer commit；禁止把 SQLite connection 共享到 writer 以外的 process。
 4. 以 synthetic staging／isolated output 做 throughput、取消、重試、重複與 crash
