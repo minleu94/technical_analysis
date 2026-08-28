@@ -49,6 +49,7 @@ from ui_qt.views.update.update_formatters import (
     format_manual_update_summary,
     format_monthly_revenue_candidate_lines,
     format_p0_license_capture_status,
+    format_p0_route_probe_statuses,
     format_program_readiness_summary,
     format_scheduler_operations_detail,
     format_source_detail_summary,
@@ -1079,7 +1080,7 @@ class UpdateView(QWidget):
         )
         p0_layout.addWidget(self.p0_source_control_summary_label)
 
-        self.p0_source_control_table = QTableWidget(0, 8)
+        self.p0_source_control_table = QTableWidget(0, 9)
         self.p0_source_control_table.setHorizontalHeaderLabels(
             (
                 "來源",
@@ -1090,6 +1091,7 @@ class UpdateView(QWidget):
                 "解析通過率／Rows",
                 "License",
                 "Owner／下游",
+                "Probe 路徑狀態",
             )
         )
         self.p0_source_control_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -3200,6 +3202,9 @@ class UpdateView(QWidget):
         decision = str(row.get("decision_status") or "not_supplied")
         eligibility = str(row.get("downstream_eligibility") or "none")
         owner_display = f"{decision}\n下游：{eligibility}"
+        route_probe_display = format_p0_route_probe_statuses(
+            row.get("route_probe_statuses")
+        )
         return (
             f"{label}\n{source_id}",
             f"{governance}\n{machine}",
@@ -3209,6 +3214,7 @@ class UpdateView(QWidget):
             coverage_display,
             license_display,
             owner_display,
+            route_probe_display,
         )
 
     def _render_p0_source_control_status(self, payload: Any) -> None:
@@ -3276,6 +3282,21 @@ class UpdateView(QWidget):
                     self._p0_count_text(fallback_attempted_count),
                     self._p0_count_text(fallback_used_count),
                     self._p0_count_text(fallback_rejected_count),
+                )
+            )
+        route_probe_counts = summary.get("route_probe_status_counts") or {}
+        route_count = summary.get("route_probe_count")
+        route_attempted_count = summary.get("route_probe_attempted_count")
+        if route_count is not None or route_attempted_count is not None or route_probe_counts:
+            route_probe_text = "、".join(
+                f"{key} {self._p0_count_text(item)}"
+                for key, item in route_probe_counts.items()
+            ) or "未提供"
+            lines.append(
+                "Probe 路徑：已嘗試 {0}／總數 {1}｜{2}".format(
+                    self._p0_count_text(route_attempted_count),
+                    self._p0_count_text(route_count),
+                    route_probe_text,
                 )
             )
         reference = str(value.get("reference") or "").strip()

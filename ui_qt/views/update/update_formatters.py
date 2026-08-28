@@ -116,6 +116,41 @@ def format_p0_license_capture_status(status: Any) -> str:
     return f"{label}（{raw_status}）"
 
 
+def format_p0_route_probe_statuses(value: Any) -> str:
+    """Render bounded P0 route probe outcomes without implying acceptance."""
+
+    if not isinstance(value, (list, tuple)) or not value:
+        return "未提供"
+    labels = {
+        "observed": "已觀測",
+        "failed": "失敗",
+        "official_no_data": "官方無資料",
+        "date_mismatch": "日期不符",
+        "no_accepted_rows": "無通過列",
+        "schema_mismatch": "格式不符",
+        "not_usable": "不可用",
+        "not_attempted": "未嘗試",
+    }
+    rendered: list[str] = []
+    for raw in value[:8]:
+        if not isinstance(raw, Mapping):
+            continue
+        route_id = str(raw.get("route_id") or "未提供").strip() or "未提供"
+        status = str(raw.get("status") or "not_usable").strip().lower()
+        status_text = labels.get(status, status)
+        markers = []
+        if raw.get("selected") is True:
+            markers.append("已選")
+        if raw.get("fallback") is True:
+            markers.append("fallback")
+        marker_text = f"（{'／'.join(markers)}）" if markers else ""
+        rendered.append(f"{route_id}：{status_text}（{status}）{marker_text}")
+    if not rendered:
+        return "未提供"
+    suffix = f"；另 {len(value) - len(rendered)} 條未顯示" if len(value) > len(rendered) else ""
+    return "\n".join(rendered) + suffix
+
+
 def format_manual_update_summary(
     operation: Any,
     status: Any,

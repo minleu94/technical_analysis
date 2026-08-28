@@ -227,6 +227,30 @@ def _write_p0_evidence_audit(path: Path) -> Path:
                     {"route_id": "route.legacy"},
                     {"route_id": "route.primary"},
                 ],
+                "route_probe_statuses": [
+                    {
+                        "source_id": source_id,
+                        "route_id": "route.primary",
+                        "provider": "official",
+                        "endpoint": "https://official/primary",
+                        "implementation_status": "implemented_live_probe",
+                        "attempt_kind": "selected",
+                        "status": "observed",
+                        "selected": True,
+                        "fallback": False,
+                    },
+                    {
+                        "source_id": source_id,
+                        "route_id": "route.legacy",
+                        "provider": "official",
+                        "endpoint": "https://official/legacy",
+                        "implementation_status": "implemented_live_fallback",
+                        "attempt_kind": "not_attempted",
+                        "status": "not_attempted",
+                        "selected": False,
+                        "fallback": False,
+                    },
+                ],
             }
             for source_id in P0_SOURCE_IDS
         ],
@@ -292,6 +316,10 @@ def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_p
     assert p0["rows"][9]["fallback_used"] is True
     assert view.p0_source_control_table.rowCount() == 13
     assert "route.primary" in view.p0_source_control_table.item(9, 2).text()
+    assert "route.primary" in view.p0_source_control_table.item(9, 8).text()
+    assert "已觀測" in view.p0_source_control_table.item(9, 8).text()
+    assert "route.legacy" in view.p0_source_control_table.item(9, 8).text()
+    assert "未嘗試" in view.p0_source_control_table.item(9, 8).text()
     assert "route.legacy" in view.p0_source_control_table.item(9, 3).text()
     assert "official_publication_timestamp_missing" in view.p0_source_control_table.item(0, 4).text()
     assert "downstream_eligibility=none" in view.p0_source_control_summary_label.text()

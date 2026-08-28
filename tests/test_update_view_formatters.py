@@ -3,6 +3,7 @@ from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
     format_manual_update_summary,
     format_p0_license_capture_status,
+    format_p0_route_probe_statuses,
     format_scheduler_operations_detail,
     format_source_detail_summary,
     format_status_token,
@@ -54,6 +55,29 @@ def test_format_p0_license_capture_status_keeps_machine_token_and_explains_parti
         == "HTTP 失敗（capture_http_error）"
     )
     assert format_p0_license_capture_status("custom") == "custom"
+
+
+def test_format_p0_route_probe_statuses_shows_attempts_and_bounded_markers() -> None:
+    rendered = format_p0_route_probe_statuses(
+        [
+            {
+                "route_id": "twse.T86",
+                "status": "observed",
+                "selected": True,
+                "fallback": False,
+            },
+            {
+                "route_id": "tpex.tpex_3insti_daily_trading",
+                "status": "not_attempted",
+                "selected": False,
+                "fallback": False,
+            },
+        ]
+    )
+
+    assert "twse.T86：已觀測（observed）（已選）" in rendered
+    assert "tpex.tpex_3insti_daily_trading：未嘗試（not_attempted）" in rendered
+    assert format_p0_route_probe_statuses({}) == "未提供"
 
 
 def test_format_status_token_preserves_known_unknown_and_missing_values() -> None:
