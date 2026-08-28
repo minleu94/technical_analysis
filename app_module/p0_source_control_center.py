@@ -40,6 +40,18 @@ _REQUIRED_EVIDENCE = (
     "pit_available_date_evidence",
     "owner_reviewer_decision",
 )
+_ROUTE_PROBE_STATUSES = frozenset(
+    {
+        "observed",
+        "failed",
+        "official_no_data",
+        "date_mismatch",
+        "no_accepted_rows",
+        "schema_mismatch",
+        "not_usable",
+        "not_attempted",
+    }
+)
 _P0_LABELS = {
     "corporate_action.ex_dividend_timeline": "除權息時間軸",
     "corporate_action.reduction_split_par_value": "減資／分割／面額變更",
@@ -55,6 +67,51 @@ _P0_LABELS = {
     "tpex.monthly_revenue_announcement": "TPEx 月營收公告",
     "pit.quarterly_financials": "PIT 季度財報",
 }
+
+
+@dataclass(frozen=True)
+class P0RouteProbeStatus:
+    """單一路徑的 bounded probe 投影；不代表來源已接受。"""
+
+    source_id: str
+    route_id: str
+    provider: str
+    endpoint: str
+    implementation_status: str
+    attempt_kind: str
+    status: str
+    selected: bool = False
+    fallback: bool = False
+
+    def __post_init__(self) -> None:
+        if self.source_id not in P0_SOURCE_IDS:
+            raise ValueError(f"unknown P0 route probe source: {self.source_id}")
+        for name in (
+            "route_id",
+            "provider",
+            "endpoint",
+            "implementation_status",
+            "attempt_kind",
+        ):
+            if not str(getattr(self, name)).strip():
+                raise ValueError(f"P0 route probe {name} is required")
+        if self.status not in _ROUTE_PROBE_STATUSES:
+            raise ValueError(f"unsupported P0 route probe status: {self.status}")
+        if type(self.selected) is not bool or type(self.fallback) is not bool:
+            raise TypeError("P0 route probe selected/fallback must be boolean")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "source_id": self.source_id,
+            "route_id": self.route_id,
+            "provider": self.provider,
+            "endpoint": self.endpoint,
+            "implementation_status": self.implementation_status,
+            "attempt_kind": self.attempt_kind,
+            "status": self.status,
+            "selected": self.selected,
+            "fallback": self.fallback,
+        }
 
 
 @dataclass(frozen=True)
@@ -83,6 +140,7 @@ class P0SourceControlRow:
     payload_sha256: str | None = None
     acquisition_route_id: str | None = None
     acquisition_route_ids: tuple[str, ...] = ()
+    route_probe_statuses: tuple[P0RouteProbeStatus, ...] = ()
     fallback_used: bool | None = None
     fallback_from_route_id: str | None = None
     fallback_reason: str | None = None
@@ -133,6 +191,12 @@ class P0SourceControlRow:
                 raise ValueError("coverage_bp must be within 0..10000")
         object.__setattr__(self, "allowed_use_cases", _string_tuple(self.allowed_use_cases))
         object.__setattr__(self, "acquisition_route_ids", _string_tuple(self.acquisition_route_ids))
+        route_probe_statuses = tuple(self.route_probe_statuses)
+        if not all(isinstance(item, P0RouteProbeStatus) for item in route_probe_statuses):
+            raise TypeError("route_probe_statuses must contain P0RouteProbeStatus values")
+        if any(item.source_id != self.source_id for item in route_probe_statuses):
+            raise ValueError("route_probe_statuses source_id must match the P0 row")
+        object.__setattr__(self, "route_probe_statuses", route_probe_statuses)
         object.__setattr__(
             self,
             "fallback_observation_dates",
@@ -186,6 +250,7 @@ class P0SourceControlRow:
             "payload_sha256": self.payload_sha256,
             "acquisition_route_id": self.acquisition_route_id,
             "acquisition_route_ids": list(self.acquisition_route_ids),
+            "route_probe_statuses": [item.to_dict() for item in self.route_probe_statuses],
             "fallback_used": self.fallback_used,
             "fallback_from_route_id": self.fallback_from_route_id,
             "fallback_reason": self.fallback_reason,
@@ -455,6 +520,14 @@ class P0SourceControlCenterService:
             acquisition_route_ids=(
                 tuple(_string_tuple(audit.get("acquisition_route_ids", ()))) if audit else ()
             ),
+            route_probe_statuses=(
+                _normalize_route_probe_statuses(
+                    audit.get("route_probe_statuses", ()),
+                    source_id=contract.source_id,
+                )
+                if audit
+                else ()
+            ),
             fallback_used=(
                 _optional_bool(audit.get("fallback_used")) if audit else None
             ),
@@ -609,14 +682,23 @@ def _normalize_audit(payload: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]
             raise ValueError(f"unknown or missing P0 audit source: {source_id}")
         if source_id in result:
             raise ValueError(f"duplicate P0 audit source: {source_id}")
-        result[source_id] = _normalize_audit_row(raw, schema_version == _EVIDENCE_AUDIT_SCHEMA)
+        result[source_id] = _normalize_audit_row(
+            raw,
+            schema_version == _EVIDENCE_AUDIT_SCHEMA,
+            source_id=source_id,
+        )
     unknown_or_missing = set(P0_SOURCE_IDS) - set(result)
     if unknown_or_missing:
         raise ValueError(f"P0 audit is missing sources: {sorted(unknown_or_missing)}")
     return result
 
 
-def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mapping[str, Any]:
+def _normalize_audit_row(
+    raw: Mapping[str, Any],
+    evidence_matrix: bool,
+    *,
+    source_id: str,
+) -> Mapping[str, Any]:
     if evidence_matrix:
         blockers = []
         remaining = _optional_text(raw.get("remaining_blocker"))
@@ -638,6 +720,9 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
             "coverage_bp": _coverage_bp(observed_rows, accepted_rows),
             "acquisition_route_id": _optional_text(raw.get("acquisition_route_id")),
             "acquisition_route_ids": _route_ids(raw.get("acquisition_routes")),
+            "route_probe_statuses": _normalize_route_probe_statuses(
+                raw.get("route_probe_statuses"), source_id=source_id
+            ),
             "fallback_used": fallback_used,
             "fallback_from_route_id": fallback_from_route_id,
             "fallback_reason": fallback_reason,
@@ -692,6 +777,9 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
         "payload_sha256": _optional_text(raw.get("payload_sha256")),
         "acquisition_route_id": _optional_text(raw.get("acquisition_route_id")),
         "acquisition_route_ids": _route_ids(raw.get("acquisition_routes")),
+        "route_probe_statuses": _normalize_route_probe_statuses(
+            raw.get("route_probe_statuses"), source_id=source_id
+        ),
         "fallback_used": fallback_used,
         "fallback_from_route_id": fallback_from_route_id,
         "fallback_reason": fallback_reason,
@@ -972,6 +1060,55 @@ def _route_ids(value: object) -> tuple[str, ...]:
         if route_id is not None:
             route_ids.append(route_id)
     return tuple(dict.fromkeys(route_ids))
+
+
+def _normalize_route_probe_statuses(
+    value: object,
+    *,
+    source_id: str,
+) -> tuple[P0RouteProbeStatus, ...]:
+    """保留 audit 的 bounded route probe 結果，並拒絕不完整／越界資料。"""
+
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise TypeError("route_probe_statuses must be an array")
+    if all(isinstance(item, P0RouteProbeStatus) for item in value):
+        normalized = tuple(value)
+        if any(item.source_id != source_id for item in normalized):
+            raise ValueError("route probe source_id must match the P0 audit row")
+        return normalized
+    result: list[P0RouteProbeStatus] = []
+    seen: set[str] = set()
+    for raw in value:
+        if not isinstance(raw, Mapping):
+            raise TypeError("route probe status must be an object")
+        raw_source_id = _optional_text(raw.get("source_id")) or source_id
+        if raw_source_id != source_id:
+            raise ValueError("route probe source_id must match the P0 audit row")
+        route_id = _optional_text(raw.get("route_id"))
+        status = _optional_text(raw.get("status"))
+        if route_id is None or status is None:
+            raise ValueError("route probe status requires route_id and status")
+        if route_id in seen:
+            raise ValueError(f"duplicate route probe status: {route_id}")
+        seen.add(route_id)
+        result.append(
+            P0RouteProbeStatus(
+                source_id=source_id,
+                route_id=route_id,
+                provider=_optional_text(raw.get("provider")) or "未提供",
+                endpoint=_optional_text(raw.get("endpoint")) or "未提供",
+                implementation_status=(
+                    _optional_text(raw.get("implementation_status")) or "未提供"
+                ),
+                attempt_kind=_optional_text(raw.get("attempt_kind")) or "未提供",
+                status=status,
+                selected=_optional_bool(raw.get("selected")) or False,
+                fallback=_optional_bool(raw.get("fallback")) or False,
+            )
+        )
+    return tuple(result)
 
 
 def _license_evidence_urls(value: object) -> tuple[str, ...]:

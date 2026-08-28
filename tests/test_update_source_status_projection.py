@@ -41,6 +41,19 @@ def _evidence_audit() -> dict[str, object]:
                     {"route_id": "route.legacy", "license_evidence_url": "https://license/legacy"},
                     {"route_id": "route.primary", "license_evidence_url": "https://license/primary"},
                 ],
+                "route_probe_statuses": [
+                    {
+                        "source_id": source_id,
+                        "route_id": "route.primary",
+                        "provider": "official",
+                        "endpoint": "https://official/primary",
+                        "implementation_status": "implemented_live_probe",
+                        "attempt_kind": "selected",
+                        "status": "observed",
+                        "selected": True,
+                        "fallback": False,
+                    },
+                ],
                 "remaining_blocker": "legal_and_license_acceptance_required",
             }
             for source_id in P0_SOURCE_IDS
@@ -62,6 +75,8 @@ def test_p0_evidence_route_and_coverage_survive_read_only_projection() -> None:
     assert tdcc.probe_outcome == "observed"
     assert tdcc.schema_status == "matched"
     assert tdcc.license_evidence_urls == ("https://license/legacy", "https://license/primary")
+    assert tdcc.route_probe_statuses[0].route_id == "route.primary"
+    assert tdcc.route_probe_statuses[0].status == "observed"
 
 
 def test_update_projection_keeps_core_keys_and_fail_closed_boundary() -> None:
@@ -80,6 +95,8 @@ def test_update_projection_keeps_core_keys_and_fail_closed_boundary() -> None:
     assert payload["p0_source_control"]["boundary"]["writes_allowed"] is False
     assert payload["p0_source_control"]["boundary"]["downstream_eligibility"] == "none"
     assert payload["p0_source_control"]["rows"][9]["fallback_used"] is True
+    assert payload["p0_source_control"]["rows"][9]["route_probe_statuses"][0]["status"] == "observed"
+    assert payload["p0_source_control"]["summary"]["route_probe_attempted_count"] == 13
 
 
 def test_p0_projection_preserves_rejected_fallback_diagnostics() -> None:

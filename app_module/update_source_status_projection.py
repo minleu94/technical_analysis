@@ -104,6 +104,15 @@ def compose_p0_source_control_projection(
         row.fallback_attempted is True and row.fallback_used is not True
         for row in control_center.rows
     )
+    route_probe_rows = tuple(
+        route
+        for row in control_center.rows
+        for route in row.route_probe_statuses
+    )
+    route_probe_status_counts = Counter(route.status for route in route_probe_rows)
+    route_probe_attempted_count = sum(
+        route.status != "not_attempted" for route in route_probe_rows
+    )
     return {
         "schema_version": UPDATE_SOURCE_STATUS_PROJECTION_SCHEMA,
         "status": status,
@@ -125,6 +134,9 @@ def compose_p0_source_control_projection(
             "fallback_attempted_count": fallback_attempted_count,
             "fallback_used_count": fallback_used_count,
             "fallback_rejected_count": fallback_rejected_count,
+            "route_probe_count": len(route_probe_rows),
+            "route_probe_attempted_count": route_probe_attempted_count,
+            "route_probe_status_counts": dict(route_probe_status_counts),
             "license_status_counts": dict(
                 Counter(row.license_status for row in control_center.rows)
             ),
