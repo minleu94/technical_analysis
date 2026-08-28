@@ -22,7 +22,7 @@ Current filesystem Python files: `650`
 - 預設不收集檔：`30`
 - `pytest --collect-only -q -o addopts=`：`3684 tests collected`
 
-2026-08-28 最新全量 pytest 已以 `-o addopts=` 完成：`3674 passed, 1 skipped, 66 warnings`（`537.05s`；已納入 scheduler `--help` guard、availability builder snapshot 選擇與月營收候選狀態回歸）。
+2026-08-28 最新全量 pytest 已以 `-o addopts=` 完成：`3683 passed, 1 skipped, 26 warnings`（`540.83s`；已納入 availability merge、broker real HTTP canary、scheduler `--help` guard、availability builder snapshot 選擇與月營收候選狀態回歸）。
 下方較早的 `3613 passed`／`3607 passed`／`3606 passed`／`3603 passed`／`3592 passed` 是前一輪中間基準，
 不取代本次完整回歸結果。
 
