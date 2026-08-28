@@ -40,6 +40,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --technical-worker-acceptance-baseline <TECHNICAL_WORKER_ACCEPTANCE_JSON> `
   --broker-performance-baseline <BROKER_BASELINE_JSON> `
   --ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON> `
+  --runtime-readiness-json <RUNTIME_READINESS_JSON> `
   --runtime-write-probe <RUNTIME_WRITE_PROBE_JSON> `
   --format markdown
 ```
@@ -56,6 +57,12 @@ latest status 冒充正式輸入。
 `training_as_of` 若只給日期或格式無效，`formal_ml` lane 會直接回報
 `training_as_of_timezone_required`／`training_as_of_invalid`，不再把時區輸入錯誤包裝成
 泛化的 `formal_ml_readiness_inspection_failed`。
+
+若已由允許實際 host context 的環境產生 `runtime-environment-readiness.v1`，可用
+`--runtime-readiness-json` 明確載入該唯讀 artifact；這會避免目前執行環境的 sandbox
+token 重新探測正式 logger／Registry 時，把已核實的 host 狀態覆蓋成
+`PermissionError`。artifact schema 不符時會 fail-closed；此選項不重新探測、不寫入正式
+路徑，也不等同正式 Registry transaction／rollback proof。
 
 本輪已用 `clock:prospective:20260828:v1` 的實際官方 staging 在隔離 TEMP output
 完成一次 activation dry-run：PIT、Rule、simulated Portfolio 三個 producer 均能各自產出
@@ -235,6 +242,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - P0 license／terms no-network preview：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence\preview_20260828.json`（3 個 allowlisted URL、`capture_executed=false`；SHA-256=`07C6DC0ECAC4E19AEEF523A5B649DBB4AE1A959F944954FC770A9B43CE0255D2`）；confirmed candidate capture 因目前 host `WinError 10013` 三個 target 均為 `transport_error`，未保存頁面全文、不改正式資料。
 - freshness probe／CMD／PowerShell wrapper post-change regression：`3665 passed / 1 skipped`；`run_daily_data_freshness_check.ps1` 與正式 Task Scheduler 使用的 `.cmd` 都已以正式資料唯讀＋TEMP status/log 實際執行 `status=passed`、daily／technical latest=`20260828`，並共用同一個 canonical probe。
 - HEAD final unified readiness（canonical freshness wrapper 修正後重新盤點）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_head_final.json`（status=`action_required`；SHA-256=`AEA56956A13AE25B271CFE56D59905180C3412743EA063FAC324A763C5A29039`）；七個 lane 的 blocker 維持原樣，表示 wrapper 修正只改善錯誤可觀測性，沒有越過任何治理／正式環境 gate。
+- host runtime／scheduler／Direct storage 載入後的最新 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_host_runtime_scheduler_storage_v2_20260828.json`（status=`action_required`；SHA-256=`42BCE67AA3D7261293AA85E23FE9B6E419ADB2C5C1E661350D2EB4AE010D0011`）；`runtime=ready`、`update_history=ready`，performance 明確保留 `direct_chain_storage_preflight_blocked` 與 `technical_production_single_writer_canary_not_completed`。此報告以 `--runtime-readiness-json` 載入 host-context artifact，以 `--ml-direct-chain-status` 載入容量 preflight；不把 sandbox `PermissionError` 或 Direct/OOC `No space left on device` 隱藏掉。
 - freshness probe ACL fail-soft regression：明確模擬 status／log `PermissionError` 時，probe 輸出結構化 `status=failed`、兩個 artifact write diagnostics 並回傳 exit code `1`；不再讓 scheduler 只看到未處理 traceback。
 - post-QA MainWindow UI smoke：`output\qa\full_app_healthcheck_20260828_final_postqa\20260828_062145\result.json`（status=`passed`；SHA-256=`CE1DCCF942F3A1FADC02F910FFBE7A8ABF00369679206CE834DD441E9AF0CC41`）；8 個 workspace 全部切換成功，`1366x768`／`390x844` 均 matched，cancel-only probe 未觸發 destructive action；UpdateView suite=`67 passed`、Data Update QA=`23 passed / 0 failed / 4 skipped`。
 - 既有 live P0 audit 已另以 `scripts\build_p0_intake_from_audit.py` 轉成 13 列 candidate intake；輸出 `C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_candidate_intake_from_audit_20260828.json`，重建後 SHA-256=`35682FF727887B1F4521755D548CD88CDF8080174828D64B0ECF012CFD9DC81D`。唯讀 validator 結果為 `deferred`、`valid=13`、`owner_review_ready=0`；轉接器在 dossier 外另保留 allowlist 內的 machine route／fallback／probe／timestamp evidence，但沒有填入或推導 owner／license／publication／PIT 決議，`downstream_eligibility` 仍為 `none`。validator report SHA-256=`E1ECE0A7615DAA867ABB099BECAF4F2EB4DADB995007C775FBA1E0A70B5FDE43`。
