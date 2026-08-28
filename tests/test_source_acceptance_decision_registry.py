@@ -3,8 +3,11 @@ from pathlib import Path
 import pytest
 
 from data_module.source_acceptance_decision_registry import (
+    OWNER_REVIEW_DECISION_SCHEMA_VERSION,
     SourceAcceptanceDecisionRegistry,
     SourceAcceptanceDecisionRevision,
+    parse_source_acceptance_decisions,
+    parse_source_acceptance_decision_revision,
 )
 
 
@@ -149,3 +152,63 @@ def test_rollback_appends_a_non_applying_revision_only(tmp_path: Path) -> None:
     assert rollback.status == "rejected"
     assert rollback.allowed_use_cases == ()
     assert registry.current("institutional_flows") == rollback
+
+
+def test_owner_review_decision_is_normalized_only_as_non_applying() -> None:
+    revision = parse_source_acceptance_decision_revision(
+        {
+            "schema_version": OWNER_REVIEW_DECISION_SCHEMA_VERSION,
+            "source_id": "institutional_flows",
+            "decision_revision_id": "decision:institutional_flows:20260827-r1",
+            "parent_revision_id": None,
+            "status": "deferred",
+            "owner_role": "archi / Project Owner",
+            "reviewer_role": "Data Governance Owner",
+            "decided_at": "2026-08-27T12:00:00+08:00",
+            "active_blockers": ["source_acceptance_not_authorized"],
+            "rollback_reference": "owner-policy:disable",
+            "evidence": [{"kind": "license", "url": "https://example.invalid"}],
+        }
+    )
+
+    assert revision.status == "deferred"
+    assert revision.allowed_use_cases == ()
+    assert revision.license_evidence_ids == ()
+    assert revision.blockers == ("source_acceptance_not_authorized",)
+
+
+def test_owner_review_applying_decision_is_rejected() -> None:
+    with pytest.raises(ValueError, match="only be imported as deferred"):
+        parse_source_acceptance_decision_revision(
+            {
+                "schema_version": OWNER_REVIEW_DECISION_SCHEMA_VERSION,
+                "source_id": "institutional_flows",
+                "decision_revision_id": "decision:institutional_flows:accepted",
+                "parent_revision_id": None,
+                "status": "accepted",
+                "owner_role": "owner",
+                "reviewer_role": "reviewer",
+                "decided_at": "2026-08-27T12:00:00+08:00",
+                "rollback_reference": "owner-policy:disable",
+            }
+        )
+
+
+def test_decision_collection_accepts_single_artifact() -> None:
+    payload = {
+        "schema_version": OWNER_REVIEW_DECISION_SCHEMA_VERSION,
+        "source_id": "institutional_flows",
+        "decision_revision_id": "decision:institutional_flows:single",
+        "parent_revision_id": None,
+        "status": "deferred",
+        "owner_role": "owner",
+        "reviewer_role": "reviewer",
+        "decision_timestamp": "2026-08-27T12:00:00+08:00",
+        "active_blockers": ["pending"],
+        "rollback_reference": "owner-policy:disable",
+    }
+
+    revisions = parse_source_acceptance_decisions(payload)
+
+    assert len(revisions) == 1
+    assert revisions[0].decision_revision_id.endswith(":single")
