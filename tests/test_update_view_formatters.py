@@ -135,6 +135,40 @@ def test_format_source_detail_summary_exposes_newer_monthly_candidate() -> None:
     assert "狀態：候選可用" in summary
 
 
+def test_format_source_detail_summary_exposes_same_period_snapshot_fetch_date() -> None:
+    summary = format_source_detail_summary(
+        "monthly_revenue",
+        {
+            "latest_period": "2026-07",
+            "latest_available_period": "2026-06",
+            "candidate_latest_period": "2026-07",
+            "candidate_fetch_date": "2026-08-28",
+            "total_records": 10,
+            "status": "ok",
+        },
+    )
+
+    assert "候選快照期別：2026-07（抓取日：2026-08-28）" in summary
+
+
+def test_format_source_detail_summary_exposes_invalid_availability_candidate_diagnostics() -> None:
+    summary = format_source_detail_summary(
+        "monthly_revenue",
+        {
+            "latest_period": "2026-06",
+            "availability_candidate_file": "C:/candidate.csv",
+            "availability_candidate_status": "invalid",
+            "availability_candidate_diagnostics": ["缺少 announced_date", "第二筆格式錯誤"],
+            "total_records": 10,
+            "status": "ok",
+        },
+    )
+
+    assert "公告日 mapping 候選：未解析（候選無效" in summary
+    assert "候選診斷：缺少 announced_date" in summary
+    assert "候選診斷：第二筆格式錯誤" in summary
+
+
 def test_format_source_detail_summary_exposes_availability_candidate_merge_preview() -> None:
     summary = format_source_detail_summary(
         "monthly_revenue",

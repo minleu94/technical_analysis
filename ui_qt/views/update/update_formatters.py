@@ -49,6 +49,7 @@ def format_status_token(status: Any) -> str:
         "stale": "待更新",
         "summary": "待更新",
         "candidate_available": "候選可用",
+        "ready": "已讀取",
         "ready_for_merge": "可併入候選",
         "already_merged": "已併入",
         "operational": "正常",
@@ -71,10 +72,18 @@ def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[st
     lines: list[str] = []
     latest_period = str(detail.get("latest_period") or "").strip()
     snapshot_period = str(detail.get("candidate_latest_period") or "").strip()
-    if snapshot_period and (
-        latest_period in {"", "未知", "無"} or snapshot_period > latest_period
-    ):
-        lines.append(f"候選待套用期別：{snapshot_period}")
+    if snapshot_period:
+        is_newer = latest_period in {"", "未知", "無"} or snapshot_period > latest_period
+        label = "候選待套用期別" if is_newer else "候選快照期別"
+        fetch_date = str(detail.get("candidate_fetch_date") or "").strip()
+        suffix = f"（抓取日：{fetch_date}）" if fetch_date else ""
+        lines.append(f"{label}：{snapshot_period}{suffix}")
+    snapshot_status = str(detail.get("candidate_snapshot_status") or "").strip()
+    snapshot_diagnostic = str(detail.get("candidate_snapshot_diagnostic") or "").strip()
+    if snapshot_status in {"missing", "invalid", "error"}:
+        lines.append(f"數值 snapshot 候選：{format_status_token(snapshot_status)}")
+        if snapshot_diagnostic:
+            lines.append(f"候選診斷：{snapshot_diagnostic}")
 
     mapping_period = str(
         detail.get("availability_candidate_latest_period") or ""
@@ -82,8 +91,9 @@ def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[st
     mapping_status = str(
         detail.get("availability_candidate_status") or ""
     ).strip()
-    if mapping_period and mapping_status:
-        status = format_status_token(mapping_status)
+    mapping_file = str(detail.get("availability_candidate_file") or "").strip()
+    if mapping_period or mapping_status or mapping_file:
+        status = format_status_token(mapping_status or "unknown")
         row_count = _safe_nonnegative_int(
             detail.get("availability_candidate_row_count")
         )
@@ -101,8 +111,12 @@ def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[st
                 f"／衝突 {_safe_nonnegative_int(conflicts):,}"
             )
         lines.append(
-            f"公告日 mapping 候選：{mapping_period}（{status}；{suffix}）"
+            f"公告日 mapping 候選：{mapping_period or '未解析'}（{status}；{suffix}）"
         )
+        diagnostics = detail.get("availability_candidate_diagnostics") or []
+        for diagnostic in list(diagnostics)[:2]:
+            if str(diagnostic).strip():
+                lines.append(f"候選診斷：{diagnostic}")
     return lines
 
 

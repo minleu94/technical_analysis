@@ -1073,9 +1073,11 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 月營收卡片會以「最新可用日」顯示該期全部資料的 `available_date`，並在附加列顯示 `fundamental_monthly_revenues` 的「已匯入期別」；這兩者不能視為每日交易資料的「最新日期」。若同一期仍有部分公司尚未到可得日，該期仍列為待生效；卡片會顯示待生效期別數與完整可用起始日。這是 point-in-time 可見性保護，不代表更新失敗。
 
-若 `OUTPUT_ROOT/monthly_revenue_mops_snapshots` 中存在比 SQLite 已匯入期別更新的受控命名 snapshot，卡片會改顯示「候選可用」，並列出「候選待套用期別」。這只代表已取得新的數值候選，不代表公告日 availability mapping 或 SQLite 已完成；仍須先跑 availability validator 與 backfill dry-run，再由人工確認是否正式套用。snapshot 選擇依檔名的資料期別／抓取日，不依檔案大小，UpdateView 與兩個 availability builder 共用同一規則，避免歷史大檔遮蔽最新候選。
+若 `OUTPUT_ROOT/monthly_revenue_mops_snapshots` 中存在比 SQLite 已匯入期別更新的受控命名 snapshot，卡片會改顯示「候選可用」，並列出「候選待套用期別」與抓取日。即使候選與已匯入期別相同，也會顯示「候選快照期別」與抓取日，避免重抓或修訂候選在畫面上消失。這只代表已取得新的數值候選，不代表公告日 availability mapping 或 SQLite 已完成；仍須先跑 availability validator 與 backfill dry-run，再由人工確認是否正式套用。snapshot 選擇依檔名的資料期別／抓取日，不依檔案大小，UpdateView 與兩個 availability builder 共用同一規則，避免歷史大檔遮蔽最新候選。
 
-若已有由 `build_monthly_revenue_availability_history.py` 或受控 PIT 匯入產生的公告日／可得日候選 CSV，可設定 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE=<絕對路徑>`。資料更新狀態檢查只會讀取這個明確檔案，先執行 validator，再對正式 mapping 做唯讀 merge preview；卡片會列出候選期別、筆數、可用日、可併入／已併入／衝突狀態，以及新增與衝突筆數。`ready_for_merge` 仍只是候選可併入，不會自動寫入正式 mapping 或 SQLite；正式套用仍須另行執行 availability merge 與月營收 backfill 的確認流程。未設定此變數時不會掃描 TEMP 或其他相鄰目錄，也不會把 snapshot 候選誤當成公告日證據。
+若 snapshot 尚未放入正式 `OUTPUT_ROOT`，可設定 `MONTHLY_REVENUE_SNAPSHOT_CANDIDATE=<絕對路徑>` 讓狀態檢查唯讀投影該明確候選；這不會掃描 TEMP、不會自動替換正式 snapshot，也不會改變更新頁的正式 backfill 欄位。路徑不存在或檔名不符合受控規則時，卡片會保留「缺漏／候選無效」與診斷，不會悄悄退回另一份 snapshot。
+
+若已有由 `build_monthly_revenue_availability_history.py` 或受控 PIT 匯入產生的公告日／可得日候選 CSV，可設定 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE=<絕對路徑>`。資料更新狀態檢查只會讀取這個明確檔案，先執行 validator，再對正式 mapping 做唯讀 merge preview；卡片會列出候選期別、筆數、可用日、可併入／已併入／衝突／無效狀態，以及新增與衝突筆數。候選期別無法解析時也會保留狀態與最多兩筆 validator 診斷，避免檔案遺失或格式錯誤被誤看成「沒有候選」。`ready_for_merge` 仍只是候選可併入，不會自動寫入正式 mapping 或 SQLite；正式套用仍須另行執行 availability merge 與月營收 backfill 的確認流程。未設定此變數時不會掃描 TEMP 或其他相鄰目錄，也不會把 snapshot 候選誤當成公告日證據。
 
 狀態意義：
 

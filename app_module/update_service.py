@@ -67,6 +67,7 @@ class UpdateService :
         self,
         config,
         *,
+        monthly_revenue_snapshot_candidate_path: Optional[str | Path] = None,
         monthly_revenue_availability_candidate_path: Optional[str | Path] = None,
     ):
         """初始化數據更新服務
@@ -79,6 +80,16 @@ class UpdateService :
         self .scripts_dir =self .project_root /'scripts'
         self .status_manifest_file =self .config .meta_data_dir /'data_status_manifest.json'
         self .monthly_revenue_source_version ="mops-static-snapshot-monthly-revenue-2026-06-16"
+        configured_snapshot_candidate = (
+            monthly_revenue_snapshot_candidate_path
+            if monthly_revenue_snapshot_candidate_path is not None
+            else os.environ.get("MONTHLY_REVENUE_SNAPSHOT_CANDIDATE")
+        )
+        self.monthly_revenue_snapshot_candidate_path = (
+            Path(configured_snapshot_candidate).expanduser().resolve()
+            if configured_snapshot_candidate
+            else None
+        )
         configured_candidate = (
             monthly_revenue_availability_candidate_path
             if monthly_revenue_availability_candidate_path is not None
@@ -2052,20 +2063,48 @@ class UpdateService :
             }
             # Snapshot 是數值候選，不是正式 availability 證據；只在唯讀狀態
             # 中揭露較新的候選期別，避免使用者把「已抓到」誤認成「已套用」。
-            candidate_path = select_latest_monthly_revenue_snapshot(
-                self.config.output_root / 'monthly_revenue_mops_snapshots'
+            candidate_path = (
+                self.monthly_revenue_snapshot_candidate_path
+                if self.monthly_revenue_snapshot_candidate_path is not None
+                else select_latest_monthly_revenue_snapshot(
+                    self.config.output_root / 'monthly_revenue_mops_snapshots'
+                )
             )
             if candidate_path is not None:
-                candidate = inspect_monthly_revenue_snapshot(candidate_path)
-                if candidate.latest_period:
-                    payload['candidate_latest_period'] = candidate.latest_period
-                    payload['candidate_fetch_date'] = candidate.fetch_date
-                    payload['candidate_snapshot_file'] = str(candidate.path)
-                    imported_period = str(payload.get('latest_period') or '')
-                    if not imported_period or candidate.latest_period > imported_period:
-                        payload['status'] = 'candidate_available'
+                payload['candidate_snapshot_file'] = str(candidate_path)
+                try:
+                    candidate_exists = candidate_path.is_file() and not candidate_path.is_symlink()
+                except OSError:
+                    candidate_exists = False
+                if not candidate_exists:
+                    if self.monthly_revenue_snapshot_candidate_path is not None:
+                        payload['candidate_snapshot_status'] = 'missing'
+                        payload['candidate_snapshot_diagnostic'] = (
+                            f'明確月營收 snapshot 候選不存在：{candidate_path}'
+                        )
                         payload['warnings'] = [
-                            '已有較新的 MOPS 月營收數值候選；尚未完成 availability dry-run／正式套用'
+                            '明確月營收 snapshot 候選不存在；未改用其他 snapshot'
+                        ]
+                else:
+                    candidate = inspect_monthly_revenue_snapshot(candidate_path)
+                    payload['candidate_snapshot_status'] = (
+                        'ready' if candidate.is_named_snapshot else 'invalid'
+                    )
+                    if candidate.latest_period:
+                        payload['candidate_latest_period'] = candidate.latest_period
+                        payload['candidate_fetch_date'] = candidate.fetch_date
+                        imported_period = str(payload.get('latest_period') or '')
+                        if not imported_period or candidate.latest_period > imported_period:
+                            payload['status'] = 'candidate_available'
+                            payload['warnings'] = [
+                                '已有較新的 MOPS 月營收數值候選；尚未完成 availability dry-run／正式套用'
+                            ]
+                    elif self.monthly_revenue_snapshot_candidate_path is not None:
+                        payload['candidate_snapshot_diagnostic'] = (
+                            '明確月營收 snapshot 候選檔名不符合受控命名規則'
+                        )
+                        payload['warnings'] = [
+                            '明確月營收 snapshot 候選無法解析；未改用其他 snapshot'
                         ]
             availability_candidate_path = self.monthly_revenue_availability_candidate_path
             if availability_candidate_path is not None:

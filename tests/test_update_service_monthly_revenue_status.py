@@ -100,6 +100,93 @@ def test_monthly_revenue_status_marks_newer_snapshot_as_candidate(
     assert status["warnings"]
 
 
+def test_monthly_revenue_status_projects_explicit_snapshot_candidate(
+    test_config,
+    monkeypatch,
+) -> None:
+    with sqlite3.connect(test_config.db_file) as conn:
+        conn.execute(
+            """
+            CREATE TABLE fundamental_monthly_revenues (
+                stock_code TEXT NOT NULL,
+                period TEXT NOT NULL,
+                as_of_date TEXT NOT NULL,
+                announced_date TEXT,
+                available_date TEXT NOT NULL,
+                revenue TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                PRIMARY KEY (stock_code, period, source_version)
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2330", "2026-06", "2026-06-30", "2026-07-14", "2026-07-15", "110", "mops", "v2", "observed"),
+        )
+
+    candidate = (
+        test_config.output_root.parent / "external-candidate"
+    ) / "mops_monthly_revenue_snapshot_2026-07_2026-07_2026-08-28.csv"
+    candidate.parent.mkdir(parents=True, exist_ok=True)
+    candidate.write_text("market,period,stock_code\ntwse,2026-07,2330\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "app_module.update_service._monthly_revenue_status_today",
+        lambda: "2026-08-28",
+        raising=False,
+    )
+
+    status = UpdateService(
+        test_config,
+        monthly_revenue_snapshot_candidate_path=candidate,
+    )._monthly_revenue_status_from_sqlite()
+
+    assert status["candidate_snapshot_file"] == str(candidate.resolve())
+    assert status["candidate_snapshot_status"] == "ready"
+    assert status["candidate_latest_period"] == "2026-07"
+    assert status["candidate_fetch_date"] == "2026-08-28"
+    assert status["status"] == "candidate_available"
+
+
+def test_monthly_revenue_status_keeps_explicit_missing_snapshot_visible(
+    test_config,
+) -> None:
+    with sqlite3.connect(test_config.db_file) as conn:
+        conn.execute(
+            """
+            CREATE TABLE fundamental_monthly_revenues (
+                stock_code TEXT NOT NULL,
+                period TEXT NOT NULL,
+                as_of_date TEXT NOT NULL,
+                announced_date TEXT,
+                available_date TEXT NOT NULL,
+                revenue TEXT NOT NULL,
+                source TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                quality TEXT NOT NULL,
+                PRIMARY KEY (stock_code, period, source_version)
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO fundamental_monthly_revenues VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2330", "2026-06", "2026-06-30", "2026-07-14", "2026-07-15", "110", "mops", "v2", "observed"),
+        )
+
+    missing = test_config.output_root.parent / "missing-candidate.csv"
+    status = UpdateService(
+        test_config,
+        monthly_revenue_snapshot_candidate_path=missing,
+    )._monthly_revenue_status_from_sqlite()
+
+    assert status["candidate_snapshot_file"] == str(missing.resolve())
+    assert status["candidate_snapshot_status"] == "missing"
+    assert status["status"] == "ok"
+    assert status["warnings"]
+
+
 def test_monthly_revenue_status_projects_explicit_availability_candidate(
     test_config,
     monkeypatch,
