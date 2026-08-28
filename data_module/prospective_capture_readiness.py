@@ -172,13 +172,15 @@ def build_prospective_capture_readiness_report(
         if defer_until_activation
         else PROSPECTIVE_CAPTURE_READINESS_SCHEMA_VERSION
     )
+    if defer_until_activation:
+        readiness_status = "ready_for_future_activation"
+    elif all_ready:
+        readiness_status = "ready"
+    else:
+        readiness_status = "waiting_for_prospective_inputs"
     body: dict[str, object] = {
         "schema_version": schema_version,
-        "status": (
-            "ready_for_future_activation"
-            if defer_until_activation or all_ready
-            else "waiting_for_prospective_inputs"
-        ),
+        "status": readiness_status,
         "mode": "prospective_formal_simulation",
         "clock_id": clock.clock_id,
         "clock_manifest_hash": clock.manifest_hash,

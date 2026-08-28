@@ -166,6 +166,41 @@ def test_readiness_routes_separate_pit_boundary_without_weakening_strictness(
     assert all(item["state"] == "missing" for item in _inputs(report))
 
 
+def test_strict_readiness_reports_ready_when_all_inputs_are_ready(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import data_module.prospective_capture_readiness as readiness_module
+
+    kwargs = _report_kwargs(tmp_path, active=True)
+    ready_inputs = (
+        {"input": "causal_simulated_portfolio_ledger", "state": "ready"},
+        {"input": "prospective_rule_champion_history", "state": "ready"},
+        {"input": "prospective_pit_sector_membership", "state": "ready"},
+    )
+    monkeypatch.setattr(
+        readiness_module,
+        "_ledger_readiness",
+        lambda **_: ready_inputs[0],
+    )
+    monkeypatch.setattr(
+        readiness_module,
+        "_rule_history_readiness",
+        lambda **_: ready_inputs[1],
+    )
+    monkeypatch.setattr(
+        readiness_module,
+        "_pit_readiness",
+        lambda **_: ready_inputs[2],
+    )
+
+    report = build_prospective_capture_readiness_report(**kwargs)
+
+    assert report["status"] == "ready"
+    assert all(item["state"] == "ready" for item in _inputs(report))
+    assert report["formal_oos_allowed"] is False
+
+
 def test_deferred_readiness_rejects_wrong_separate_pit_boundary(
     tmp_path: Path,
 ) -> None:
