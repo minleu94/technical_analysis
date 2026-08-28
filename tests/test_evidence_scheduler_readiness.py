@@ -19,6 +19,36 @@ def _config(tmp_path: Path) -> TWStockConfig:
     return config
 
 
+def _approval_artifact(tmp_path: Path) -> Path:
+    path = tmp_path / "evidence-scheduler-approval.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "evidence-production-scheduler-approval.v1",
+                "approval_id": "approval-test-001",
+                "owner": "test-owner",
+                "approved_at": "2026-08-28T08:00:00+00:00",
+                "expires_at": "2026-08-29T08:00:00+00:00",
+                "scope": "evidence_capture_scheduler",
+                "approved": True,
+                "production_scheduler_allowed": True,
+                "checks": {
+                    "source_coverage_ready": True,
+                    "dry_run_passed": True,
+                    "working_copy_smoke_passed": True,
+                    "diagnostics_reviewed": True,
+                    "backup_verified": True,
+                    "rollback_verified": True,
+                    "recovery_verified": True,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_readiness_evaluator_fail_closes_when_source_coverage_is_missing(
     tmp_path: Path,
 ) -> None:
@@ -28,7 +58,8 @@ def test_readiness_evaluator_fail_closes_when_source_coverage_is_missing(
 
     assert summary["production_scheduler_allowed"] is False
     assert summary["rule_operational_scheduler_allowed"] is True
-    assert summary["required_manual_checks"] == []
+    assert summary["required_manual_checks"]
+    assert "production_scheduler_approval_missing" in summary["blocking_gaps"]
     assert summary["readiness"] in {"not_ready", "dry_run_only", "ready_for_design", "ready_for_manual_confirm"}
     assert summary["readiness"] != "production_ready"
     assert "production_ready" not in summary.values()
@@ -56,14 +87,16 @@ def test_readiness_evaluator_uses_smoke_as_diagnostic_not_manual_gate(
     assert summary["latest_smoke_status"] == "passed"
     assert summary["working_copy_confirm_passed"] is True
     assert summary["production_scheduler_allowed"] is False
-    assert summary["required_manual_checks"] == []
+    assert summary["required_manual_checks"]
+    assert "production_scheduler_approval_missing" in summary["blocking_gaps"]
 
 
-def test_readiness_evaluator_allows_operational_scheduler_without_human_gate(
+def test_readiness_evaluator_requires_validated_human_approval_artifact(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     config = _config(tmp_path)
+    approval_path = _approval_artifact(tmp_path)
 
     class _Coverage:
         def to_dict(self) -> dict[str, object]:
@@ -80,7 +113,11 @@ def test_readiness_evaluator_allows_operational_scheduler_without_human_gate(
     )
     monkeypatch.setattr(readiness_module, "_dashboard_available", lambda: True)
 
-    summary = evaluate_evidence_scheduler_readiness(config, db_path=config.db_file)
+    summary = evaluate_evidence_scheduler_readiness(
+        config,
+        db_path=config.db_file,
+        approval_artifact_path=approval_path,
+    )
 
     assert summary["readiness"] == "operational_production"
     assert summary["production_scheduler_allowed"] is True
@@ -88,6 +125,7 @@ def test_readiness_evaluator_allows_operational_scheduler_without_human_gate(
     assert summary["required_manual_checks"] == []
     assert summary["formal_evidence_credit_allowed"] is False
     assert summary["ml_nonzero_alpha_allowed"] is False
+    assert summary["approval_artifact"]["approval_id"] == "approval-test-001"
 
 
 def test_readiness_cli_outputs_json(tmp_path: Path) -> None:
@@ -132,12 +170,14 @@ def test_readiness_cli_defaults_to_twstock_config_database(
         smoke_report_path: str | Path | None = None,
         decision_date: str | None = None,
         result_id: str | None = None,
+        approval_artifact_path: str | Path | None = None,
     ) -> dict[str, object]:
         captured["config"] = config
         captured["db_path"] = Path(db_path)
         captured["smoke_report_path"] = smoke_report_path
         captured["decision_date"] = decision_date
         captured["result_id"] = result_id
+        captured["approval_artifact_path"] = approval_artifact_path
         return {"readiness": "not_ready", "production_scheduler_allowed": False}
 
     monkeypatch.setenv("DATA_ROOT", str(data_root))

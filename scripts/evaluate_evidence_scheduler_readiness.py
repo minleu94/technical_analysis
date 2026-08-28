@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--decision-date")
     parser.add_argument("--result-id")
     parser.add_argument("--smoke-report")
+    parser.add_argument(
+        "--approval-artifact",
+        type=Path,
+        help="可選的具名 owner evidence-production-scheduler-approval.v1；缺少或無效時保持 fail-closed。",
+    )
     parser.add_argument("--json-output", action="store_true")
     parser.add_argument("--data-root")
     parser.add_argument("--output-root")
@@ -56,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         smoke_report_path=args.smoke_report,
         decision_date=args.decision_date,
         result_id=args.result_id,
+        approval_artifact_path=args.approval_artifact,
     )
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))
     return 0

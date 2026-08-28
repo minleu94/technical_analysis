@@ -76,6 +76,8 @@
 - explicit human approval 已記錄。
 - `pending_human_review` sidecar record 不得當作 dashboard human review、manual approval 或 weekly history 的替代證據。
 
+機器 gate 也必須讀到明確指定的 `evidence-production-scheduler-approval.v1` JSON；其中需包含具名 `owner`、`approval_id`、有時區且不晚於現在的 `approved_at`、有時區且尚未過期的 `expires_at`、`scope=evidence_capture_scheduler`、`production_scheduler_allowed=true`，以及 source coverage、dry-run、working-copy smoke、diagnostics、backup、rollback、recovery 七項 checks 全部為 `true`。`scripts/evaluate_evidence_scheduler_readiness.py --approval-artifact <PATH>` 只讀取並重驗這份 artifact；缺少、過期、未核准或格式錯誤時一律 fail-closed，不會因 source coverage 或 smoke 通過而自行放行。
+
 ## Stage 6：Production Scheduler Design
 
 目標：只設計 production scheduler，不立即啟用。

@@ -2117,6 +2117,7 @@ Evidence Pipeline Runner 是手動 CLI，用來模擬每日 evidence pipeline；
 .\.venv\Scripts\python.exe scripts\inspect_evidence_source_coverage.py --db-path <working-copy-db> --decision-date 2026-06-30 --json-output
 .\.venv\Scripts\python.exe scripts\smoke_evidence_pipeline_working_copy.py --source-db-path <source-db> --working-copy-db-path <working-copy-db> --decision-date 2026-06-30 --repeat 2 --json-output
 .\.venv\Scripts\python.exe scripts\evaluate_evidence_scheduler_readiness.py --db-path <working-copy-db> --json-output
+.\.venv\Scripts\python.exe scripts\evaluate_evidence_scheduler_readiness.py --db-path <working-copy-db> --approval-artifact <owner-approved-json> --json-output
 .\.venv\Scripts\python.exe scripts\inspect_data_source_capabilities.py --json-output
 .\.venv\Scripts\python.exe scripts\inspect_corporate_action_policy.py --json-output
 ```
@@ -2483,7 +2484,7 @@ Replay summary 只能使用 JSON summary；不得把 replay DB 直接交給 prot
 
 2026-07-06 closeout 的參考結果：在 ignored working-copy DB 與 output-root mirror 中，source gaps 為 `ready`、read-only Agent report sample 為 `ready`、Evidence Review UI smoke passed、all-source working-copy confirm smoke repeat=2 idempotency passed；當日整體仍為 `waiting_for_time`，因 weekly history `0/3`、multi-day dry-run `1/3`。2026-07-08 已將 multi-day dry-run record 累積至 `3/3 ready`；weekly history 與 manual review / action-item rhythm 仍未完成。這個結果不代表正式 DB 已 confirm，也不代表 production scheduler 可啟用。
 
-Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 只彙總 source coverage、smoke report 與 dashboard availability，輸出的 `production_scheduler_allowed` 固定為 `false`。正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
+Working-copy smoke 會先確認 source DB 與 working-copy DB 不是同一路徑；若 working-copy DB 不存在，會以 `shutil.copy2` 從 source DB 複製一份，再只對 working-copy DB 執行 confirm smoke。預設 repeat 至少 2 次，用 event / outcome counts 檢查 idempotency；source DB 應維持 read-only。readiness evaluator 會彙總 source coverage、smoke report 與 dashboard availability；若未提供具名 owner 簽署的 `evidence-production-scheduler-approval.v1`，即使其他輸入沒有 blocking gap，仍會保留 `production_scheduler_approval_missing`／`invalid` 並維持 `production_scheduler_allowed=false`。只有該 artifact 的七項 checks 全部通過且未過期時，才可能回報 `operational_production`；正式排程前仍需人工 review `docs/06_qa/POST_V1_EVIDENCE_PRODUCTION_SCHEDULER_APPROVAL_CHECKLIST_2026_07_07.md` 的 source coverage、diagnostics report、backup path、rollback path 與 manual approval steps。
 
 Live vs Research Gap linkage CLI 用來把 portfolio position source trace、Evidence Event / Outcome 與 saved source metadata 串成 gap observation。這是 evidence，不是 action；不修改持倉、不修改 Research Run、不做 lifecycle action，也不是完整實帳歸因。沒有真實交易與人工 override 記錄時，只能解讀為 research / simulated gap。Symbol / date fuzzy match 只會列為 low-confidence candidate，不會當作 confirmed evidence link。
 
