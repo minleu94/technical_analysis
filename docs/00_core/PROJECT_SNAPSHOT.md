@@ -90,6 +90,7 @@
 - `scripts/qa_validate_update_tab.py` 在 quick runner 完成後為 `23 passed / 0 failed / 4 skipped`；目前核心資料狀態為 daily `5,284,040`、market `3,071`、industry `210,775`、broker `973,609`、technical `5,228,274`，均為 `2026-08-28`。
 - technical step 實際處理 `2,153` 檔、成功 `1,960`、失敗 `0`；另有 `8` 檔資料不足，已列入 terminal diagnostics，不以缺資料假標成功。
 - 可見性缺口已縮小為治理層：正式 `data_freshness` 已與 `2026-08-28` quick run 對齊，host scheduler 註冊與 action wiring 也已確認；readiness 不再把資料更新問題誤判成核心市場資料不存在。
+- 排程頁的初始 freshness 預覽已改用明確注入的 `DATA_FRESHNESS_STATUS_ARTIFACT`／設定路徑，投影成 bounded 中文摘要（狀態與原始 token、檢查時間、日價／技術指標最新日、warnings／errors），不再直接顯示 raw JSON，也不把單一 freshness 工作誤當整體 Scheduler；此修正只影響可見性，維持唯讀與 `production_scheduler_allowed=false`。
 
 ## 2026-08-28 P0 owner packet renderer（current engineering）
 

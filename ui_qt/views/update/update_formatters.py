@@ -445,6 +445,98 @@ def format_scheduler_operations_detail(detail: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_data_freshness_preview(payload: Mapping[str, Any]) -> str:
+    """Render one ``data_freshness`` artifact without exposing raw JSON.
+
+    This is intentionally different from :func:`format_scheduler_operations_detail`:
+    a freshness artifact describes one read-only check, not the health of every
+    scheduled job.  Keep the machine token and the small set of freshness
+    observations visible, while bounding warning/error output so a malformed or
+    unexpectedly large artifact cannot take over the status panel.
+    """
+
+    raw_status = str(payload.get("status") or "unknown").strip().lower() or "unknown"
+    lines = [
+        "單一排程 artifact：資料新鮮度（非整體 Scheduler）",
+        f"狀態：{format_status_token(raw_status)}（{raw_status}）",
+    ]
+
+    task = str(payload.get("task") or "").strip()
+    if task:
+        lines.append(f"工作：{task}")
+    checked_at = str(
+        payload.get("checked_at")
+        or payload.get("generated_at")
+        or payload.get("completed_at")
+        or ""
+    ).strip()
+    if checked_at:
+        lines.append(f"檢查時間：{checked_at}")
+
+    checks = payload.get("checks")
+    check_values = checks if isinstance(checks, Mapping) else payload
+    daily_latest = str(
+        check_values.get("daily_prices_latest_date")
+        or check_values.get("daily_price_latest_date_key")
+        or ""
+    ).strip()
+    technical_latest = str(
+        check_values.get("technical_indicators_latest_date") or ""
+    ).strip()
+    if daily_latest:
+        lines.append(f"日價最新日：{daily_latest}")
+    if technical_latest:
+        lines.append(f"技術指標最新日：{technical_latest}")
+
+    quick_status = str(check_values.get("data_update_quick_status") or "").strip()
+    quick_checked_date = str(
+        check_values.get("data_update_quick_checked_date") or ""
+    ).strip()
+    quick_expected_date = str(
+        check_values.get("data_update_quick_expected_date") or ""
+    ).strip()
+    if quick_status or quick_checked_date or quick_expected_date:
+        quick_line = f"快速更新：{format_status_token(quick_status or 'unknown')}"
+        if quick_status:
+            quick_line += f"（{quick_status}）"
+        if quick_checked_date or quick_expected_date:
+            quick_line += (
+                f"；檢查日={quick_checked_date or '未提供'}"
+                f"；預期日={quick_expected_date or '未提供'}"
+            )
+        lines.append(quick_line)
+
+    for label, key in (
+        ("日價年齡（天）", "daily_prices_age_days"),
+        ("技術指標年齡（天）", "technical_indicators_age_days"),
+    ):
+        if check_values.get(key) is not None:
+            lines.append(f"{label}：{_safe_nonnegative_int(check_values.get(key))}")
+
+    warnings = payload.get("warnings")
+    errors = payload.get("errors")
+    warning_items = (
+        [str(item).strip() for item in warnings if str(item).strip()]
+        if isinstance(warnings, (list, tuple, set))
+        else ([str(warnings).strip()] if warnings not in (None, "") else [])
+    )
+    error_items = (
+        [str(item).strip() for item in errors if str(item).strip()]
+        if isinstance(errors, (list, tuple, set))
+        else ([str(errors).strip()] if errors not in (None, "") else [])
+    )
+    if warning_items:
+        lines.append("提醒：" + "；".join(warning_items[:3]))
+    if error_items:
+        lines.append("錯誤：" + "；".join(error_items[:3]))
+    if not warning_items and not error_items:
+        lines.append("診斷：無 warnings／errors")
+
+    if payload.get("read_only") is True:
+        lines.append("邊界：唯讀，只觀測 freshness artifact，不修改資料或 Scheduler")
+    return "\n".join(lines)
+
+
 def tpex_warning_messages(result: Mapping[str, Any]) -> list[str]:
     warnings = [str(item) for item in result.get("warnings", []) if str(item).strip()]
     failed_dates = sorted({str(item) for item in result.get("failed_dates", []) if str(item).strip()})

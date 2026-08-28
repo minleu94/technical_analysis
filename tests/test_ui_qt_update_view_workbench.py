@@ -1499,6 +1499,37 @@ def test_scheduler_detail_projection_updates_summary_and_raw_status_panel():
     assert "尚未提供各工作明細" in view.scheduler_status_log_box.toPlainText()
 
 
+def test_scheduler_initial_preview_uses_injected_freshness_artifact(tmp_path):
+    freshness_path = tmp_path / "freshness-status.json"
+    freshness_path.write_text(
+        json.dumps(
+            {
+                "task": "test-freshness",
+                "status": "passed",
+                "checked_at": "2026-08-28T05:00:01+08:00",
+                "checks": {
+                    "daily_prices_latest_date": "20260828",
+                    "technical_indicators_latest_date": "20260828",
+                },
+                "warnings": [],
+                "errors": [],
+                "read_only": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        data_freshness_status_path=freshness_path,
+    )
+
+    preview = view.scheduler_status_log_box.toPlainText()
+    assert "單一排程 artifact：資料新鮮度（非整體 Scheduler）" in preview
+    assert "工作：test-freshness" in preview
+    assert "日價最新日：20260828" in preview
+    assert '"checks"' not in preview
+
+
 def test_source_tabs_have_operational_content():
     view = make_view()
 

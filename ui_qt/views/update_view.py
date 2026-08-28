@@ -44,6 +44,7 @@ from data_module.monthly_revenue_snapshot_selection import (
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
+    format_data_freshness_preview,
     format_freshness_gap,
     format_manual_update_summary,
     format_monthly_revenue_candidate_lines,
@@ -1686,14 +1687,19 @@ class UpdateView(QWidget):
                 log_box.setReadOnly(True)
                 log_box.setPlaceholderText("背景排程尚未啟動，目前無執行日誌。")
                 log_box.setStyleSheet("background-color: #0f172a; color: #cbd5e1; font-family: monospace; font-size: 11px;")
-                status_path = Path(self.update_service.config.output_root) / "scheduled" / "data_freshness" / "latest_status.json"
-                if status_path.exists():
+                status_path = self.data_freshness_status_path
+                if status_path is not None and status_path.exists():
                     try:
                         import json
                         status_data = json.loads(status_path.read_text(encoding="utf-8"))
-                        log_box.setPlainText(json.dumps(status_data, ensure_ascii=False, indent=2))
+                        if isinstance(status_data, dict):
+                            log_box.setPlainText(format_data_freshness_preview(status_data))
+                        else:
+                            log_box.setPlainText("資料新鮮度 artifact 格式不符：預期 JSON object。")
                     except Exception as e:
-                        log_box.setPlainText(f"加載排程狀態失敗: {e}")
+                        log_box.setPlainText(f"加載資料新鮮度 artifact 失敗：{e}")
+                elif status_path is None:
+                    log_box.setPlainText("尚未設定資料新鮮度 artifact 路徑。")
                 info_layout.addWidget(
                     QLabel(
                         "初始預覽：data_freshness/latest_status.json（單一工作；非整體 Scheduler 狀態）。"

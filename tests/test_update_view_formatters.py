@@ -1,4 +1,5 @@
 from ui_qt.views.update.update_formatters import (
+    format_data_freshness_preview,
     format_freshness_gap,
     format_manual_update_summary,
     format_p0_license_capture_status,
@@ -154,6 +155,35 @@ def test_format_scheduler_operations_detail_explains_state_and_keeps_tokens() ->
     assert "診斷=non_trading_day_noop" in summary
     assert "operation_count=2" in summary
     assert "邊界：唯讀" in summary
+
+
+def test_format_data_freshness_preview_is_bounded_and_not_scheduler_summary() -> None:
+    summary = format_data_freshness_preview(
+        {
+            "task": "baldr-data-freshness-check-daily",
+            "status": "passed",
+            "checked_at": "2026-08-28T05:00:01-07:00",
+            "checks": {
+                "daily_prices_latest_date": "20260828",
+                "technical_indicators_latest_date": "20260828",
+                "data_update_quick_status": "passed",
+                "data_update_quick_checked_date": "2026-08-28",
+                "data_update_quick_expected_date": "2026-08-28",
+                "daily_prices_age_days": 0,
+            },
+            "warnings": [],
+            "errors": [],
+            "read_only": True,
+        }
+    )
+
+    assert "單一排程 artifact：資料新鮮度（非整體 Scheduler）" in summary
+    assert "狀態：正常（passed）" in summary
+    assert "日價最新日：20260828" in summary
+    assert "快速更新：正常（passed）" in summary
+    assert "診斷：無 warnings／errors" in summary
+    assert "邊界：唯讀" in summary
+    assert '"checks"' not in summary
 
 
 def test_format_source_detail_summary_handles_missing_broker_fields() -> None:
