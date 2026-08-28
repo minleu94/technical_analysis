@@ -334,6 +334,9 @@ UI 若要讀取外部 status，另需設定 `DATA_FRESHNESS_STATUS_ARTIFACT` 指
 `log_artifact_write_failed:<ErrorType>`，並以 exit code `1` 結束。如此 scheduler／wrapper
 可以把「資料檢查失敗」與「結果檔無法發布」分開診斷；能寫入的 artifact 也會被重寫成同一份
 結構化錯誤，不會沿用舊的 `passed` 假狀態。
+`run_daily_data_freshness_check.ps1` 也只委派這個 canonical probe，並接受相同的
+`BALDR_FRESHNESS_STATUS_PATH`／`BALDR_FRESHNESS_LOG_PATH` 或參數覆寫，避免維運入口維護第二套
+日期／freshness 判定。
 
 The same runner appends bounded `data-update-status-history.v1` records to `history.jsonl` (or the explicit `--history-path`) for the running and terminal attempts. The history is append-only and idempotent by record hash; it does not backfill an existing `latest_status.json` and does not change any downstream readiness or write permission.
 

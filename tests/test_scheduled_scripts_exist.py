@@ -52,3 +52,13 @@ def test_register_and_unregister_support_dry_run_modes() -> None:
     assert "baldr-ml-promotion-authority-daily" in unregister_text
     assert "baldr-evidence-working-copy-smoke-manual" not in register_text
     assert "baldr-evidence-working-copy-smoke-manual" in unregister_text
+
+
+def test_freshness_powershell_wrapper_delegates_to_canonical_probe() -> None:
+    text = (SCHEDULED_DIR / "run_daily_data_freshness_check.ps1").read_text(encoding="utf-8")
+
+    assert "data_freshness_probe.py" in text
+    assert "--status-path" in text
+    assert "--log-path" in text
+    assert "FreshnessProbe = @'" not in text
+    assert "status=failed" not in text.lower()
