@@ -23,7 +23,7 @@ Current filesystem Python files: `657`
 
 本次機器重算（2026-08-28）以 `pytest --collect-only -q -o addopts=` 實際收集 `3764 tests collected`；前一輪 `3748`／`3726`／`3719`／`3702`／`3684`／`3683`／`3691`／`3696` 僅作歷史中間讀數。
 
-- 預設 pytest 可收集測試檔：`615`
+- 預設 pytest 可收集測試檔：`626`
 - pytest support 檔：`1`
 - 預設不收集檔：`30`
 - `pytest --collect-only -q -o addopts=`：`3764 tests collected`
