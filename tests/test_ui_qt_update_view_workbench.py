@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from datetime import date
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QS
 import pandas as pd
 
 from ui_qt.views.update_view import StatusCard, UpdateView
+from data_module.p0_source_contract_registry import P0_SOURCE_IDS
 
 
 
@@ -192,6 +194,81 @@ def app():
 def make_view():
     app()
     return _TestableUpdateView(FakeUpdateService())
+
+
+def _write_p0_evidence_audit(path: Path) -> Path:
+    payload = {
+        "schema_version": "p0-source-evidence-audit.v1",
+        "safety_flags": {
+            "formal_oos_allowed": False,
+            "production_blend_alpha_bp": 0,
+            "production_allowed": False,
+            "scheduler_allowed": False,
+            "downstream_eligibility": "none",
+            "human_decision": "requires_human_acceptance",
+        },
+        "machine_evidence_matrix": [
+            {
+                "source_id": source_id,
+                "machine_status": "verified",
+                "availability": "network_probed",
+                "pit_status": "official_publication_timestamp_missing",
+                "raw_row_count": 4,
+                "accepted_row_count": 3,
+                "blocked_row_count": 1,
+                "provider": "official",
+                "acquisition_route_id": "route.primary",
+                "fallback_used": source_id == "tdcc_shareholding",
+                "fallback_from_acquisition_route_id": (
+                    "route.legacy" if source_id == "tdcc_shareholding" else None
+                ),
+                "acquisition_routes": [
+                    {"route_id": "route.legacy"},
+                    {"route_id": "route.primary"},
+                ],
+            }
+            for source_id in P0_SOURCE_IDS
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_path):
+    audit_path = _write_p0_evidence_audit(tmp_path / "p0-audit.json")
+    app()
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        p0_source_audit_path=audit_path,
+    )
+
+    status = view._get_overview_status()
+    view._on_status_checked(status)
+
+    p0 = status["p0_source_control"]
+    assert p0["status"] == "research_shadow"
+    assert p0["rows"][9]["fallback_used"] is True
+    assert view.p0_source_control_table.rowCount() == 13
+    assert "route.primary" in view.p0_source_control_table.item(9, 2).text()
+    assert "route.legacy" in view.p0_source_control_table.item(9, 3).text()
+    assert "official_publication_timestamp_missing" in view.p0_source_control_table.item(0, 4).text()
+    assert "downstream_eligibility=none" in view.p0_source_control_summary_label.text()
+
+
+def test_update_view_marks_missing_p0_artifact_as_unavailable(tmp_path):
+    app()
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        p0_source_audit_path=tmp_path / "not-found.json",
+    )
+
+    status = view._get_overview_status()
+    view._on_status_checked(status)
+
+    assert status["p0_source_control"]["status"] == "audit_unavailable"
+    assert view.p0_source_control_table.rowCount() == 13
+    assert "讀取問題" in view.p0_source_control_summary_label.text()
+    assert "P0 稽核 artifact 不存在" in view.p0_source_control_summary_label.text()
 
 
 def test_update_view_date_controls_use_taiwan_market_date(monkeypatch):

@@ -741,6 +741,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - Workbench → Evidence → Research Console 會自動顯示同一份 P0 Control Center；頁面沒有 Accept／Apply／Promote／Retrain／Trade 控制。若沒有稽核投影，畫面仍保留 13 列並列出 `candidate_audit_not_supplied`、`source_acceptance_decision_missing` 與 `downstream_eligibility_none`。
 - 若要讓主 UI 顯示某份既有稽核 artifact，可在啟動前設定 `P0_SOURCE_CONTROL_CENTER_AUDIT=<絕對路徑>`；程式只讀取該明確路徑，不會掃描 `output`、QA 或正式資料目錄。artifact schema 不合法或邊界不符時，整個 Research Console 會 fail-closed 為 degraded。
 - 若要讓主 UI 同步顯示具名 owner decision，可設定 `P0_SOURCE_CONTROL_CENTER_DECISIONS=<絕對路徑>`。輸入可以是 canonical `source-acceptance-decision-revision.v1` 的單筆／清單，也可以是外部 `source-acceptance-owner-review-decision.v1`；後者只允許 `deferred`／`rejected`／`disabled` 正規化，`accepted`／`limited` 會 fail-closed，絕不從外部 attestation 或 evidence URL 推導授權。這個入口只接受 13 個 canonical P0 source ID；`fubon.marketdata` 是獨立的 research shadow provider，必須用 Fubon dossier／shadow inspector，不能硬映射進 P0 denominator。UI 只做 read-only projection，不會因載入 decision 而建立 registry 或改變 `downstream_eligibility=none`。
+- Data Update → 全部資料也會在執行「檢查數據狀態」時載入上述兩個明確路徑，顯示 13 列 `P0 官方來源證據` 表格。欄位包含實際 route、可用 route 清單、fallback 來源／原因、PIT／公告與 availability、coverage／accepted-observed-blocked rows、license、owner decision 與下游資格；表格是 candidate／shadow 的治理觀測，不是更新按鈕，也不會寫入 SQLite。未設定 artifact 會顯示 `contract_only`，路徑遺失或 schema／boundary 錯誤會顯示 `audit_unavailable` 與讀取原因，避免沿用上一輪或假綠。
 
 ### P0 Source Intake Validator（唯讀候選輸入）
 
@@ -2723,6 +2724,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：修正資料更新個別來源詳情查詢失敗時的錯誤顯示；現在只會將該來源標為異常，不再把其他來源狀態卡誤刷成錯誤。
 - 2026-08-27：補強資料更新頁顯示一致性：全域／各來源日期控件的「今日」統一採台灣市場日期；localized `不可用` 會顯示為異常而非待更新；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要並保留共同錯誤原因，候選來源分頁也會顯示檢查結果，方便排錯且不誤讀舊數字。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
+- 2026-08-27：Data Update 全部資料新增 P0 官方來源證據唯讀 projection；全域狀態檢查會把明確指定的 audit／owner decision 與核心資料狀態一起呈現，逐列保留 actual route、fallback lineage、PIT／公告、coverage、license、owner decision 與 `downstream_eligibility=none`。未設定時是 `contract_only`，artifact 遺失／格式錯誤時是 `audit_unavailable`，不會掃描正式目錄、發網路請求或把 candidate 升格為正式來源。
 - 2026-08-27：持倉管理的「情境壓力」新增明確確認式 Stress history v1；UI 與 `append_portfolio_stress_history.py` 可預覽／保存 hash-idempotent 研究快照，並由 query-only history table 唯讀揭露。此歷史仍不構成正式績效、交易 evidence 或投資有效性。
 - 2026-08-26：持倉管理新增 Gate 4 的「情境壓力」與「匯入交易 CSV」入口。前者以 Decimal 做固定情境的研究唯讀投影，缺價／缺必要來源時 partial 或 not-computable；後者先做 UTF-8／CP950、欄位、日期、hash 與重複 ID 預覽，只有二次確認才批次驗證並 append。兩者均不接券商、不自動交易；Paper NAV、Equal Weight 成本後 evidence、fill 狀態與壓力歷史仍待後續。
 

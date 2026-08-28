@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-27 Data Update × P0 source status projection（current engineering）
+
+- `UpdateView` 的全域狀態檢查現在以 `compose_source_status_projection()` 統一保留核心 SQLite/CSV 狀態與 P0 Control Center 狀態；主視窗將既有的 `P0_SOURCE_CONTROL_CENTER_AUDIT`／`P0_SOURCE_CONTROL_CENTER_DECISIONS` 明確路徑傳入更新頁，不掃描正式資料目錄、不發網路請求。
+- Data Update「全部資料」新增 13 列 P0 唯讀表格，逐列顯示 governance／machine、實際 `acquisition_route_id`、可用 route、fallback 來源與原因、PIT／公告與 availability、整數基點 coverage／accepted-observed-blocked rows、license 狀態、owner decision 與 `downstream_eligibility=none`。P0 route／fallback／PIT 欄位由 `P0SourceControlCenterRow` 保留，Research Console 與更新頁共用同一個 read model。
+- 未設定 audit 時仍明示 `contract_only`；artifact 遺失、格式錯誤或安全旗標不符時則顯示 `audit_unavailable` 並保留 13 列 fail-closed contract rows，不把讀取失敗誤報成成功。這個 projection 只改善可觀測性，不升格 source acceptance、不寫 SQLite、不開啟 Scoring／Advice／Portfolio／scheduler／broker。
+- 本 slice targeted regression=`95 passed / 1 warning`，mypy（512 source files）與 `scripts/qa_validate_update_tab.py`（23 passed / 0 failed / 4 skipped）通過；完整 Data Update live artifact refresh／capture history 仍是後續工程工作。
+
 ## 2026-08-27 Recommendation Explain pattern evidence（current engineering）
 
 - `ScoringEngine.calculate_pattern_score()` 現在與分數同步保存 rolling detector 的已確認型態 evidence：名稱、方向、確認日與 20 日衰減窗中的 `age`。只有在突破或安全延遲確認日後才建立 evidence，`end_idx` 當天不會被 Explain 當成成立。

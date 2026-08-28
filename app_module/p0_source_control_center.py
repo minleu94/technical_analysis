@@ -79,6 +79,17 @@ class P0SourceControlRow:
     provider: str | None = None
     revision: str | None = None
     payload_sha256: str | None = None
+    acquisition_route_id: str | None = None
+    acquisition_route_ids: tuple[str, ...] = ()
+    fallback_used: bool | None = None
+    fallback_from_route_id: str | None = None
+    fallback_reason: str | None = None
+    pit_status: str | None = None
+    timestamp_kind: str | None = None
+    probe_outcome: str | None = None
+    schema_status: str | None = None
+    availability: str | None = None
+    license_evidence_urls: tuple[str, ...] = ()
     allowed_use_cases: tuple[str, ...] = ()
     blockers: tuple[str, ...] = ()
     evidence_requirements: tuple[str, ...] = _REQUIRED_EVIDENCE
@@ -98,9 +109,13 @@ class P0SourceControlRow:
             if name == "coverage_bp" and value > 10000:
                 raise ValueError("coverage_bp must be within 0..10000")
         object.__setattr__(self, "allowed_use_cases", _string_tuple(self.allowed_use_cases))
+        object.__setattr__(self, "acquisition_route_ids", _string_tuple(self.acquisition_route_ids))
+        object.__setattr__(self, "license_evidence_urls", _string_tuple(self.license_evidence_urls))
         object.__setattr__(self, "blockers", _string_tuple(self.blockers))
         object.__setattr__(self, "evidence_requirements", _string_tuple(self.evidence_requirements))
         object.__setattr__(self, "owner_actions", _string_tuple(self.owner_actions))
+        if self.fallback_used is not None and type(self.fallback_used) is not bool:
+            raise TypeError("fallback_used must be a boolean or None")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +139,17 @@ class P0SourceControlRow:
             "provider": self.provider,
             "revision": self.revision,
             "payload_sha256": self.payload_sha256,
+            "acquisition_route_id": self.acquisition_route_id,
+            "acquisition_route_ids": list(self.acquisition_route_ids),
+            "fallback_used": self.fallback_used,
+            "fallback_from_route_id": self.fallback_from_route_id,
+            "fallback_reason": self.fallback_reason,
+            "pit_status": self.pit_status,
+            "timestamp_kind": self.timestamp_kind,
+            "probe_outcome": self.probe_outcome,
+            "schema_status": self.schema_status,
+            "availability": self.availability,
+            "license_evidence_urls": list(self.license_evidence_urls),
             "allowed_use_cases": list(self.allowed_use_cases),
             "blockers": list(self.blockers),
             "evidence_requirements": list(self.evidence_requirements),
@@ -348,6 +374,35 @@ class P0SourceControlCenterService:
             provider=_optional_text(audit.get("provider")) if audit else None,
             revision=(decision.decision_revision_id if decision is not None else None),
             payload_sha256=_optional_text(audit.get("payload_sha256")) if audit else None,
+            acquisition_route_id=(
+                _optional_text(audit.get("acquisition_route_id")) if audit else None
+            ),
+            acquisition_route_ids=(
+                tuple(_string_tuple(audit.get("acquisition_route_ids", ()))) if audit else ()
+            ),
+            fallback_used=(
+                _optional_bool(audit.get("fallback_used")) if audit else None
+            ),
+            fallback_from_route_id=(
+                _optional_text(audit.get("fallback_from_route_id")) if audit else None
+            ),
+            fallback_reason=(
+                _optional_text(audit.get("fallback_reason")) if audit else None
+            ),
+            pit_status=_optional_text(audit.get("pit_status")) if audit else None,
+            timestamp_kind=(
+                _optional_text(audit.get("timestamp_kind")) if audit else None
+            ),
+            probe_outcome=(
+                _optional_text(audit.get("probe_outcome")) if audit else None
+            ),
+            schema_status=_optional_text(audit.get("schema_status")) if audit else None,
+            availability=_optional_text(audit.get("availability")) if audit else None,
+            license_evidence_urls=(
+                tuple(_string_tuple(audit.get("license_evidence_urls", ())))
+                if audit
+                else ()
+            ),
             allowed_use_cases=(
                 tuple(decision.allowed_use_cases)
                 if decision is not None and decision.status in {"accepted", "limited"}
@@ -438,16 +493,40 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
         remaining = _optional_text(raw.get("remaining_blocker"))
         if remaining:
             blockers.append(remaining)
+        observed_rows = _optional_int(raw.get("raw_row_count"))
+        accepted_rows = _optional_int(raw.get("accepted_row_count"))
+        fallback_from_route_id = _optional_text(raw.get("fallback_from_acquisition_route_id"))
+        fallback_used = _optional_bool(raw.get("fallback_used"))
+        fallback_reason = _optional_text(raw.get("fallback_reason"))
+        if fallback_reason is None and fallback_from_route_id:
+            fallback_reason = f"fallback_from:{fallback_from_route_id}"
         return {
             "audit_status": _optional_text(raw.get("availability")) or "not_supplied",
             "machine_status": _optional_text(raw.get("machine_status")) or "not_observed",
-            "observed_rows": _optional_int(raw.get("raw_row_count")),
-            "accepted_rows": _optional_int(raw.get("accepted_row_count")),
+            "observed_rows": observed_rows,
+            "accepted_rows": accepted_rows,
             "blocked_rows": _optional_int(raw.get("blocked_row_count")),
+            "coverage_bp": _coverage_bp(observed_rows, accepted_rows),
+            "acquisition_route_id": _optional_text(raw.get("acquisition_route_id")),
+            "acquisition_route_ids": _route_ids(raw.get("acquisition_routes")),
+            "fallback_used": fallback_used,
+            "fallback_from_route_id": fallback_from_route_id,
+            "fallback_reason": fallback_reason,
+            "pit_status": _optional_text(raw.get("pit_status")),
+            "timestamp_kind": _optional_text(raw.get("timestamp_kind")),
+            "probe_outcome": _optional_text(raw.get("probe_outcome")),
+            "schema_status": _optional_text(raw.get("schema_status")),
+            "availability": _optional_text(raw.get("availability")),
+            "license_evidence_urls": _license_evidence_urls(raw.get("acquisition_routes")),
             "provider": _optional_text(raw.get("provider")),
             "payload_sha256": _optional_text(raw.get("payload_sha256")),
             "blockers": _unique_strings((*blockers, *_string_tuple(raw.get("blockers", ())))),
         }
+    fallback_from_route_id = _optional_text(raw.get("fallback_from_acquisition_route_id"))
+    fallback_used = _optional_bool(raw.get("fallback_used"))
+    fallback_reason = _optional_text(raw.get("fallback_reason"))
+    if fallback_reason is None and fallback_from_route_id:
+        fallback_reason = f"fallback_from:{fallback_from_route_id}"
     return {
         "audit_status": _optional_text(raw.get("audit_status")) or "not_supplied",
         "machine_status": _optional_text(raw.get("machine_status")) or "not_observed",
@@ -459,6 +538,17 @@ def _normalize_audit_row(raw: Mapping[str, Any], evidence_matrix: bool) -> Mappi
         "latest_observed_date": _optional_text(raw.get("latest_observation_date")),
         "provider": _optional_text(raw.get("provider")),
         "payload_sha256": _optional_text(raw.get("payload_sha256")),
+        "acquisition_route_id": _optional_text(raw.get("acquisition_route_id")),
+        "acquisition_route_ids": _route_ids(raw.get("acquisition_routes")),
+        "fallback_used": fallback_used,
+        "fallback_from_route_id": fallback_from_route_id,
+        "fallback_reason": fallback_reason,
+        "pit_status": _optional_text(raw.get("pit_status")),
+        "timestamp_kind": _optional_text(raw.get("timestamp_kind")),
+        "probe_outcome": _optional_text(raw.get("probe_outcome")),
+        "schema_status": _optional_text(raw.get("schema_status")),
+        "availability": _optional_text(raw.get("availability")),
+        "license_evidence_urls": _license_evidence_urls(raw.get("acquisition_routes")),
         "blockers": _unique_strings(_string_tuple(raw.get("blockers", ()))),
     }
 
@@ -533,6 +623,53 @@ def _optional_int(value: object, *, maximum: int | None = None) -> int | None:
     if maximum is not None and value > maximum:
         raise ValueError("audit numeric field exceeds maximum")
     return value
+
+
+def _optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if type(value) is not bool:
+        raise TypeError("audit boolean fields must be boolean values")
+    return value
+
+
+def _coverage_bp(observed_rows: int | None, accepted_rows: int | None) -> int | None:
+    """從 evidence matrix 的 row conservation 數字推導整數基點覆蓋率。"""
+    if observed_rows is None or accepted_rows is None or observed_rows <= 0:
+        return None
+    if accepted_rows < 0 or accepted_rows > observed_rows:
+        return None
+    return (accepted_rows * 10_000) // observed_rows
+
+
+def _route_ids(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise TypeError("acquisition_routes must be an array")
+    route_ids: list[str] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            raise TypeError("acquisition route must be an object")
+        route_id = _optional_text(item.get("route_id"))
+        if route_id is not None:
+            route_ids.append(route_id)
+    return tuple(dict.fromkeys(route_ids))
+
+
+def _license_evidence_urls(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise TypeError("acquisition_routes must be an array")
+    urls: list[str] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            raise TypeError("acquisition route must be an object")
+        url = _optional_text(item.get("license_evidence_url"))
+        if url is not None:
+            urls.append(url)
+    return tuple(dict.fromkeys(urls))
 
 
 def _optional_text(value: object) -> str | None:

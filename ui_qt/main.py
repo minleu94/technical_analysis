@@ -375,7 +375,12 @@ class MainWindow(QMainWindow):
 
             # 數據更新標籤
             print("[MainWindow] 創建數據更新視圖...")
-            update_view = UpdateView(update_service=self.update_service, parent=self)
+            update_view = UpdateView(
+                update_service=self.update_service,
+                parent=self,
+                p0_source_audit_path=self._p0_source_audit_path(),
+                p0_source_decision_path=self._p0_source_decision_path(),
+            )
             self.update_view = update_view
             print("[MainWindow] 數據更新視圖創建成功")
 

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from typing import Any
 
 from app_module.research_console_dtos import ResearchConsoleDTO
 from app_module.research_console_source_service import ResearchConsoleSourceService
@@ -153,7 +154,17 @@ class ResearchConsoleView(QWidget):
         self.control_center_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.control_center_summary_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
         self.control_center_table = _table(
-            ("來源", "Family", "治理狀態", "Machine / Audit", "Rows", "Decision / Eligibility", "Blockers")
+            (
+                "來源",
+                "Family",
+                "治理狀態",
+                "Machine / Audit",
+                "Actual route / Fallback",
+                "PIT / Coverage",
+                "License",
+                "Decision / Eligibility",
+                "Blockers",
+            )
         )
         control_panel.layout.addWidget(self.control_center_summary_label)
         control_panel.layout.addWidget(self.control_center_table)
@@ -252,15 +263,17 @@ class ResearchConsoleView(QWidget):
             _set_rows(
                 self.control_center_table,
                 (
-                    (
-                        row.source_id,
-                        row.family,
-                        row.governance_status,
-                        f"{row.machine_status} / {row.audit_status}",
-                        _optional_number(row.observed_rows),
-                        f"{row.decision_status} / {row.downstream_eligibility}",
-                        _join(row.blockers),
-                    )
+                (
+                    row.source_id,
+                    row.family,
+                    row.governance_status,
+                    f"{row.machine_status} / {row.audit_status}",
+                    _control_route(row),
+                    _control_pit_coverage(row),
+                    _control_license(row),
+                    f"{row.decision_status} / {row.downstream_eligibility}",
+                    _join(row.blockers),
+                )
                     for row in control_center.rows
                 ),
                 status_column=2,
@@ -350,3 +363,30 @@ def _control_center_status(control_center: P0SourceControlCenterDTO) -> str:
     if control_center.accepted_count:
         return "accepted"
     return "unknown"
+
+
+def _control_route(row: Any) -> str:
+    route = str(getattr(row, "acquisition_route_id", None) or "Missing / Unknown")
+    if getattr(row, "fallback_used", None) is True:
+        source_route = str(getattr(row, "fallback_from_route_id", None) or "Unknown")
+        return f"{route} ← fallback from {source_route}"
+    if getattr(row, "fallback_used", None) is False:
+        return f"{route} (primary)"
+    return route
+
+
+def _control_pit_coverage(row: Any) -> str:
+    pit = str(getattr(row, "pit_status", None) or "Missing / Unknown")
+    timestamp_kind = str(getattr(row, "timestamp_kind", None) or "Unknown class")
+    coverage_bp = getattr(row, "coverage_bp", None)
+    if isinstance(coverage_bp, int) and 0 <= coverage_bp <= 10_000:
+        coverage = f"{coverage_bp // 100}.{coverage_bp % 100:02d}%"
+    else:
+        coverage = "Missing / Unknown"
+    return f"{pit} / {timestamp_kind} / {coverage}"
+
+
+def _control_license(row: Any) -> str:
+    status = str(getattr(row, "license_status", None) or "Missing / Unknown")
+    urls = getattr(row, "license_evidence_urls", ()) or ()
+    return f"{status} / URLs: {len(urls)}" if urls else status

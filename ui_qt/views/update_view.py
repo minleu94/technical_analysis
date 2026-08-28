@@ -9,10 +9,11 @@ from PySide6.QtWidgets import (
     QTextEdit, QRadioButton, QButtonGroup,
     QDateEdit, QMessageBox, QFormLayout, QSpinBox, QLineEdit,
     QListWidget, QStackedWidget, QFrame, QCalendarWidget, QGridLayout,
-    QScrollArea, QSizePolicy, QBoxLayout
+    QScrollArea, QSizePolicy, QBoxLayout, QAbstractItemView, QHeaderView,
+    QTableWidget, QTableWidgetItem
 )
 from PySide6.QtCore import Qt, Signal, QDate
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QColor
 from typing import Dict, Any, Optional, List, Callable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -25,6 +26,12 @@ import inspect
 from ui_qt.workers.task_worker import TaskWorker, ProgressTaskWorker
 from app_module.update_service import UpdateService
 from app_module.paper_portfolio_time import taiwan_market_today
+from app_module.p0_source_control_center import (
+    P0SourceControlCenterDTO,
+    P0SourceControlCenterService,
+)
+from app_module.update_source_status_projection import compose_source_status_projection
+from data_module.source_acceptance_decision_registry import parse_source_acceptance_decisions
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
@@ -170,7 +177,15 @@ class StatusCard(QFrame):
         elif (
             raw_status.startswith(("error", "failed", "failure", "exception"))
             or raw_status.startswith(("missing", "empty", "unavailable", "缺漏", "不可用"))
-            or raw_status in {"異常"}
+            or raw_status in {
+                "異常",
+                "official_no_data",
+                "schema_blocked",
+                "schema_mismatch",
+                "network_failed",
+                "audit_unavailable",
+                "blocked_provenance",
+            }
             or any(marker in text for marker in ("錯誤", "失敗", "異常"))
         ):
             label, color = "異常", "#ef4444"
@@ -207,7 +222,14 @@ class StatusCard(QFrame):
 class UpdateView(QWidget):
     """數據更新視圖"""
 
-    def __init__(self, update_service: UpdateService, parent=None):
+    def __init__(
+        self,
+        update_service: UpdateService,
+        parent=None,
+        *,
+        p0_source_audit_path: str | Path | None = None,
+        p0_source_decision_path: str | Path | None = None,
+    ):
         """初始化數據更新視圖
 
         Args:
@@ -216,6 +238,17 @@ class UpdateView(QWidget):
         """
         super().__init__(parent)
         self.update_service = update_service
+        self.p0_source_audit_path = (
+            Path(p0_source_audit_path).expanduser().resolve()
+            if p0_source_audit_path is not None
+            else None
+        )
+        self.p0_source_decision_path = (
+            Path(p0_source_decision_path).expanduser().resolve()
+            if p0_source_decision_path is not None
+            else None
+        )
+        self._p0_control_center_service = P0SourceControlCenterService()
         self.setMinimumWidth(0)
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._responsive_narrow: bool | None = None
@@ -704,6 +737,60 @@ class UpdateView(QWidget):
             card.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self._reflow_grid(candidate_layout, self._candidate_cards, columns=3)
         all_layout.addWidget(candidate_group)
+
+        # P0 官方來源證據面板：與核心 SQLite/CSV 狀態同頁呈現，但明確保留
+        # candidate／shadow 邊界，避免使用者誤以為「抓得到」就等於已核准。
+        p0_group = QGroupBox("P0 官方來源證據（候選／唯讀，不參與評分）")
+        p0_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                margin-top: 10px;
+                font-weight: bold;
+                color: #94a3b8;
+            }
+        """)
+        p0_layout = QVBoxLayout(p0_group)
+        p0_layout.setSpacing(8)
+        p0_layout.setContentsMargins(12, 12, 12, 12)
+        self.p0_source_control_summary_label = QLabel(
+            "尚未檢查 P0 證據；此區只讀取明確指定的稽核 artifact。"
+        )
+        self.p0_source_control_summary_label.setWordWrap(True)
+        self.p0_source_control_summary_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.p0_source_control_summary_label.setStyleSheet(
+            "color: #cbd5e1; font-size: 11px;"
+        )
+        p0_layout.addWidget(self.p0_source_control_summary_label)
+
+        self.p0_source_control_table = QTableWidget(0, 8)
+        self.p0_source_control_table.setHorizontalHeaderLabels(
+            (
+                "來源",
+                "治理／Machine",
+                "實際路徑",
+                "Fallback",
+                "PIT／公告",
+                "Coverage／Rows",
+                "License",
+                "Owner／下游",
+            )
+        )
+        self.p0_source_control_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.p0_source_control_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.p0_source_control_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.p0_source_control_table.setAlternatingRowColors(True)
+        self.p0_source_control_table.verticalHeader().setVisible(False)
+        self.p0_source_control_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+        self.p0_source_control_table.horizontalHeader().setStretchLastSection(True)
+        self.p0_source_control_table.setMinimumHeight(180)
+        self.p0_source_control_table.setToolTip(
+            "P0 row 只代表候選觀測與治理缺口；downstream eligibility 永遠為 none。"
+        )
+        p0_layout.addWidget(self.p0_source_control_table)
+        all_layout.addWidget(p0_group)
 
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
@@ -2071,7 +2158,223 @@ class UpdateView(QWidget):
                 res['credit_transaction'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
             if 'tdcc_shareholding' not in res:
                 res['tdcc_shareholding'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
-        return res
+        p0_center, p0_error, p0_reference = self._load_p0_source_control_center()
+        return compose_source_status_projection(
+            res,
+            p0_control_center=p0_center,
+            p0_load_error=p0_error,
+            p0_reference=p0_reference,
+        )
+
+    def _load_p0_source_control_center(
+        self,
+    ) -> tuple[P0SourceControlCenterDTO | None, str | None, str]:
+        """只讀取明確指定的 P0 artifact；任何錯誤均回傳 fail-closed 投影。"""
+        audit = None
+        decisions = ()
+        references: list[str] = []
+        try:
+            if self.p0_source_audit_path is not None:
+                references.append(str(self.p0_source_audit_path))
+                if not self.p0_source_audit_path.is_file():
+                    raise FileNotFoundError(
+                        f"P0 稽核 artifact 不存在：{self.p0_source_audit_path}"
+                    )
+                parsed_audit = json.loads(self.p0_source_audit_path.read_text(encoding="utf-8"))
+                if not isinstance(parsed_audit, dict):
+                    raise TypeError("P0 稽核 artifact 根節點必須是 object")
+                audit = parsed_audit
+            if self.p0_source_decision_path is not None:
+                references.append(str(self.p0_source_decision_path))
+                if not self.p0_source_decision_path.is_file():
+                    raise FileNotFoundError(
+                        f"P0 owner decision artifact 不存在：{self.p0_source_decision_path}"
+                    )
+                parsed_decisions = json.loads(
+                    self.p0_source_decision_path.read_text(encoding="utf-8")
+                )
+                decisions = parse_source_acceptance_decisions(parsed_decisions)
+            center = self._p0_control_center_service.build(
+                candidate_audit=audit,
+                decisions=decisions,
+            )
+            reference = ", ".join(references) if references else "未設定（contract-only default）"
+            return center, None, reference
+        except Exception as exc:
+            # 仍保留 13 項 contract rows，讓 UI 明確顯示「artifact 讀取失敗」；
+            # 不能在讀取失敗時退回成看似正常的 research shadow。
+            try:
+                center = self._p0_control_center_service.build()
+            except Exception:
+                center = None
+            reference = ", ".join(references) if references else "未設定"
+            return center, f"{type(exc).__name__}: {exc}", reference
+
+    @staticmethod
+    def _p0_status_color(status: str) -> str:
+        return {
+            "research_shadow": "#a78bfa",
+            "contract_only": "#a78bfa",
+            "governance_review": "#f59e0b",
+            "blocked_provenance": "#ef4444",
+            "audit_unavailable": "#ef4444",
+            "not_available": "#94a3b8",
+        }.get(str(status or "").strip().lower(), "#94a3b8")
+
+    @staticmethod
+    def _p0_percent_text(value: Any) -> str:
+        try:
+            basis_points = int(value)
+        except (TypeError, ValueError):
+            return "未提供"
+        if basis_points < 0 or basis_points > 10_000:
+            return "未提供"
+        return f"{basis_points // 100}.{basis_points % 100:02d}%"
+
+    @staticmethod
+    def _p0_count_text(value: Any) -> str:
+        try:
+            return f"{max(0, int(value or 0)):,}"
+        except (TypeError, ValueError):
+            return "--"
+
+    @classmethod
+    def _format_p0_source_row(cls, row: Dict[str, Any]) -> tuple[str, ...]:
+        source_id = str(row.get("source_id") or "未知來源")
+        label = str(row.get("label") or source_id)
+        governance = str(row.get("governance_status") or "unknown")
+        machine = str(row.get("machine_status") or "not_observed")
+        route_id = str(row.get("acquisition_route_id") or "未觀測")
+        route_ids = row.get("acquisition_route_ids") or []
+        route_ids_text = ", ".join(str(item) for item in route_ids if str(item).strip())
+        if route_ids_text and route_ids_text != route_id:
+            route_display = f"{route_id}\n可用路徑：{route_ids_text}"
+        else:
+            route_display = route_id
+        fallback_used = row.get("fallback_used")
+        if fallback_used is True:
+            fallback_from = str(row.get("fallback_from_route_id") or "來源未提供")
+            fallback_reason = str(row.get("fallback_reason") or "")
+            fallback_display = f"是（{fallback_from}）"
+            if fallback_reason:
+                fallback_display += f"\n{fallback_reason}"
+        elif fallback_used is False:
+            fallback_display = "否"
+        else:
+            fallback_display = "未提供"
+        pit_status = str(row.get("pit_status") or "未提供")
+        availability = str(row.get("availability") or row.get("audit_status") or "未提供")
+        pit_display = f"{pit_status}\n可得性：{availability}"
+        timestamp_kind = str(row.get("timestamp_kind") or "")
+        probe_outcome = str(row.get("probe_outcome") or "")
+        if timestamp_kind:
+            pit_display += f"\nclass：{timestamp_kind}"
+        if probe_outcome:
+            pit_display += f"\nprobe：{probe_outcome}"
+        coverage = cls._p0_percent_text(row.get("coverage_bp"))
+        observed = cls._p0_count_text(row.get("observed_rows"))
+        accepted = cls._p0_count_text(row.get("accepted_rows"))
+        blocked = cls._p0_count_text(row.get("blocked_rows"))
+        coverage_display = f"{coverage}\naccepted {accepted} / observed {observed}\nblocked {blocked}"
+        license_display = str(row.get("license_status") or "未提供")
+        license_urls = row.get("license_evidence_urls") or []
+        if license_urls:
+            license_display += f"\n證據 URL：{len(license_urls)}"
+        decision = str(row.get("decision_status") or "not_supplied")
+        eligibility = str(row.get("downstream_eligibility") or "none")
+        owner_display = f"{decision}\n下游：{eligibility}"
+        return (
+            f"{label}\n{source_id}",
+            f"{governance}\n{machine}",
+            route_display,
+            fallback_display,
+            pit_display,
+            coverage_display,
+            license_display,
+            owner_display,
+        )
+
+    def _render_p0_source_control_status(self, payload: Any) -> None:
+        """將 P0 projection 投影到可讀表格；不以顏色取代狀態文字。"""
+        table = getattr(self, "p0_source_control_table", None)
+        label = getattr(self, "p0_source_control_summary_label", None)
+        if table is None or label is None:
+            return
+        value = payload if isinstance(payload, dict) else {}
+        status = str(value.get("status") or "not_available")
+        source_count = self._p0_count_text(value.get("source_count"))
+        summary = value.get("summary") if isinstance(value.get("summary"), dict) else {}
+        governance_counts = summary.get("governance_status_counts") or {}
+        machine_counts = summary.get("machine_status_counts") or {}
+        decision_counts = summary.get("decision_status_counts") or {}
+        governance_text = ", ".join(
+            f"{key} {self._p0_count_text(item)}"
+            for key, item in governance_counts.items()
+        ) or "未提供"
+        machine_text = ", ".join(
+            f"{key} {self._p0_count_text(item)}"
+            for key, item in machine_counts.items()
+        ) or "未提供"
+        decision_text = ", ".join(
+            f"{key} {self._p0_count_text(item)}"
+            for key, item in decision_counts.items()
+        ) or "未提供"
+        lines = [
+            f"P0 狀態：{status}｜來源：{source_count}｜治理：{governance_text}",
+            f"Machine：{machine_text}｜Owner 決議：{decision_text}",
+            "唯讀邊界：writes=false、formal_oos=false、scheduler=false、"
+            "auto_accept=false、downstream_eligibility=none",
+        ]
+        observed_rows = summary.get("observed_rows")
+        accepted_rows = summary.get("accepted_rows")
+        blocked_rows = summary.get("blocked_rows")
+        if observed_rows is not None or accepted_rows is not None or blocked_rows is not None:
+            lines.append(
+                "Rows：observed {0} / accepted {1} / blocked {2}".format(
+                    self._p0_count_text(observed_rows),
+                    self._p0_count_text(accepted_rows),
+                    self._p0_count_text(blocked_rows),
+                )
+            )
+        reference = str(value.get("reference") or "").strip()
+        if reference:
+            lines.append(f"Artifact：{reference}")
+        load_error = str(value.get("load_error") or "").strip()
+        if load_error:
+            lines.append(f"讀取問題：{load_error}")
+        label.setText("\n".join(lines))
+        label.setStyleSheet(
+            f"color: {self._p0_status_color(status)}; font-size: 11px;"
+        )
+
+        rows = value.get("rows") if isinstance(value.get("rows"), list) else []
+        table.setRowCount(0)
+        for raw_row in rows:
+            if not isinstance(raw_row, dict):
+                continue
+            row_index = table.rowCount()
+            table.insertRow(row_index)
+            display_values = self._format_p0_source_row(raw_row)
+            for column_index, display_value in enumerate(display_values):
+                item = QTableWidgetItem(display_value)
+                item.setToolTip(display_value)
+                if column_index == 1:
+                    item.setForeground(QColor(self._p0_status_color(raw_row.get("governance_status", ""))))
+                table.setItem(row_index, column_index, item)
+            blockers = raw_row.get("blockers") or []
+            owner_actions = raw_row.get("owner_actions") or []
+            license_urls = raw_row.get("license_evidence_urls") or []
+            extra = [str(item) for item in (*blockers, *owner_actions) if str(item).strip()]
+            extra.extend(
+                f"license_evidence_url={item}"
+                for item in license_urls
+                if str(item).strip()
+            )
+            if extra:
+                for column_index in range(table.columnCount()):
+                    item = table.item(row_index, column_index)
+                    if item is not None:
+                        item.setToolTip(f"{item.toolTip()}\n缺口／下一步：{'；'.join(extra)}")
 
     def _get_source_detail(self, source: str) -> Dict[str, Any]:
         """取得單一資料來源詳細狀態並包成 UI 可套用的狀態 dict"""
@@ -2340,6 +2643,7 @@ class UpdateView(QWidget):
             "tdcc_shareholding",
         ):
             self._render_source_detail_status(source, status)
+        self._render_p0_source_control_status(status.get("p0_source_control"))
         self._log(f"數據狀態檢查完成")
 
     def _on_status_error(self, error_msg: str):
@@ -2386,6 +2690,15 @@ class UpdateView(QWidget):
                 source,
                 {source_key: dict(error_detail)},
             )
+        self._render_p0_source_control_status(
+            {
+                "status": "audit_unavailable",
+                "source_count": 0,
+                "rows": [],
+                "load_error": error_msg,
+                "reference": "本輪狀態檢查失敗",
+            }
+        )
         QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{error_msg}")
         self._log(f"錯誤：{error_msg}")
 
