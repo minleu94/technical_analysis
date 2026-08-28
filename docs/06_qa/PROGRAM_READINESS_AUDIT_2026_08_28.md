@@ -45,6 +45,10 @@ Evidence read model；它只會顯示待審核週期，不會把 pending 轉成 
 缺少路徑時會明示「未觀察」，不會以同根目錄的 prospective、replay、snapshot 或舊
 latest status 冒充正式輸入。
 
+`training_as_of` 若只給日期或格式無效，`formal_ml` lane 會直接回報
+`training_as_of_timezone_required`／`training_as_of_invalid`，不再把時區輸入錯誤包裝成
+泛化的 `formal_ml_readiness_inspection_failed`。
+
 本輪已用 `clock:prospective:20260828:v1` 的實際官方 staging 在隔離 TEMP output
 完成一次 activation dry-run：PIT、Rule、simulated Portfolio 三個 producer 均能各自產出
 prospective manifest，strict readiness 也能產出；所有產物仍保留
