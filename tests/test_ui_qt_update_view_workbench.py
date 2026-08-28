@@ -323,6 +323,9 @@ def test_update_view_projects_p0_routes_fallback_and_pit_into_status_table(tmp_p
     assert "route.legacy" in view.p0_source_control_table.item(9, 3).text()
     assert "official_publication_timestamp_missing" in view.p0_source_control_table.item(0, 4).text()
     assert "downstream_eligibility=none" in view.p0_source_control_summary_label.text()
+    assert view.p0_source_control_table.wordWrap() is True
+    assert view.p0_source_control_table.textElideMode() == Qt.ElideNone
+    assert view.p0_source_control_table.columnWidth(8) == 300
 
 
 def test_update_view_projects_license_candidate_capture_status(tmp_path):

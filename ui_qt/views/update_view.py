@@ -1098,12 +1098,36 @@ class UpdateView(QWidget):
         self.p0_source_control_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.p0_source_control_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.p0_source_control_table.setAlternatingRowColors(True)
+        # P0 diagnostics contain long route/PIT/license explanations.  Keep the
+        # table readable in the normal workbench width while retaining the full
+        # value in the cell tooltip and allowing horizontal scrolling when a
+        # narrower window cannot fit every bounded column.
+        self.p0_source_control_table.setWordWrap(True)
+        self.p0_source_control_table.setTextElideMode(Qt.ElideNone)
         self.p0_source_control_table.verticalHeader().setVisible(False)
-        self.p0_source_control_table.horizontalHeader().setSectionResizeMode(
+        p0_header = self.p0_source_control_table.horizontalHeader()
+        p0_header.setMinimumSectionSize(96)
+        for column_index, width in {
+            0: 190,  # 來源
+            1: 180,  # governance / machine
+            2: 260,  # 實際路徑
+            3: 220,  # fallback
+            4: 260,  # PIT / 公告
+            5: 210,  # coverage / rows
+            6: 220,  # license
+            7: 180,  # owner / downstream
+            8: 300,  # route probe
+        }.items():
+            p0_header.setSectionResizeMode(column_index, QHeaderView.Interactive)
+            self.p0_source_control_table.setColumnWidth(column_index, width)
+        p0_header.setStretchLastSection(False)
+        self.p0_source_control_table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.p0_source_control_table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.p0_source_control_table.verticalHeader().setSectionResizeMode(
             QHeaderView.ResizeToContents
         )
-        self.p0_source_control_table.horizontalHeader().setStretchLastSection(True)
         self.p0_source_control_table.setMinimumHeight(180)
+        self.p0_source_control_table.setMaximumHeight(520)
         self.p0_source_control_table.setToolTip(
             "P0 row 只代表候選觀測與治理缺口；downstream eligibility 永遠為 none。"
         )
@@ -3366,6 +3390,7 @@ class UpdateView(QWidget):
                     item = table.item(row_index, column_index)
                     if item is not None:
                         item.setToolTip(f"{item.toolTip()}\n缺口／下一步：{'；'.join(extra)}")
+        table.resizeRowsToContents()
 
     def _get_source_detail(self, source: str) -> Dict[str, Any]:
         """取得單一資料來源詳細狀態並包成 UI 可套用的狀態 dict"""

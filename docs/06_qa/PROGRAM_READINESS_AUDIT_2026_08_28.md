@@ -142,6 +142,8 @@ P0 audit 現在也會對 27 條候選 route 產生 `acquisition_route_probe_summ
 
 Data Update 的 P0 控制中心現在將這份 route probe 投影直接放在第 9 欄「Probe 路徑狀態」，摘要也列出已嘗試／總路徑與狀態計數。顯示採 bounded allowlist，並以「已選」／`fallback` 標記保留 lineage；沒有 route probe 的舊 artifact 仍顯示「未提供」，不會由 route registry 猜成已觀測。這只改善 UI 可見性，不把候選 evidence 變成 accepted source。
 
+P0 表格顯示層也已改為 bounded columns + word wrap + horizontal scroll；完整診斷字串仍在 cell tooltip，避免長 route／license／PIT 文本遮住其他來源列。這是顯示可讀性修正，不改變 projection payload 或任何 readiness gate。
+
 以最新 code 再跑一次 bounded read-only audit（未提供 MOPS 季報 artifact）後，輸出 `C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_route_status_refresh.json`（SHA-256=`BD41E6916C08C731B80B94DAFA505484CCE6567506F76E56E2C1765313706F6B`）。本輪 27 條 route 中 12 條 `observed`、15 條 `not_attempted`，13/13 source rows 都有 machine evidence；這是 route-level 可觀測性 refresh，不是 source acceptance refresh。因未帶 MOPS artifact，PIT 季報列維持 `artifact_missing`，不能與先前 MOPS verified artifact 的數字混用。
 
 同一份 route probe status 也已進入 `machine_evidence_by_source` 的 candidate intake 與 owner packet；packet 會在 route label 後附上 machine status 與 selected／fallback 標記。這讓人工 review 可直接區分「有 route 設計」與「本輪真的嘗試」，但不改 dossier v1、license／PIT／owner gate 或任何正式寫入邊界。
