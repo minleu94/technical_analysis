@@ -732,6 +732,16 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - 產出稽核草稿 handoff JSON 至 `%TEMP%\technical_analysis_gemini_handoffs\GEMINI-P0-13-OFFICIAL-EVIDENCE-AND-READINESS-HARDENING-V1.json`；其 `status=audit_generated_not_validation_handoff`，不宣稱 pytest、mypy 或 Git 終態已通過。
 - 嚴格守護 `downstream_eligibility=none`、`human_decision=requires_human_acceptance`、`production_scheduler_allowed=false` 與 `formal_oos_allowed=false`；所有 formal clock zeros 維持 0。
 
+若要把已保存的 audit 交給 Owner／License reviewer，可用下列唯讀 renderer；它只整理既有 13-source machine evidence 與 5 組 owner question，不重新抓資料、不寫 registry，也不會推導 `accepted`／`limited`：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\render_p0_owner_decision_packet.py `
+  --input $env:TEMP\technical_analysis_p0_audit\p0_evidence_hardening_live.json `
+  --output $env:TEMP\technical_analysis_p0_audit\p0_owner_decision_packet.md
+```
+
+輸入必須是既有 `p0-source-evidence-audit.v1` artifact；輸出路徑不得位於正式 `DATA_ROOT`。packet 中的人工欄位（具名 Owner／reviewer、license／quality／PIT evidence、用途與 rollback）仍須由實際權責人填寫，完成前下游資格固定為 `none`。
+
 ### Gate 3 P0 Data Source Control Center（唯讀）
 
 `scripts/inspect_p0_source_control_center.py` 將 13 個 authoritative P0 source contract、候選／官方證據稽核與選擇性人工 decision revision 收斂成同一份可稽核 read model。它不建立 decision registry、不寫正式 SQLite、不執行網路抓取，也不會因 row count 或 machine status 足夠而自動接受來源：

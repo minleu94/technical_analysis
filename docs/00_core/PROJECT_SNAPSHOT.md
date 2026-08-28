@@ -7,6 +7,11 @@
 - 目前正式環境讀到 `data_update_quick`=`passed`、run=`20260827-308`、目標資料日=`2026-08-27`、12/12 步驟通過；距目前約 17.8 小時，時間軸狀態為 `current`。這是最新一次排程結果，不等於 Paper fills、P0 acceptance 或 Formal credit。
 - `run_daily_data_update_quick.py` 現在會在固定排程出口旁 append `data-update-status-history.v1` JSONL，保留每次 `running` 與 terminal attempt 的 run／時間／步驟摘要；相同 record hash 不重複追加。既有 latest status 不會被回放或補寫，正式環境要等下一次真實排程自然產生第一筆 history。
 
+## 2026-08-28 P0 owner packet renderer（current engineering）
+
+- 新增唯讀 `scripts/render_p0_owner_decision_packet.py`，可將既有 `p0-source-evidence-audit.v1` artifact 整理成 5 組 Owner／License reviewer packet。它只重排 machine evidence、route／timestamp blocker 與 owner question，不重新抓資料、不建立 registry、不推導 `accepted`／`limited`。
+- Renderer 嚴格驗證 `formal_oos_allowed=false`、`production_allowed=false`、`scheduler_allowed=false`、`downstream_eligibility=none`，輸出只能落在正式 `DATA_ROOT` 外；人工填寫的具名 owner／reviewer、license／quality／PIT evidence 與 rollback 仍是外部輸入。
+
 ## 2026-08-28 Data Update append-only status history（current engineering）
 
 - 新增 `app_module/update_status_history.py` 與排程 runner 的 `--history-path`；未指定時使用 `<STATUS_PATH_PARENT>/history.jsonl`，預設即為 `<OUTPUT_ROOT>/scheduled/data_update_quick/history.jsonl`。
