@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime
 from hashlib import sha256
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, Mapping, Sequence
 
@@ -61,7 +62,7 @@ def build_p0_candidate_audit(
     *,
     probe_report: Mapping[str, Any] | None = None,
     fubon_projection: Mapping[str, Any] | None = None,
-    mops_quarterly_artifact: Mapping[str, Any] | None = None,
+    mops_quarterly_artifact: Mapping[str, Any] | Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     """投影候選品質與 13 項 P0 機器驗證狀態；只探測官方來源，絕不寫入資料庫。"""
     report = dict(
@@ -296,7 +297,135 @@ def build_p0_candidate_audit(
     }
 
 
-def _validate_mops_quarterly_artifact(payload: Mapping[str, Any]) -> list[dict[str, object]]:
+_MOPS_NORMALIZED_HASH_RE = re.compile(r"\A[0-9a-fA-F]{64}\Z")
+_MOPS_NORMALIZED_SHA256_REF_RE = re.compile(r"\Asha256:[0-9a-fA-F]{64}\Z")
+
+
+def _parse_mops_normalized_date(value: object, *, field: str) -> date:
+    """Parse a normalized MOPS date while preserving timestamp precision."""
+
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"normalized MOPS row {field} is required")
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError as exc:
+            raise ValueError(
+                f"normalized MOPS row {field} must be an ISO date or timestamp"
+            ) from exc
+
+
+def _validate_normalized_mops_rows(payload: Sequence[Any]) -> list[dict[str, object]]:
+    """Validate rows emitted by ``validate_mops_quarterly_artifact.py``.
+
+    The validator CLI intentionally emits a normalized JSON list for downstream
+    bridges.  Requiring callers to reconstruct the original wrapper object
+    would discard a usable, hash-addressed candidate artifact and make the
+    audit report ``artifact_missing`` again.  This branch accepts only the
+    validator's normalized identity/provenance fields; it never changes the
+    candidate-only safety boundary or grants source acceptance.
+    """
+
+    if not isinstance(payload, Sequence) or isinstance(payload, (str, bytes)):
+        raise ValueError("normalized MOPS artifact must be a JSON list")
+    if not payload:
+        raise ValueError("normalized MOPS artifact rows must be non-empty")
+
+    required_fields = {
+        "stock_code",
+        "statement_type",
+        "statement_scope",
+        "period",
+        "period_end",
+        "announcement_date",
+        "available_date",
+        "revision",
+        "content_hash",
+        "correction_status",
+        "source_id",
+        "artifact_source_id",
+        "numeric_source_id",
+        "availability_source_id",
+        "source_contract_mapping_version",
+        "source_version",
+        "source_hash",
+        "evidence_tier",
+    }
+    normalized: list[dict[str, object]] = []
+    for index, raw_row in enumerate(payload):
+        if not isinstance(raw_row, Mapping):
+            raise ValueError(f"normalized MOPS row {index} must be an object")
+        missing = sorted(field for field in required_fields if field not in raw_row)
+        if missing:
+            raise ValueError(
+                f"normalized MOPS row {index} missing provenance fields: {', '.join(missing)}"
+            )
+        row = dict(raw_row)
+        if row["source_id"] != "pit.quarterly_financials":
+            raise ValueError("normalized MOPS row source_id is not governed by P0 PIT")
+        if row["artifact_source_id"] != "mops.statement.publication":
+            raise ValueError("normalized MOPS row artifact_source_id is invalid")
+        if row["numeric_source_id"] != "mops.t163sb06.financial_ratio":
+            raise ValueError("normalized MOPS row numeric_source_id is invalid")
+        if row["availability_source_id"] != "mops.document_listing.statement_publication":
+            raise ValueError("normalized MOPS row availability_source_id is invalid")
+        if row["evidence_tier"] != "research_candidate":
+            raise ValueError("normalized MOPS rows must remain research_candidate")
+        if row["statement_scope"] != "consolidated" or row["correction_status"] != "none":
+            raise ValueError(
+                "normalized MOPS rows must be uncorrected consolidated reports"
+            )
+        if not _MOPS_NORMALIZED_HASH_RE.fullmatch(str(row["content_hash"])):
+            raise ValueError("normalized MOPS row content_hash is invalid")
+        if not _MOPS_NORMALIZED_HASH_RE.fullmatch(str(row["source_hash"])):
+            raise ValueError("normalized MOPS row source_hash is invalid")
+        try:
+            revision = int(row["revision"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("normalized MOPS row revision is invalid") from exc
+        if isinstance(row["revision"], bool) or revision < 1:
+            raise ValueError("normalized MOPS row revision must be positive")
+        publication_date = _parse_mops_normalized_date(
+            row["publication_timestamp"]
+            if row.get("publication_timestamp") is not None
+            else row["announcement_date"],
+            field="publication_timestamp",
+        )
+        available_date = _parse_mops_normalized_date(
+            row["available_date"], field="available_date"
+        )
+        if available_date <= publication_date:
+            raise ValueError(
+                "normalized MOPS row available_date must be after publication date"
+            )
+        if "statement_items" in row:
+            for field in ("numeric_source_row_sha256", "availability_event_sha256"):
+                if not _MOPS_NORMALIZED_SHA256_REF_RE.fullmatch(str(row.get(field) or "")):
+                    raise ValueError(
+                        f"normalized MOPS numeric row {field} must be sha256-addressed"
+                    )
+            statement_items = row["statement_items"]
+            if not isinstance(statement_items, Mapping) or not statement_items:
+                raise ValueError("normalized MOPS statement_items must be non-empty")
+            if any(
+                isinstance(value, bool) or not isinstance(value, int)
+                for value in statement_items.values()
+            ):
+                raise ValueError("normalized MOPS statement_items must use integers")
+        normalized.append(row)
+    return normalized
+
+
+def _validate_mops_quarterly_artifact(
+    payload: Mapping[str, Any] | Sequence[Any],
+) -> list[dict[str, object]]:
+    if isinstance(payload, list):
+        return _validate_normalized_mops_rows(payload)
+    if not isinstance(payload, Mapping):
+        raise ValueError("MOPS quarterly artifact must be an object or normalized row list")
     if payload.get("schema_version") == MOPS_STATEMENT_AVAILABILITY_SCHEMA:
         return _validate_mops_ezsearch_availability_artifact(payload)
     expected = {

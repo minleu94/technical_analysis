@@ -144,6 +144,8 @@ Data Update 的 P0 控制中心現在將這份 route probe 投影直接放在第
 
 P0 表格顯示層也已改為 bounded columns + word wrap + horizontal scroll；完整診斷字串仍在 cell tooltip，避免長 route／license／PIT 文本遮住其他來源列。這是顯示可讀性修正，不改變 projection payload 或任何 readiness gate。
 
+同日以既有 MOPS validator normalized row list（`mops_quarterly_candidate_validated_2330_2025q1.json`）作為明確 candidate artifact，重新完成 host-context bounded live audit：13/13 source rows 有 machine evidence，`1 verified / 12 degraded / 0 missing`；27 條 route 中 13 條 `observed`、14 條 `not_attempted`。audit=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_route_status_mops_normalized_refresh_host.json`（SHA-256=`C1B6993FF3D9B077BDD6978187C2FBFB95B5CCB4FF29B8F1BF0AE57CB29B49DC`），MOPS row `1/1` 保留到 candidate intake，且 candidate intake／Owner packet 仍是 `owner-review-ready=0`、`downstream_eligibility=none`。這是重用已驗證候選的輸入形狀修正，不是把資料寫入正式 PIT／SQLite，也不代表 source acceptance。
+
 以最新 code 再跑一次 bounded read-only audit（未提供 MOPS 季報 artifact）後，輸出 `C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_route_status_refresh.json`（SHA-256=`BD41E6916C08C731B80B94DAFA505484CCE6567506F76E56E2C1765313706F6B`）。本輪 27 條 route 中 12 條 `observed`、15 條 `not_attempted`，13/13 source rows 都有 machine evidence；這是 route-level 可觀測性 refresh，不是 source acceptance refresh。因未帶 MOPS artifact，PIT 季報列維持 `artifact_missing`，不能與先前 MOPS verified artifact 的數字混用。
 
 同一份 route probe status 也已進入 `machine_evidence_by_source` 的 candidate intake 與 owner packet；packet 會在 route label 後附上 machine status 與 selected／fallback 標記。這讓人工 review 可直接區分「有 route 設計」與「本輪真的嘗試」，但不改 dossier v1、license／PIT／owner gate 或任何正式寫入邊界。

@@ -392,6 +392,78 @@ def test_valid_mops_artifact_upgrades_to_verified() -> None:
     }
 
 
+def test_validated_normalized_mops_rows_upgrade_to_verified() -> None:
+    normalized_rows = [
+        {
+            "stock_code": "2330",
+            "statement_type": "financial_ratio",
+            "statement_scope": "consolidated",
+            "period": "2025-Q1",
+            "period_end": "2025-03-31",
+            "announcement_date": "2025-05-15T13:40:15+08:00",
+            "publication_timestamp": "2025-05-15T13:40:15+08:00",
+            "available_date": "2025-05-16",
+            "revision": 1,
+            "parent_revision": None,
+            "correction_status": "none",
+            "content_hash": "a" * 64,
+            "source_id": "pit.quarterly_financials",
+            "artifact_source_id": "mops.statement.publication",
+            "numeric_source_id": "mops.t163sb06.financial_ratio",
+            "availability_source_id": "mops.document_listing.statement_publication",
+            "source_contract_mapping_version": "p0-candidate-source-alignment.v1",
+            "source_version": "mops-t163sb06-with-t57sb01-publication.v1",
+            "source_hash": "b" * 64,
+            "evidence_tier": "research_candidate",
+        }
+    ]
+
+    payload = build_p0_source_evidence_audit(
+        date(2026, 7, 26),
+        probe_report=_sample_probe_report(),
+        mops_quarterly_artifact=normalized_rows,
+    )
+    quarterly = next(
+        item
+        for item in payload["machine_evidence_matrix"]
+        if item["source_id"] == "pit.quarterly_financials"
+    )
+    assert quarterly["machine_status"] == "verified"
+    assert quarterly["availability"] == "artifact_verified"
+    assert quarterly["raw_row_count"] == 1
+    assert quarterly["payload_sha256"] == "b" * 64
+
+
+def test_normalized_mops_rows_reject_wrong_identity() -> None:
+    with pytest.raises(ValueError, match="normalized MOPS row source_id"):
+        build_p0_source_evidence_audit(
+            date(2026, 7, 26),
+            probe_report=_sample_probe_report(),
+            mops_quarterly_artifact=[
+                {
+                    "stock_code": "2330",
+                    "statement_type": "financial_ratio",
+                    "statement_scope": "consolidated",
+                    "period": "2025-Q1",
+                    "period_end": "2025-03-31",
+                    "announcement_date": "2025-05-15T13:40:15+08:00",
+                    "available_date": "2025-05-16",
+                    "revision": 1,
+                    "correction_status": "none",
+                    "content_hash": "a" * 64,
+                    "source_id": "not-a-p0-source",
+                    "artifact_source_id": "mops.statement.publication",
+                    "numeric_source_id": "mops.t163sb06.financial_ratio",
+                    "availability_source_id": "mops.document_listing.statement_publication",
+                    "source_contract_mapping_version": "p0-candidate-source-alignment.v1",
+                    "source_version": "mops-v1",
+                    "source_hash": "b" * 64,
+                    "evidence_tier": "research_candidate",
+                }
+            ],
+        )
+
+
 def test_grouped_owner_decision_packet_has_at_most_5_groups() -> None:
     payload = build_p0_source_evidence_audit(
         date(2026, 7, 26),

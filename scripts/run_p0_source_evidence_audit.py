@@ -480,7 +480,7 @@ def build_p0_source_evidence_audit(
     *,
     probe_report: Mapping[str, Any] | None = None,
     fubon_projection: Mapping[str, Any] | None = None,
-    mops_quarterly_artifact: Mapping[str, Any] | None = None,
+    mops_quarterly_artifact: Mapping[str, Any] | Sequence[Any] | None = None,
     live_mode: bool = False,
     confirm_live_readonly: bool = False,
     output_path: Path | None = None,
