@@ -45,6 +45,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_fubon_shadow_decision_service.py": "service-oracle-recommendation",
     "tests/test_inspect_fubon_shadow_decision_cli.py": "governance-doc-tooling",
     "tests/test_official_trading_calendar.py": "service-oracle-data-market",
+    "tests/test_official_calendar_bundle.py": "governance-doc-tooling",
     "tests/test_official_phase3c_fetcher.py": "service-oracle-data-market",
     "tests/test_ml_direct_chain_maintenance.py": "governance-doc-tooling",
     "tests/test_phase3c_backfill_runner.py": "service-oracle-data-market",

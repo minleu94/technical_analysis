@@ -77,7 +77,10 @@ Codex 負責完成候選盤點、比較與首選提案。**Owner 只需在看到
    產生 `candidate_ready` proposal。這個 proposal 不等於 clock manifest、formal input 或
    owner acceptance；缺少官方 response hash、共同交易日或未來 window 時會回
    `blocked`，不自行查網路、不猜日期、不選 same-day override，也不會重跑已消耗的
-   2026-08-28 one-shot。
+   2026-08-28 one-shot。若只有官方 raw 回應，可先用
+   `scripts/capture_official_calendar_bundle.py` 正規化；它支援 fixture-only 或明確
+   `--confirm-network` 的 bounded GET，輸出限 TEMP、create-only、candidate-only，且
+   缺少 TPEX 平日 row 會 fail closed。兩個工具都不會自動建立 clock 或改受控 path。
 2. 產出 Rule Champion proposal：一個首選、必要時最多兩個替代方案；列出完整 identity、比較證據與 Look-ahead 自查。
 3. 建立官方 TWSE／TPEX sector source registry 與 prospective first-seen capture producer；先用 fixture／staging 驗證，再接受控路徑。
 4. 在 Owner 對具體 Rule Champion 做一次接受後，依本文件選日規則建立新 clock，凍結 Rule／policy／universe／source／model／calibration／evaluation identities。

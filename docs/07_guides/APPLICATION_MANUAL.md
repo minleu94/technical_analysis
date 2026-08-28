@@ -10,6 +10,7 @@ PFS-07 的 activation contract 已可用於受控 fixture preflight：
 
 - `scripts\publish_prospective_formal_clock.py --fixture-only` 可把 owner 已核准、仍在未來的 activation trading day 與官方 calendar evidence 寫成 planned clock manifest。呼叫端必須明確提供 clock／owner decision、cash seed、strategy／policy／universe／source identities、frozen candidate training cutoff、calibration／evaluation hashes 與 `--now`；命令不會自行選日期、查找或回填歷史、設定任何 `BALDR_ML_*` path、讀取 HMAC secret 或啟動 watcher。輸出 parent 必須先存在，manifest 採 canonical JSON create-only。
 - `scripts\plan_prospective_formal_clock.py` 是新的唯讀日期 preflight。它只接受呼叫端提供的 `official-trading-calendar-bundle.v1`（每個候選日同時含 TWSE／TPEX `is_trading_day`、官方 `source` 與 `sha256:` response hash），以帶時區的 `--now`、owner decision timestamp、至少一個準備日與 lookahead window 選出第一個尚未使用的共同交易日。輸出是 `candidate_ready` proposal，不是 clock manifest；不下載日曆、不採用 same-day override、不自動切換 `BALDR_ML_*` path、不寫正式資料。選不到合格日期時回 `blocked`，不猜日期。
+- `scripts\capture_official_calendar_bundle.py` 可將已由官方 TWSE 年度 `holidaySchedule` 與 TPEX 月度 `mktCalendar` 取得的 raw JSON 正規化成上述 bundle；fixture 可重複指定，缺少的年度／月份只有在明確加上 `--confirm-network` 時才各發一次 bounded GET。輸出只能寫入作業系統 TEMP 且 create-only，artifact 永遠標示 `candidate_only=true`、`formal_clock_created=false`；它不寫市場 SQLite、不改 `BALDR_ML_*` path，也不會自動建立或啟動 clock。TPEX 缺少平日明確 row、TWSE／TPEX 年月不符或回應格式錯誤時均 fail closed。
 - `scripts\activate_prospective_formal_clock.py --fixture-only` 在 strict 模式只於三個 PFS-06 input 都 ready、candidate／calibration／evaluation identities 與 file hashes 都一致、owner activation timestamp 已發生、activation trading day 仍在未來時建立 create-only manifest。Owner handoff 可改用 `--fixture-only --controlled-environment`，由 shared Windows reader 取得三個 formal paths、非秘密 store identity 與 HMAC configured flag；此模式不讀／輸出 secret、不設定環境，缺件即 blocked。
 - `scripts\record_prospective_daily_capture.py --fixture-only` 只建立低 CPU daily capture 的 `started` record，固定 PIT publication → Rule snapshot → T-1 Portfolio transition → frozen inference → heartbeat 順序；`elapsed_day_credit=0`、`formal_credit=0`，不能隔日補寫。
 - `scripts\run_prospective_rule_only_decision.py` 只在實際台北 09:00–13:30 盤中，以 prospective clock owner acceptance、frozen universe 與 T-1 `daily_prices` 產生 TEMP owner-bound Rule source；它不寫 market DB、Recommendation、Portfolio、evidence ledger 或 broker，且 HMAC secret 只由受控 runtime 驗證，絕不輸出。
@@ -74,6 +75,20 @@ Bundle 最小格式如下；`source_hash` 必須是保存過的官方 response b
   ]
 }
 ```
+
+若手上只有官方 raw 回應，可先用候選-only capture（命令不會自動連線）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\capture_official_calendar_bundle.py `
+  --start-date <START_DATE> --end-date <END_DATE> `
+  --twse-fixture <TWSE_ANNUAL_JSON> `
+  --tpex-fixture <TPEX_MONTH_JSON> `
+  --output <TEMP_CANDIDATE_BUNDLE_JSON>
+```
+
+若缺少某年度／月份，確認來源可用且允許 bounded GET 後才加上
+`--confirm-network`；網路失敗不會建立半成品輸出。fixture／network 混合結果仍只
+是日曆候選證據，必須先 owner review source hash，再交給日期 planner。
 
 `candidate_ready` 只表示日期與日曆證據通過；仍須由 owner 審閱 proposal hash，接著
 再以 `publish_prospective_formal_clock.py --fixture-only` 建立新的 planned clock。若
