@@ -3162,6 +3162,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：Runtime 排程 read model 新增 `ML Direct/OOC 維護` 安全工作；`blocked_insufficient_storage` 會以「需要注意」與明確容量 diagnostic 顯示，並保留 raw status／source path 供排錯。
 - 2026-08-28：整體 readiness 盤點新增 `--ml-direct-chain-status`；載入 Direct/OOC maintainer status 後，performance lane 會明確投影 `direct_chain_storage_preflight_blocked`／磁碟不足診斷與下一步，仍維持唯讀、不啟動 worker、不刪除歷史 run。
 - 2026-08-28：整體 readiness 盤點新增 `--runtime-readiness-json`；可載入明確 host-context `runtime-environment-readiness.v1` artifact，避免 sandbox token 的 `PermissionError` 覆蓋 host 狀態；schema 不符即 fail-closed，仍不寫正式 Registry。
+- 2026-08-28：新增 `inspect_ml_storage_retention.py` 唯讀容量／retention inventory；可對明確 Direct/OOC 根目錄做 bounded metadata scan，列出完整／截斷狀態、manifest status 與 owner review 候選，固定不刪除、不搬移、不修改 lock／pointer。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
@@ -3337,3 +3338,23 @@ owner deposit 能被同一個 process 接收；只更新 process memory，HMAC v
 wrapper，不啟動重建、不進入維護器 retry loop，也不刪除既有 run。這只是容量保護，不是
 Formal／promotion 通過；若需調整門檻，使用受控命令列的
 `--minimum-free-space-bytes`，並先確認年度 raw shard 估算、備份與 rollback 空間。
+
+若 preflight 已回報 `blocked_insufficient_storage`，可先用下列唯讀工具整理容量與人工
+retention 候選：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_ml_storage_retention.py `
+  --root <DIRECT_RAW_ROOT> `
+  --root <DIRECT_NUMERIC_ROOT> `
+  --root <OOC_TRAINING_ROOT> `
+  --minimum-free-space-bytes 21474836480 `
+  --max-files 500000 `
+  --format markdown `
+  --output $env:TEMP\technical_analysis_program_readiness\ml_storage_retention_inventory.md
+```
+
+工具只讀取檔案 metadata 與小型 `manifest.json`，會列出大小、manifest status、掃描是否
+截斷及可逆的外部 archive／人工 review 建議；不刪除、不搬移、不修改 lock／pointer，且
+輸出明確固定 `automatic_delete_allowed=false`。若 `scan_truncated=true`，候選清單只能作
+初步盤點，需提高 `--max-files` 重跑後再交 owner 決定；不要因清單出現 `status=complete`
+就直接刪除 immutable run。
