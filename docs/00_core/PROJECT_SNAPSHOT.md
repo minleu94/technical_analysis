@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-28 整體程式 readiness 聚合入口（current engineering）
+
+- 新增唯讀 `scripts/inspect_program_readiness.py`，將 P0、Evidence、Paper、Formal/ML、Runtime、Data Update history 與 performance 七個 lane 收斂到 `program-readiness.v1`；每個 lane 都保留實際 read model、blockers、外部輸入需求與下一步，並以 `execution_order` 對齊 [Program Readiness Audit](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md) 的推進順序。
+- 這個入口不建立 `TWStockConfig`，避免 readiness 檢查因 log／目錄初始化產生副作用；只讀取明確路徑，history 另檢查 JSONL schema、duplicate record、terminal run、latest status／history run identity 與 8 MiB bounded retention。
+- 報告固定揭露 `read_only=true`、`writes_allowed=false`、`formal_oos_allowed=false`、`production_scheduler_allowed=false`、`broker_order_allowed=false`。目前它將「可以工程化」與「必須等待 owner／真實時間／執行事實」分開，不會用 replay、prospective、snapshot 或舊 latest status 補造缺件。
+- focused regression 已加入既有 `tests/test_pre_v2_readiness_service.py`；本 slice 未寫正式資料、未發網路、未啟用 scheduler／broker。
+
 ## 2026-08-28 Data Update fallback diagnostics projection（current engineering）
 
 - P0 evidence matrix 的 fallback lineage 現在完整保留到 `P0SourceControlRow`／UpdateView read-model：`fallback_attempted`、實際替代 endpoint／route、probe outcome、HTTP／payload evidence、要求日／觀測日、quarantine 與 transport error 不再於投影時遺失。

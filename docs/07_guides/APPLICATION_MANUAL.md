@@ -992,6 +992,31 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 快速更新排程會在 `latest_status.json` 旁以 append-only 方式保存 `data-update-status-history.v1` JSONL；每次真實執行會記錄 `running` 與 terminal status 的 run／時間／步驟摘要。預設 history 路徑為 `OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`，也可用 runner 的 `--history-path` 或 UI 的 `DATA_UPDATE_HISTORY_ARTIFACT` 指定。這個功能不會回放既有 latest status、不會把檔案 mtime 當成完成時間；既有環境的 history 缺檔會顯示「缺漏」，等下一次真實排程自然產生，不得手動複製舊結果補足。
 
+### 4.1.1 整體程式 readiness 盤點（唯讀）
+
+若要一次確認目前各 Gate「在哪裡、卡在哪裡、下一步是什麼」，使用：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_program_readiness.py `
+  --data-root <DATA_ROOT> `
+  --output-root <OUTPUT_ROOT> `
+  --training-as-of <TRAINING_AS_OF> `
+  --format markdown
+```
+
+需要載入已存在的證據時，再加上 `--p0-audit-json`、
+`--approved-weekly-history-projection`、`--technical-performance-baseline` 與
+`--broker-performance-baseline`。程式會固定顯示 P0、Evidence、Paper、Formal/ML、
+Runtime、Update history、Performance 七個 lane 以及依序下一步；未提供的 artifact
+會顯示 `waiting_for_external_input` 或 `action_required`，不會自行搜尋、回放、補歷史
+或改接 prospective path。`update_history` 另外檢查 history JSONL 是否超過 8 MiB、
+是否有重複 record、terminal run，以及 latest status 與 history 最新 run 是否一致。
+
+此命令是 query-only readiness projection：不建立資料夾、不寫正式 SQLite、不發網路、
+不啟用 scheduler／broker；輸出 `partial` 也不代表 Formal credit、source acceptance、
+Paper 成本後週報或平行 worker 已完成。若要保存報告，才另以 `--output <REPORT_PATH>`
+指定明確的報告檔案。
+
 若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT` 或 `TPEX_REFRESH_STATUS_ARTIFACT`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。
 
 每日股價、大盤指數、產業指數、券商分點、技術指標、月營收，以及法人／信用／集保三個候選資料源分頁，都會在「檢查此資料源狀態」下方顯示同一份唯讀來源摘要；全域檢查完成後也會同步刷新這九份摘要。個別來源查詢失敗時只會將該來源標為異常，不會把其他來源卡片誤刷成錯誤。候選來源摘要仍屬 research-only，不代表正式評分或交易訊號。

@@ -6,6 +6,37 @@
 
 這仍不是完整產品 closeout。Data Update 的 read-model 現在也保留 fallback attempted／實際替代 route／date mismatch／network error 等拒絕診斷，並在 P0 表格與 summary 明確區分「已採用」和「已嘗試但未採用」；Paper benchmark 建置入口已完成，但成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
+## 可重複的整體盤點入口
+
+新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
+P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read model，
+另檢查 `data-update-status-history.v1` 的 JSONL schema、run identity、terminal record
+與 8 MiB bounded retention，並可載入 technical／broker latency baseline。它不會呼叫
+網路、不掃描替代路徑、不建立 `TWStockConfig`（避免建立目錄／log 的副作用）、不寫
+正式 SQLite，也不把 `partial`／`action_required` 轉成任何 scheduler、Formal 或 broker
+授權。
+
+目前這份 audit 可用下列方式重算（所有外部 artifact 都必須是明確指定的檔案）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_program_readiness.py `
+  --data-root <DATA_ROOT> `
+  --output-root <OUTPUT_ROOT> `
+  --p0-audit-json <P0_AUDIT_JSON> `
+  --approved-weekly-history-projection <APPROVED_WEEKLY_HISTORY_JSON> `
+  --training-as-of <TRAINING_AS_OF> `
+  --technical-performance-baseline <TECHNICAL_BASELINE_JSON> `
+  --broker-performance-baseline <BROKER_BASELINE_JSON> `
+  --format markdown
+```
+
+輸出固定分成 `p0`、`evidence`、`paper`、`formal_ml`、`runtime`、`update_history` 與
+`performance` 七個 lane，並以 `execution_order` 列出目前順序。`ready` 只代表該 lane
+的既有輸入通過；`partial` 代表仍有安全邊界或後續工程；`waiting_for_external_input`
+代表要等真實週期／owner artifact；`action_required` 代表需要先修正資料或治理決策。
+缺少路徑時會明示「未觀察」，不會以同根目錄的 prospective、replay、snapshot 或舊
+latest status 冒充正式輸入。
+
 本輪已用 `clock:prospective:20260828:v1` 的實際官方 staging 在隔離 TEMP output
 完成一次 activation dry-run：PIT、Rule、simulated Portfolio 三個 producer 均能各自產出
 prospective manifest，strict readiness 也能產出；所有產物仍保留
