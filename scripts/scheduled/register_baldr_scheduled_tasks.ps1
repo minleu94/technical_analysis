@@ -114,6 +114,17 @@ foreach ($task in $selectedTasks) {
     Write-Host "  Enabled: $($task.Enabled)"
 }
 
+$missingScripts = @(
+    $selectedTasks |
+        Where-Object { -not (Test-Path -LiteralPath $_.ScriptPath -PathType Leaf) }
+)
+if ($missingScripts.Count -gt 0) {
+    foreach ($task in $missingScripts) {
+        Write-Host "Wrapper missing: $($task.ScriptPath)"
+    }
+    throw "Wrapper preflight failed. No scheduled task was registered."
+}
+
 if ($Mode -eq "DryRun") {
     Write-Host "DryRun only. No scheduled task was registered. Use RegisterAll to register all displayed tasks."
     return

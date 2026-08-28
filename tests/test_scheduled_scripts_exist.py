@@ -31,10 +31,13 @@ def test_required_scheduled_scripts_exist() -> None:
 
 def test_register_and_unregister_support_dry_run_modes() -> None:
     register_text = (SCHEDULED_DIR / "register_baldr_scheduled_tasks.ps1").read_text(encoding="utf-8")
+    register_cmd_text = (SCHEDULED_DIR / "register_baldr_scheduled_tasks.cmd").read_text(encoding="utf-8")
     unregister_text = (SCHEDULED_DIR / "unregister_baldr_scheduled_tasks.ps1").read_text(encoding="utf-8")
 
     assert "ValidateSet('DryRun', 'Register', 'WeeklyRegister', 'RegisterAll')" in register_text
     assert "ValidateSet('DryRun', 'Unregister')" in unregister_text
+    assert "register-all" in register_cmd_text
+    assert "Wrapper preflight failed" in register_cmd_text
     assert "baldr-data-freshness-check-daily" in register_text
     assert "baldr-official-market-events-daily" in register_text
     assert "baldr-ml-raw-pit-refresh-daily" in register_text

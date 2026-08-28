@@ -57,6 +57,9 @@ def test_register_cmd_contains_task_names_and_times() -> None:
     assert "run_ml_promotion_authority.cmd" in text
     assert "run_decision_evidence_capture.cmd" in text
     assert "run_paper_portfolio_daily.cmd" in text
+    assert "register-all" in text
+    assert "Wrapper preflight failed" in text
+    assert "call :check_wrapper" in text
     assert text.index("DAILY 04:20") < text.index("DAILY 04:50")
     assert text.index("DAILY 05:17") < text.index("DAILY 05:18")
     assert text.index("DAILY 05:18") < text.index("DAILY 05:20")
@@ -99,6 +102,8 @@ def test_register_powershell_defines_all_daily_and_weekly_tasks() -> None:
         assert field in text
     assert "'WeeklyRegister'" in text
     assert "'RegisterAll'" in text
+    assert "Test-Path -LiteralPath $_.ScriptPath -PathType Leaf" in text
+    assert "Wrapper preflight failed" in text
     assert "New-ScheduledTaskTrigger -Weekly" in text
     assert "run_recommendation_snapshot.cmd" in text
     assert "run_v2_2_weekly_collection.cmd" in text

@@ -206,6 +206,14 @@ Create or replace the daily tasks:
 scripts\scheduled\register_baldr_scheduled_tasks.cmd register
 ```
 
+Create or replace all 12 daily tasks and the weekly collection task in one explicit operation:
+
+    scripts\scheduled\register_baldr_scheduled_tasks.cmd register-all
+
+Both registration modes run a wrapper-file preflight first. If a selected wrapper
+is missing, the command exits before calling schtasks and leaves existing tasks
+untouched. Use dryrun to inspect all 13 actions without registration.
+
 The register script creates:
 
 ```text
@@ -263,6 +271,10 @@ scripts\scheduled\register_baldr_scheduled_tasks.cmd weekly-register
 ```
 
 `weekly-register` 只建立 `baldr-v2-2-weekly-collection`，其排程為 `WEEKLY SUN 18:00` 並執行 `run_v2_2_weekly_collection.cmd`。它不建立、取代、啟用或以其他方式變更任何每日 task。
+
+The weekly-register mode still only changes the weekly collection task. The
+register-all mode performs the daily and weekly registrations together, but
+both modes require the selected wrapper files to pass preflight first.
 
 ## Query
 

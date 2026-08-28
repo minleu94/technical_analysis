@@ -4,7 +4,7 @@ setlocal EnableExtensions
 set "MODE=%~1"
 if "%MODE%"=="" set "MODE=dryrun"
 if /I "%MODE%"=="weekly-register" goto weekly_register
-if /I not "%MODE%"=="dryrun" if /I not "%MODE%"=="register" goto usage
+if /I not "%MODE%"=="dryrun" if /I not "%MODE%"=="register" if /I not "%MODE%"=="register-all" goto usage
 
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
@@ -48,6 +48,9 @@ set "PAPER_PORTFOLIO_ACTION=cmd.exe /c ""%PAPER_PORTFOLIO_SCRIPT%"""
 set "WEEKLY_TASK=baldr-v2-2-weekly-collection"
 set "WEEKLY_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_v2_2_weekly_collection.cmd"
 set "WEEKLY_ACTION=cmd.exe /c ""%WEEKLY_SCRIPT%"""
+set "CHECK_WEEKLY=0"
+if /I "%MODE%"=="dryrun" set "CHECK_WEEKLY=1"
+if /I "%MODE%"=="register-all" set "CHECK_WEEKLY=1"
 
 echo Mode: %MODE%
 echo Task: %UPDATE_TASK%
@@ -90,6 +93,33 @@ if /I "%MODE%"=="dryrun" (
   echo Task: %WEEKLY_TASK%
   echo   Schedule: WEEKLY SUN 18:00
   echo   Action: %WEEKLY_ACTION%
+)
+if /I "%MODE%"=="register-all" (
+  echo Task: %WEEKLY_TASK%
+  echo   Schedule: WEEKLY SUN 18:00
+  echo   Action: %WEEKLY_ACTION%
+)
+
+set "WRAPPER_MISSING=0"
+call :check_wrapper "%UPDATE_SCRIPT%"
+call :check_wrapper "%OFFICIAL_EVENTS_SCRIPT%"
+call :check_wrapper "%FRESH_SCRIPT%"
+call :check_wrapper "%ML_RAW_PIT_REFRESH_SCRIPT%"
+call :check_wrapper "%ML_DIRECT_CHAIN_MAINTAINER_SCRIPT%"
+call :check_wrapper "%RECOMMENDATION_SCRIPT%"
+call :check_wrapper "%EVIDENCE_SCRIPT%"
+call :check_wrapper "%ML_PROMOTION_EVIDENCE_SCRIPT%"
+call :check_wrapper "%ML_PROMOTION_AUTHORITY_SCRIPT%"
+call :check_wrapper "%ML_COPILOT_SCRIPT%"
+call :check_wrapper "%DECISION_EVIDENCE_SCRIPT%"
+call :check_wrapper "%PAPER_PORTFOLIO_SCRIPT%"
+if "%CHECK_WEEKLY%"=="1" call :check_wrapper "%WEEKLY_SCRIPT%"
+if "%WRAPPER_MISSING%"=="1" (
+  echo Wrapper preflight failed. No scheduled task was created.
+  exit /b 2
+)
+
+if /I "%MODE%"=="dryrun" (
   echo Dryrun only. No scheduled task was created.
   exit /b 0
 )
@@ -130,6 +160,11 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Create /TN "%PAPER_PORTFOLIO_TASK%" /SC DAILY /ST 05:28 /TR "%PAPER_PORTFOLIO_ACTION%" /F
 if errorlevel 1 exit /b %ERRORLEVEL%
 
+if /I "%MODE%"=="register-all" (
+  schtasks.exe /Create /TN "%WEEKLY_TASK%" /SC WEEKLY /D SUN /ST 18:00 /TR "%WEEKLY_ACTION%" /F
+  if errorlevel 1 exit /b %ERRORLEVEL%
+)
+
 echo.
 echo Registered tasks:
 schtasks.exe /Query /TN "%UPDATE_TASK%" /V /FO LIST
@@ -156,6 +191,10 @@ schtasks.exe /Query /TN "%DECISION_EVIDENCE_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%PAPER_PORTFOLIO_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
+if /I "%MODE%"=="register-all" (
+  schtasks.exe /Query /TN "%WEEKLY_TASK%" /V /FO LIST
+  if errorlevel 1 exit /b %ERRORLEVEL%
+)
 exit /b 0
 
 :weekly_register
@@ -171,6 +210,12 @@ echo Task: %WEEKLY_TASK%
 echo   Schedule: WEEKLY SUN 18:00
 echo   Action: %WEEKLY_ACTION%
 
+if not exist "%WEEKLY_SCRIPT%" (
+  echo Wrapper missing: %WEEKLY_SCRIPT%
+  echo Wrapper preflight failed. No scheduled task was created.
+  exit /b 2
+)
+
 schtasks.exe /Create /TN "%WEEKLY_TASK%" /SC WEEKLY /D SUN /ST 18:00 /TR "%WEEKLY_ACTION%" /F
 if errorlevel 1 exit /b %ERRORLEVEL%
 
@@ -180,5 +225,12 @@ schtasks.exe /Query /TN "%WEEKLY_TASK%" /V /FO LIST
 exit /b %ERRORLEVEL%
 
 :usage
-echo Usage: scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun^|register^|weekly-register
+echo Usage: scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun^|register^|register-all^|weekly-register
 exit /b 2
+
+:check_wrapper
+if not exist "%~1" (
+  echo Wrapper missing: %~1
+  set "WRAPPER_MISSING=1"
+)
+exit /b 0

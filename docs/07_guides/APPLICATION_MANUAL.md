@@ -2560,9 +2560,16 @@ Evidence Review UI 完成後，正式 scheduler 前仍需要人工 closeout：
 ```cmd
 scripts\scheduled\register_baldr_scheduled_tasks.cmd dryrun
 scripts\scheduled\register_baldr_scheduled_tasks.cmd register
+scripts\scheduled\register_baldr_scheduled_tasks.cmd register-all
 scripts\scheduled\query_baldr_scheduled_tasks.cmd
 scripts\scheduled\unregister_baldr_scheduled_tasks.cmd unregister
 ```
+
+register 只註冊 12 個每日 task；register-all 會在同一個受控操作中註冊
+12 個每日 task 與每週日 collection task。兩者都會先檢查選定的 .cmd
+wrapper 是否存在，缺檔時在呼叫 schtasks 前停止，不會留下指向不存在檔案的
+task。執行前仍須先以 dryrun 檢查 repo root、時間與 action，執行後再用
+registration inspector 與真實 terminal history 驗證；本段不代表目前 host 已完成註冊。
 
 目前 Windows Task Scheduler task：
 
