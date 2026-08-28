@@ -600,6 +600,20 @@ def build_p0_source_evidence_audit(
             "fallback_used",
             "fallback_from_endpoint_id",
             "fallback_from_acquisition_route_id",
+            "fallback_attempted",
+            "fallback_endpoint_id",
+            "fallback_acquisition_route_id",
+            "fallback_probe_outcome",
+            "fallback_official_status",
+            "fallback_http_status",
+            "fallback_payload_sha256",
+            "fallback_payload_size_bytes",
+            "fallback_observation_dates",
+            "fallback_requested_date",
+            "fallback_quarantine_reasons",
+            "fallback_error_type",
+            "fallback_error",
+            "primary_official_status",
         ):
             if route_field in probe:
                 item[route_field] = probe[route_field]

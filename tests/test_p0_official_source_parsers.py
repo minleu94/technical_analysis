@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 from data_module.p0_official_source_parsers import (
     RawFetchEnvelope,
     parse_tdcc_shareholding,
+    parse_tpex_credit_openapi,
+    parse_tpex_institutional_openapi,
     parse_twse_credit,
     parse_twse_disposition,
     parse_twse_ex_dividend,
@@ -116,6 +118,77 @@ def test_twse_credit_parser_accepts_current_duplicate_column_schema() -> None:
         "margin_purchase_shares": 100,
         "short_balance_shares": 24,
         "short_sale_shares": 4,
+    }
+
+
+def test_tpex_institutional_openapi_parser_normalizes_roc_date_and_quantities() -> None:
+    payload = [
+        {
+            "Date": "1150710",
+            "SecuritiesCompanyCode": "2330",
+            "CompanyName": "台積電",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Buy": "2,000",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Sell": "800",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference": "1,200",
+        }
+    ]
+    envelope = RawFetchEnvelope(
+        source_id="twse_institutional",
+        source_version="tpex-3insti-openapi.v1",
+        endpoint_id="tpex:openapi:tpex_3insti_daily_trading",
+        request_parameters={},
+        fetched_at=FETCHED_AT,
+        http_status=200,
+        http_headers={"Content-Type": "application/json"},
+        payload=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    )
+
+    result = parse_tpex_institutional_openapi(envelope)
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    observation = result.accepted[0].to_dict()
+    assert observation["observation_date"] == "2026-07-10"
+    assert observation["quantities"] == {
+        "foreign_buy_shares": 2000,
+        "foreign_sell_shares": 800,
+        "foreign_net_shares": 1200,
+    }
+    assert observation["quality"] == "degraded"
+
+
+def test_tpex_credit_openapi_parser_normalizes_margin_fields() -> None:
+    payload = [
+        {
+            "Date": "1150710",
+            "SecuritiesCompanyCode": "2330",
+            "CompanyName": "台積電",
+            "MarginPurchase": "100",
+            "MarginPurchaseBalance": "2500",
+            "ShortSale": "4",
+            "ShortSaleBalance": "24",
+        }
+    ]
+    envelope = RawFetchEnvelope(
+        source_id="twse_credit",
+        source_version="tpex-mainboard-margin-openapi.v1",
+        endpoint_id="tpex:openapi:tpex_mainboard_margin_balance",
+        request_parameters={},
+        fetched_at=FETCHED_AT,
+        http_status=200,
+        http_headers={"Content-Type": "application/json"},
+        payload=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+    )
+
+    result = parse_tpex_credit_openapi(envelope)
+
+    assert result.raw_row_count == 1
+    assert result.accepted_row_count == 1
+    assert result.accepted[0].to_dict()["quantities"] == {
+        "margin_purchase_shares": 100,
+        "margin_balance_shares": 2500,
+        "short_sale_shares": 4,
+        "short_balance_shares": 24,
     }
 
 

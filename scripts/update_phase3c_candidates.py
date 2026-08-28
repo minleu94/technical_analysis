@@ -23,6 +23,8 @@ from data_module.p0_official_source_parsers import (
     OfficialParserResult,
     RawFetchEnvelope,
     parse_tdcc_shareholding,
+    parse_tpex_credit_openapi,
+    parse_tpex_institutional_openapi,
     parse_twse_credit,
     parse_twse_disposition,
     parse_twse_ex_dividend,
@@ -54,19 +56,46 @@ OFFICIAL_PROBE_ROUTE_IDS: dict[str, str] = {
     "twse:exchangeReport:TWTAUU": "twse.TWTAUU",
     "twse:opendata:t187ap05_L": "twse.openapi.t187ap05_L",
     "tpex:openapi:mopsfin_t187ap05_O": "tpex.openapi.mopsfin_t187ap05_O",
+    "tpex:openapi:tpex_3insti_daily_trading": "tpex.tpex_3insti_daily_trading",
+    "tpex:openapi:tpex_mainboard_margin_balance": "tpex.tpex_mainboard_margin_balance",
     "twse:exchangeReport:TWT84U": "twse.TWT84U",
 }
 
 
 OFFICIAL_PROBE_FALLBACKS: dict[
-    str, tuple[str, str, str, str, dict[str, str]]
+    str,
+    tuple[
+        str,
+        str,
+        str,
+        str,
+        dict[str, str],
+        Callable[[RawFetchEnvelope], OfficialParserResult],
+    ],
 ] = {
+    "twse_institutional": (
+        "tpex-3insti-openapi.v1",
+        "tpex:openapi:tpex_3insti_daily_trading",
+        "tpex.tpex_3insti_daily_trading",
+        "https://www.tpex.org.tw/openapi/v1/tpex_3insti_daily_trading",
+        {},
+        parse_tpex_institutional_openapi,
+    ),
+    "twse_credit": (
+        "tpex-mainboard-margin-openapi.v1",
+        "tpex:openapi:tpex_mainboard_margin_balance",
+        "tpex.tpex_mainboard_margin_balance",
+        "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_margin_balance",
+        {},
+        parse_tpex_credit_openapi,
+    ),
     "tdcc_shareholding": (
         "tdcc-openapi-1-5.v1",
         "tdcc:openapi:1-5",
         "tdcc.openapi_1-5",
         "https://openapi.tdcc.com.tw/v1/opendata/1-5",
         {},
+        parse_tdcc_shareholding,
     ),
     "twse_monthly_revenue": (
         "mopsfin-t187ap05_L-csv.v1",
@@ -74,6 +103,7 @@ OFFICIAL_PROBE_FALLBACKS: dict[
         "mopsfin.csv.t187ap05_L",
         "https://mopsfin.twse.com.tw/opendata/t187ap05_L.csv",
         {},
+        parse_monthly_revenue_open_data,
     ),
     "tpex_monthly_revenue": (
         "mopsfin-t187ap05_O-csv.v1",
@@ -81,6 +111,7 @@ OFFICIAL_PROBE_FALLBACKS: dict[
         "mopsfin.csv.t187ap05_O",
         "https://mopsfin.twse.com.tw/opendata/t187ap05_O.csv",
         {},
+        parse_monthly_revenue_open_data,
     ),
 }
 
@@ -210,6 +241,7 @@ def run_bounded_official_probe(probe_date: date) -> dict:
                 acquisition_route_id,
                 url,
                 params,
+                parser,
             ) = fallback
             try:
                 response = safe_request(
@@ -263,9 +295,129 @@ def run_bounded_official_probe(probe_date: date) -> dict:
             "fetched_at": fetched_at.isoformat(),
         }
         official_no_data = _official_no_data_status(payload)
+        fallback_result: OfficialParserResult | None = None
         if official_no_data is not None:
-            diagnostics.append(
-                {
+            fallback = OFFICIAL_PROBE_FALLBACKS.get(source_id)
+            fallback_attempt: dict[str, object] = {}
+            if fallback is not None and not bool(fallback_evidence["fallback_used"]):
+                (
+                    fallback_source_version,
+                    fallback_endpoint_id,
+                    fallback_route_id,
+                    fallback_url,
+                    fallback_params,
+                    fallback_parser,
+                ) = fallback
+                fallback_attempt = {
+                    "fallback_attempted": True,
+                    "fallback_endpoint_id": fallback_endpoint_id,
+                    "fallback_acquisition_route_id": fallback_route_id,
+                    "fallback_from_endpoint_id": primary_endpoint_id,
+                    "fallback_from_acquisition_route_id": primary_route_id,
+                }
+                fallback_response = None
+                try:
+                    fallback_response = safe_request(
+                        fallback_url,
+                        fallback_params or None,
+                        timeout_seconds=8,
+                        max_attempts=1,
+                    )
+                    fallback_payload = bytes(fallback_response.content)
+                    fallback_attempt.update(
+                        {
+                            "fallback_http_status": int(fallback_response.status_code),
+                            "fallback_payload_sha256": sha256(fallback_payload).hexdigest(),
+                            "fallback_payload_size_bytes": len(fallback_payload),
+                        }
+                    )
+                    fallback_no_data = _official_no_data_status(fallback_payload)
+                    if fallback_no_data is not None:
+                        fallback_attempt.update(
+                            {
+                                "fallback_probe_outcome": "official_no_data",
+                                "fallback_official_status": fallback_no_data,
+                            }
+                        )
+                    else:
+                        fallback_envelope = RawFetchEnvelope(
+                            source_id=source_id,
+                            source_version=fallback_source_version,
+                            endpoint_id=fallback_endpoint_id,
+                            request_parameters=fallback_params,
+                            fetched_at=fetched_at,
+                            http_status=int(fallback_response.status_code),
+                            http_headers=dict(fallback_response.headers),
+                            payload=fallback_payload,
+                        )
+                        candidate_result = fallback_parser(fallback_envelope)
+                        candidate_dates = {
+                            observation.observation_date
+                            for observation in candidate_result.accepted
+                        }
+                        requested_date = probe_date.isoformat()
+                        if source_id in {"twse_institutional", "twse_credit"} and (
+                            not candidate_dates or candidate_dates != {requested_date}
+                        ):
+                            fallback_attempt.update(
+                                {
+                                    "fallback_probe_outcome": "date_mismatch",
+                                    "fallback_observation_dates": sorted(candidate_dates),
+                                    "fallback_requested_date": requested_date,
+                                }
+                            )
+                        elif not candidate_result.accepted:
+                            fallback_attempt.update(
+                                {
+                                    "fallback_probe_outcome": "no_accepted_rows",
+                                    "fallback_quarantine_reasons": sorted(
+                                        {
+                                            record.reason_code
+                                            for record in candidate_result.quarantine
+                                        }
+                                    ),
+                                }
+                            )
+                        else:
+                            response = fallback_response
+                            payload = fallback_payload
+                            source_version = fallback_source_version
+                            endpoint_id = fallback_endpoint_id
+                            acquisition_route_id = fallback_route_id
+                            params = fallback_params
+                            parser = fallback_parser
+                            fallback_evidence = {
+                                "fallback_used": True,
+                                "fallback_from_endpoint_id": primary_endpoint_id,
+                                "fallback_from_acquisition_route_id": primary_route_id,
+                                "primary_official_status": official_no_data,
+                            }
+                            envelope = fallback_envelope
+                            raw_evidence = {
+                                "source_id": source_id,
+                                "endpoint_id": endpoint_id,
+                                "acquisition_route_id": acquisition_route_id,
+                                **fallback_evidence,
+                                "network_status": "reachable",
+                                "http_status": int(response.status_code),
+                                "payload_sha256": sha256(payload).hexdigest(),
+                                "payload_size_bytes": len(payload),
+                                "fetched_at": fetched_at.isoformat(),
+                            }
+                            fallback_result = candidate_result
+                except Exception as fallback_exc:
+                    fallback_failure_kind = (
+                        "network_error" if fallback_response is None else "schema_mismatch"
+                    )
+                    fallback_attempt.update(
+                        {
+                            "fallback_probe_outcome": fallback_failure_kind,
+                            "fallback_error_type": type(fallback_exc).__name__,
+                            "fallback_error": str(fallback_exc),
+                        }
+                    )
+            if fallback_result is None:
+                no_data_diagnostic = {
                     **raw_evidence,
                     "probe_outcome": "official_no_data",
                     "availability_status": "official_no_data",
@@ -279,10 +431,24 @@ def run_bounded_official_probe(probe_date: date) -> dict:
                     "blocked_row_count": 0,
                     "quarantine_reasons": [],
                 }
-            )
-            continue
+                no_data_diagnostic.update(fallback_attempt)
+                diagnostics.append(no_data_diagnostic)
+                continue
         try:
-            result = parser(envelope)
+            result = fallback_result if fallback_result is not None else parser(envelope)
+            if bool(fallback_evidence["fallback_used"]) and source_id in {
+                "twse_institutional",
+                "twse_credit",
+            }:
+                fallback_dates = {
+                    observation.observation_date for observation in result.accepted
+                }
+                requested_date = probe_date.isoformat()
+                if not result.accepted or fallback_dates != {requested_date}:
+                    raise ValueError(
+                        "fallback observation date mismatch: "
+                        f"expected {requested_date}, got {sorted(fallback_dates)}"
+                    )
             evidence_kinds = {
                 row.availability_evidence_kind for row in result.accepted
             }

@@ -536,6 +536,9 @@ def test_evidence_audit_preserves_actual_fallback_route_lineage() -> None:
             "fallback_used": True,
             "fallback_from_endpoint_id": "tdcc:1-5",
             "fallback_from_acquisition_route_id": "tdcc.legacy_1-5_csv",
+            "fallback_attempted": True,
+            "fallback_probe_outcome": "matched",
+            "fallback_payload_sha256": "d" * 64,
         }
     )
 
@@ -551,6 +554,9 @@ def test_evidence_audit_preserves_actual_fallback_route_lineage() -> None:
     assert row["acquisition_route_id"] == "tdcc.openapi_1-5"
     assert row["fallback_used"] is True
     assert row["fallback_from_acquisition_route_id"] == "tdcc.legacy_1-5_csv"
+    assert row["fallback_attempted"] is True
+    assert row["fallback_probe_outcome"] == "matched"
+    assert row["fallback_payload_sha256"] == "d" * 64
 
 
 def test_handoff_export_and_safety_flags() -> None:

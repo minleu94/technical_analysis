@@ -355,6 +355,119 @@ def parse_twse_credit(envelope: RawFetchEnvelope) -> OfficialParserResult:
     )
 
 
+def _parse_tpex_date(value: object) -> str:
+    """Normalize TPEx OpenAPI's ROC compact date (for example ``1150827``)."""
+
+    normalized = str(value).strip()
+    if re.fullmatch(r"\d{7}", normalized):
+        return _parse_roc_date(
+            f"{normalized[:3]}/{normalized[3:5]}/{normalized[5:]}"
+        )
+    if re.fullmatch(r"\d{8}", normalized):
+        if normalized[:4] in {"19", "20"}:
+            return _parse_yyyymmdd(normalized)
+        raise ValueError("unsupported TPEx compact date")
+    return _parse_roc_date(normalized)
+
+
+def _build_tpex_openapi_result(
+    envelope: RawFetchEnvelope,
+    *,
+    source_name: str,
+    quantity_parser: Callable[[Mapping[str, Any]], tuple[dict[str, int], tuple[str, ...]]],
+    malformed_reason: str,
+) -> OfficialParserResult:
+    """Parse TPEx OpenAPI list-of-object distributions with row conservation."""
+
+    rows = _json_or_csv_rows(envelope.payload, source_name=source_name)
+    if not rows:
+        raise ValueError(f"schema drift: {source_name} rows missing")
+    accepted: list[NormalizedP0Observation] = []
+    quarantine: list[QuarantineRecord] = []
+    for row in rows:
+        try:
+            symbol = str(
+                row.get("SecuritiesCompanyCode")
+                or row.get("證券代號")
+                or row.get("股票代號")
+                or ""
+            ).strip()
+            if not symbol:
+                raise ValueError("missing symbol")
+            observation_date = _parse_tpex_date(row.get("Date"))
+            quantities, warnings = quantity_parser(row)
+            accepted.append(
+                NormalizedP0Observation.build(
+                    source_id=envelope.source_id,
+                    source_version=envelope.source_version,
+                    symbol=symbol,
+                    observation_date=observation_date,
+                    period="daily",
+                    publication_at=None,
+                    first_observed_at=envelope.fetched_at,
+                    raw_payload_sha256=_raw_row_hash(row),
+                    quantities=quantities,
+                    warnings=warnings,
+                )
+            )
+        except (TypeError, ValueError) as exc:
+            quarantine.append(
+                _quarantine(envelope, row, reason_code=malformed_reason, detail=str(exc))
+            )
+    return OfficialParserResult(
+        accepted=tuple(accepted),
+        quarantine=tuple(quarantine),
+        raw_row_count=len(rows),
+    )
+
+
+def parse_tpex_institutional_openapi(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse TPEx's official daily institutional-flow OpenAPI fallback."""
+
+    field_map = {
+        "foreign_buy_shares": (
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Buy"
+        ),
+        "foreign_sell_shares": (
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Sell"
+        ),
+        "foreign_net_shares": (
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference"
+        ),
+    }
+
+    def quantities(row: Mapping[str, Any]) -> tuple[dict[str, int], tuple[str, ...]]:
+        return ({name: _strict_int(row[key]) for name, key in field_map.items()}, ())
+
+    return _build_tpex_openapi_result(
+        envelope,
+        source_name="TPEx institutional flow",
+        quantity_parser=quantities,
+        malformed_reason="malformed_institutional_quantity",
+    )
+
+
+def parse_tpex_credit_openapi(envelope: RawFetchEnvelope) -> OfficialParserResult:
+    """Parse TPEx's official daily margin-balance OpenAPI fallback."""
+
+    field_map = {
+        "margin_purchase_shares": "MarginPurchase",
+        "margin_balance_shares": "MarginPurchaseBalance",
+        "short_sale_shares": "ShortSale",
+        "short_balance_shares": "ShortSaleBalance",
+    }
+
+    def quantities(row: Mapping[str, Any]) -> tuple[dict[str, int], tuple[str, ...]]:
+        return ({name: _strict_int(row[key]) for name, key in field_map.items()}, ())
+
+    return _build_tpex_openapi_result(
+        envelope,
+        source_name="TPEx credit transaction",
+        quantity_parser=quantities,
+        malformed_reason="malformed_credit_quantity",
+    )
+
+
 def parse_tdcc_shareholding(envelope: RawFetchEnvelope) -> OfficialParserResult:
     """Parse TDCC 1-5 from either the legacy CSV or official OpenAPI JSON."""
 

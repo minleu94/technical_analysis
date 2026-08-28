@@ -1,5 +1,6 @@
 from datetime import date
 from pathlib import Path
+import json
 import sqlite3
 from unittest.mock import MagicMock, patch
 
@@ -257,8 +258,8 @@ def test_bounded_probe_uses_one_short_attempt_per_source() -> None:
         run_bounded_official_probe(date(2026, 7, 10))
 
     # 季報僅能接收既有、可驗證的 MOPS artifact；不可把 HTML 頁面當成
-    # JSON probe 端點，因此 bounded official probe 維持 12 個來源。
-    assert request.call_count == 12
+    # JSON probe 端點。官方無資料時，對已登錄的替代路徑各做一次短 probe。
+    assert request.call_count == 17
     for call in request.call_args_list:
         assert call.kwargs["timeout_seconds"] == 8
         assert call.kwargs["max_attempts"] == 1
@@ -281,7 +282,7 @@ def test_bounded_probe_preserves_raw_http_evidence_for_official_no_data():
 
     with patch(
         "scripts.update_phase3c_candidates.safe_request",
-        side_effect=[drifted, valid_credit, valid_tdcc],
+        side_effect=[drifted, drifted, valid_credit, valid_tdcc, *([drifted] * 11)],
     ):
         report = run_bounded_official_probe(date(2026, 7, 10))
 
@@ -297,6 +298,8 @@ def test_bounded_probe_preserves_raw_http_evidence_for_official_no_data():
     assert institutional["probe_outcome"] == "official_no_data"
     assert institutional["schema_status"] == "no_data"
     assert institutional["official_status"] == "No data"
+    assert institutional["fallback_attempted"] is True
+    assert institutional["fallback_probe_outcome"] == "official_no_data"
 
 
 def test_bounded_probe_uses_tdcc_openapi_after_legacy_csv_network_failure():
@@ -328,7 +331,7 @@ def test_bounded_probe_uses_tdcc_openapi_after_legacy_csv_network_failure():
         response_for("twse_credit.json"),
         TimeoutError("legacy TDCC timeout"),
         tdcc_openapi,
-        *([no_data] * 9),
+        *([no_data] * 11),
     ]
 
     with patch(
@@ -339,10 +342,99 @@ def test_bounded_probe_uses_tdcc_openapi_after_legacy_csv_network_failure():
     tdcc = next(
         item for item in report["sources"] if item["source_id"] == "tdcc_shareholding"
     )
-    assert request.call_count == 13
+    assert request.call_count == 15
     assert tdcc["network_status"] == "reachable"
     assert tdcc["schema_status"] == "matched"
     assert tdcc["fallback_used"] is True
     assert tdcc["fallback_from_acquisition_route_id"] == "tdcc.legacy_1-5_csv"
     assert tdcc["acquisition_route_id"] == "tdcc.openapi_1-5"
     assert tdcc["accepted_row_count"] == 1
+
+
+def test_bounded_probe_uses_tpex_institutional_fallback_after_official_no_data():
+    tpex_payload = [
+        {
+            "Date": "1150710",
+            "SecuritiesCompanyCode": "2330",
+            "CompanyName": "台積電",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Buy": "2000",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Sell": "800",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference": "1200",
+        }
+    ]
+
+    def response_for(url: str, *args, **kwargs):
+        response = MagicMock()
+        response.headers = {"Content-Type": "application/json"}
+        response.status_code = 200
+        if url.endswith("/fund/T86"):
+            response.content = b'{"stat":"No data"}'
+        elif url.endswith("/tpex_3insti_daily_trading"):
+            response.content = json.dumps(tpex_payload).encode("utf-8")
+        else:
+            response.content = b'{"stat":"No data"}'
+        return response
+
+    with patch(
+        "scripts.update_phase3c_candidates.safe_request",
+        side_effect=response_for,
+    ) as request:
+        report = run_bounded_official_probe(date(2026, 7, 10))
+
+    institutional = next(
+        item
+        for item in report["sources"]
+        if item["source_id"] == "twse_institutional"
+    )
+    assert institutional["probe_outcome"] == "observed"
+    assert institutional["schema_status"] == "matched"
+    assert institutional["fallback_used"] is True
+    assert institutional["fallback_from_endpoint_id"] == "twse:T86"
+    assert institutional["fallback_from_acquisition_route_id"] == "twse.T86"
+    assert institutional["endpoint_id"] == "tpex:openapi:tpex_3insti_daily_trading"
+    assert institutional["acquisition_route_id"] == "tpex.tpex_3insti_daily_trading"
+    assert institutional["accepted_row_count"] == 1
+    assert request.call_count == 17
+
+
+def test_bounded_probe_rejects_tpex_fallback_when_observation_date_is_not_requested_date():
+    tpex_payload = [
+        {
+            "Date": "1150709",
+            "SecuritiesCompanyCode": "2330",
+            "CompanyName": "台積電",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Buy": "2000",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Total Sell": "800",
+            "Foreign Investors include Mainland Area Investors (Foreign Dealers excluded)-Difference": "1200",
+        }
+    ]
+
+    def response_for(url: str, *args, **kwargs):
+        response = MagicMock()
+        response.headers = {"Content-Type": "application/json"}
+        response.status_code = 200
+        if url.endswith("/fund/T86"):
+            response.content = b'{"stat":"No data"}'
+        elif url.endswith("/tpex_3insti_daily_trading"):
+            response.content = json.dumps(tpex_payload).encode("utf-8")
+        else:
+            response.content = b'{"stat":"No data"}'
+        return response
+
+    with patch(
+        "scripts.update_phase3c_candidates.safe_request",
+        side_effect=response_for,
+    ):
+        report = run_bounded_official_probe(date(2026, 7, 10))
+
+    institutional = next(
+        item
+        for item in report["sources"]
+        if item["source_id"] == "twse_institutional"
+    )
+    assert institutional["probe_outcome"] == "official_no_data"
+    assert institutional["schema_status"] == "no_data"
+    assert institutional["fallback_used"] is False
+    assert institutional["fallback_probe_outcome"] == "date_mismatch"
+    assert institutional["fallback_observation_dates"] == ["2026-07-09"]
+    assert institutional["fallback_requested_date"] == "2026-07-10"
