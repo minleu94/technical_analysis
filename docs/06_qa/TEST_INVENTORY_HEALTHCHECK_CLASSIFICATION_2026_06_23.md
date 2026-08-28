@@ -20,8 +20,8 @@ Current filesystem Python files: `645`
 - 預設不收集檔：`30`
 - `pytest --collect-only -q -o addopts=`：`3651 tests collected`
 
-2026-08-28 全量 pytest 已以 `-o addopts=` 完成：`3613 passed, 1 skipped, 26 warnings`
-（`521.38s`；未指定 JUnit 輸出）。下方較早的 `3607 passed`／`3606 passed`／`3603 passed`／`3592 passed` 是前一輪中間基準，
+2026-08-28 全量 pytest 已以 `-o addopts=` 完成：`3650 passed, 1 skipped, 26 warnings`
+（`562.30s`；未指定 JUnit 輸出）。下方較早的 `3613 passed`／`3607 passed`／`3606 passed`／`3603 passed`／`3592 passed` 是前一輪中間基準，
 不取代本次完整回歸結果。
 
 | 分類 | 數量 |
@@ -40,7 +40,7 @@ Current filesystem Python files: `645`
 | `ui-healthcheck-direct-bridge` | 12 |
 | `write-risk-dry-run-required` | 42 |
 
-最近一次完整 pytest 已以 `-o addopts=` 完成：`3613 passed, 1 skipped, 26 warnings`（`518.58s`；本次執行未指定 JUnit 輸出）。本輪修正 OOC RSS monitor 的 preflight thread lifecycle、UpdateView 合作式取消、SQLite 結果可見性與匯出／合併原子安全邊界，並加入 P0 intake validator／decision append CLI、匯出／合併批次進度、增量合併 no-op 狀態、Runtime staging Registry transaction／rollback probe、Runtime existing-file write-handle probe、Paper future-date look-ahead guard、Paper／Decision 排程 future-write guard、Decision Desk current-date／query-only guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消與 reader cleanup、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Formal stale-clock diagnostic、Pre-V2／Simulation projection consistency、P0 owner packet renderer、P0 audit CLI CP1252 console guard、TPEx institutional／credit fallback 與日期 fail-closed guard、P0 fallback rejected／date provenance UI projection 與 inventory 登錄後，全量執行未再重現先前約 89% 的 Windows access violation；warnings 主要是 joblib 核心數偵測 fallback、研究回測的同日成交理想化假設與 pytest cache 權限提示。仍保留 focused／full run 證據，後續若再出現 native fault 需以 WER／dump 交叉定位。
+最近一次完整 pytest 已以 `-o addopts=` 完成：`3650 passed, 1 skipped, 26 warnings`（`562.30s`；本次執行未指定 JUnit 輸出）。本輪修正 OOC RSS monitor 的 preflight thread lifecycle、UpdateView 合作式取消、SQLite 結果可見性與匯出／合併原子安全邊界，並加入 P0 intake validator／decision append CLI、匯出／合併批次進度、增量合併 no-op 狀態、Runtime staging Registry transaction／rollback probe、Runtime existing-file write-handle probe、Paper future-date look-ahead guard、Paper／Decision 排程 future-write guard、Decision Desk current-date／query-only guard、UpdateView 台灣市場日期／localized unavailable／全域錯誤摘要同步、候選資料源頁內摘要、窄版導覽／卡片／操作鈕重排、Paper fills template/append CLI UTF-8 guard、單檔 CSV 讀取批次取消與 reader cleanup、Recommendation Pattern Explain evidence、SQLite 欄位別名正規化、Formal stale-clock diagnostic、Pre-V2／Simulation projection consistency、P0 owner packet renderer、P0 audit CLI CP1252 console guard、TPEx institutional／credit fallback 與日期 fail-closed guard、P0 fallback rejected／date provenance UI projection、technical process-pool／worker recovery acceptance、scheduler registration inspector 與 inventory 登錄後，全量執行未再重現先前約 89% 的 Windows access violation；warnings 主要是 joblib 核心數偵測 fallback、研究回測的同日成交理想化假設與 pytest cache 權限提示。仍保留 focused／full run 證據，後續若再出現 native fault 需以 WER／dump 交叉定位。
 第一次 full run 暴露的新測試檔未登錄 inventory；補登錄與數量同步後重跑全量已通過，inventory audit 維持 `0` machine-checkable blockers。本輪環境／Runtime／Update／healthcheck
 集中 regression（涵蓋 Update worker／coordinator／service／SQLite／UI／formatter、匯出／合併原子邊界與 healthcheck）既有基準為 `177 passed`；本輪受影響的 Update／UI／coordinator targeted suite 為 `151 passed / 1 warning`，UpdateView focused UI regression 為 `59 passed / 1 warning`，大型合併讀取批次取消與 Update service suite 為 `58 passed / 1 warning`，Pre-V2／Workbench projection consistency 為 `38 passed / 1 warning`、Simulation projection consistency 為 `5 passed / 1 warning`，
 Update Tab QA 為 `23 passed / 0 failed / 4 skipped`。

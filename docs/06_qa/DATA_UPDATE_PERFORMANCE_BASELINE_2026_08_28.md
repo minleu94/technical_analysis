@@ -167,7 +167,7 @@ SHA-256=`983FDEB4C1829137857F49513463BA48579910BF5A3882B73260F096F0454A8D`。
 結果接到既有 parent CSV／`DBManager.write_dataframe`，並在 ephemeral SQLite
 實測 lock／retry。`production_single_writer_integration` 現為
 `staging_measured`（scope=`isolated_staging`），不是 production 啟用證明；因此
-readiness 仍保留 production single-writer blocker，technical worker 仍維持關閉。
+readiness 仍保留 production single-writer canary blocker，technical worker 仍維持關閉。
 
 ### 2026-08-28 10:28 UTC parent single-writer integration staging（本輪新增）
 

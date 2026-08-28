@@ -2,9 +2,9 @@
 
 ## 結論
 
-程式可以持續推進，而且原先六項 blocker 中有三項是舊投影或不完整診斷，不是資料真的不存在：P0 已取得 `13/13` 來源候選證據、Evidence Gate 已是 `3/3`、正式路徑的既有檔案 write-handle probe 在一般 host context 已通過。現在真正不能由程式自動補造的，只剩具名來源接受決議、真實 Paper execution evidence，以及必須隨 prospective clock 累積的 Formal inputs。
+程式可以持續推進，而且多個原先看起來像「功能沒做」的項目已被補成可觀測、可驗證的工程路徑：P0 已取得 `13/13` 候選來源矩陣與 27 條 acquisition route、Evidence projection 已能顯示 `3/3` 但仍待正式 credit、Paper Equal Weight benchmark 已建立、technical process-pool／recovery／single-writer staging 與 scheduler wiring 已完成、Data Update 也能顯示 fallback 與排程註冊狀態。
 
-這仍不是完整產品 closeout。Data Update 的 read-model 現在也保留 fallback attempted／實際替代 route／date mismatch／network error 等拒絕診斷，並在 P0 表格與 summary 明確區分「已採用」和「已嘗試但未採用」；Paper benchmark 建置入口已完成，但成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
+這仍不是完整產品 closeout。真正尚未具備的不是同一種「補資料」問題，而是不同性質的外部 gate：P0 的具名 owner／license／PIT decision、Evidence 的真實週期與 review credit、Paper 的真實 fills／成本／execution gap、Formal/ML 的 3 個 owner-controlled inputs、正式 Runtime ACL、technical production backup／rollback＋canary、broker 真實 HTTP canary，以及正式 scheduler registration／history。程式不能替這些事實自行推導或用 replay 填入。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 ## 可重複的整體盤點入口
 
