@@ -190,7 +190,13 @@ class StatusCard(QFrame):
 
     @staticmethod
     def _indicator_markup(status: str, text: str = "") -> str:
-        """把服務狀態轉為可理解且不會假綠的燈號。"""
+        """把服務狀態轉為可理解且不會假綠的燈號。
+
+        狀態卡是摘要層，不能把 ``partial``、``degraded``、
+        ``action_required`` 與 ``running`` 全部壓成「待更新」；那些狀態
+        對使用者代表不同的下一步。原始 machine token 仍保留在卡片內文，
+        這裡只投影一個短的中文燈號。
+        """
         raw_status = str(status or "").strip().lower()
         if not raw_status or raw_status in {"unknown", "未知", "未檢查"}:
             label, color = "未檢查", "#94a3b8"
@@ -208,11 +214,116 @@ class StatusCard(QFrame):
             or any(marker in text for marker in ("錯誤", "失敗", "異常"))
         ):
             label, color = "異常", "#ef4444"
-        elif raw_status in {"ok", "success", "current", "normal", "正常"}:
+        elif raw_status in {
+            "ok",
+            "success",
+            "current",
+            "normal",
+            "正常",
+            "最新",
+            "完成",
+        }:
             if "immutable" in text.lower() or "唯讀快照" in text:
                 label, color = "待更新", "#eab308"
             else:
                 label, color = "最新", "#22c55e"
+        elif raw_status in {"running", "in_progress", "started", "執行中", "進行中"}:
+            label, color = "進行中", "#38bdf8"
+        elif raw_status in {"partial", "部分完成", "部分可用"}:
+            label, color = "部分完成", "#fbbf24"
+        elif raw_status in {
+            "degraded",
+            "warning",
+            "passed_with_warnings",
+            "需注意",
+            "freshness 異常",
+        }:
+            label, color = "需注意", "#fbbf24"
+        elif raw_status in {
+            "action_required",
+            "需處理",
+            "attention",
+            "blocked_insufficient_storage",
+            "direct_chain_storage_preflight_blocked",
+            "磁碟空間不足",
+        }:
+            label, color = "需處理", "#f59e0b"
+        elif raw_status in {
+            "official_no_data",
+            "no_data",
+            "no_data_skipped_dates",
+            "官方無資料",
+        }:
+            label, color = "官方無資料", "#fbbf24"
+        elif raw_status in {"date_mismatch", "日期不符"}:
+            label, color = "日期不符", "#fbbf24"
+        elif raw_status in {
+            "waiting_for_external_input",
+            "waiting_for_formal_inputs",
+            "waiting_for_time",
+            "等待外部輸入",
+            "等待 formal 輸入",
+            "等待真實時間",
+        }:
+            label, color = "等待輸入", "#fbbf24"
+        elif raw_status in {
+            "pending_human_review",
+            "manual_review_required",
+            "governance_review",
+            "待人工覆核",
+            "待治理審核",
+        }:
+            label, color = "待人工覆核", "#fbbf24"
+        elif raw_status in {
+            "not_computable",
+            "not_computable_cost_ledger_missing",
+        } or raw_status.startswith("尚不可計算"):
+            label, color = "尚不可計算", "#fbbf24"
+        elif raw_status in {
+            "candidate_available",
+            "candidate_only",
+            "contract_only",
+            "research_shadow",
+            "research_only",
+            "research_only_degraded",
+            "ready_for_merge",
+            "already_merged",
+            "preview",
+            "staging",
+            "候選可用",
+            "可併入候選",
+            "已併入",
+            "預覽",
+            "候選暫存",
+            "僅限候選",
+            "僅有契約",
+            "研究影子",
+            "研究受限",
+        }:
+            label, color = "候選／研究", "#a78bfa"
+        elif raw_status in {
+            "not_configured",
+            "not_supplied",
+            "not_observed",
+            "not_available",
+            "未設定",
+            "未提供",
+            "未觀測",
+            "尚未觀測",
+            "尚未建立",
+        }:
+            label, color = "未設定", "#94a3b8"
+        elif raw_status in {
+            "blocked",
+            "merge_blocked",
+            "blocked_provenance",
+            "已阻擋",
+            "合併受阻",
+            "來源證據受阻",
+            "invalid",
+            "格式異常",
+        }:
+            label, color = "已阻擋", "#ef4444"
         else:
             label, color = "待更新", "#eab308"
         return f"<span style='font-size:11px; color:{color};'>{label}</span>"

@@ -10,6 +10,8 @@ Data Update 的「本次手動更新」摘要已與排程時間軸分離：UI �
 
 更新失敗／背景例外收尾後，UpdateView 會再做一次唯讀狀態檢查，讓可能已提交的部分 CSV／SQLite 變更反映在卡片與來源摘要；這個重查不會重跑下載或寫入，也不會把 partial success 標成完整成功。
 
+Data Update 狀態卡的摘要燈號也已細分：`partial` 為「部分完成」、`degraded` 為「需注意」、`action_required` 為「需處理」、`running` 為「進行中」、`pending_human_review` 為「待人工覆核」，未設定／未觀測則顯示「未設定」。原始 machine token 仍留在內文，避免不同下一步被壓成同一個「待更新」。
+
 這仍不是完整產品 closeout。真正尚未具備的不是同一種「補資料」問題，而是不同性質的外部 gate：P0 的具名 owner／license／PIT decision、Evidence 的真實週期與 review credit、Paper 的真實 fills／成本／execution gap、Formal/ML 的 3 個 owner-controlled inputs、正式 Runtime Registry transaction／rollback evidence、technical production backup／rollback＋canary，以及 scheduler 的自然 history 與 production governance。Broker 現在已完成一次受控真實 HTTP canary，但長期 rate-limit／Selenium fallback／production writer 仍未驗收。程式不能替這些事實自行推導或用 replay 填入。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。

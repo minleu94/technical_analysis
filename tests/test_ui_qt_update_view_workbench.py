@@ -1036,6 +1036,28 @@ def test_status_card_surfaces_parser_ratio_in_extra_summary():
     assert "解析通過率：100%（accepted/observed）" in card.extra_label.text()
 
 
+def test_status_card_preserves_granular_non_success_states():
+    app()
+
+    cases = (
+        ("partial", "部分完成", "#fbbf24"),
+        ("degraded", "需注意", "#fbbf24"),
+        ("action_required", "需處理", "#f59e0b"),
+        ("running", "進行中", "#38bdf8"),
+        ("pending_human_review", "待人工覆核", "#fbbf24"),
+        ("not_computable_cost_ledger_missing", "尚不可計算", "#fbbf24"),
+        ("official_no_data", "官方無資料", "#fbbf24"),
+        ("blocked", "已阻擋", "#ef4444"),
+        ("not_configured", "未設定", "#94a3b8"),
+    )
+    for raw_status, label, color in cases:
+        card = StatusCard("測試")
+        card.setPlainText(f"最新日期：2026-08-28\n狀態：{raw_status}")
+
+        assert label in card.indicator_label.text()
+        assert color in card.indicator_label.text()
+
+
 def test_status_card_placeholder_remains_unchecked_not_needs_update():
     app()
     card = StatusCard("測試")

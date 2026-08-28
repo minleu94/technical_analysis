@@ -3191,6 +3191,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：資料更新狀態卡與來源詳情會將 `degraded`／`partial`／`action_required` 等狀態統一轉成中文；核心資料落後 daily reference 時，直接顯示新鮮度基準日與資料最新日，並保留來源錯誤訊息供排錯。
 - 2026-08-28：資料更新頁新增「本次手動更新」唯讀摘要，將 UI 觸發的執行中／完成／失敗／錯誤／取消與排程時間軸分開顯示；保留本輪資料區間、失敗步驟、日期計數與警告，避免失敗後只看到上一輪排程成功結果。
 - 2026-08-28：手動更新以失敗／背景例外結束後會自動做唯讀狀態重查，揭露可能已提交的部分 CSV／SQLite 變更；不重跑寫入、不把部分成功改標成完整成功。
+- 2026-08-28：Data Update 狀態卡燈號改為保留 `partial`／`degraded`／`action_required`／`running`／`pending_human_review`／`not_configured` 等細分語意，分別顯示部分完成、需注意、需處理、進行中、待人工覆核、未設定；machine token 仍保留於卡片內文，避免不同處理路徑被誤讀成同一個「待更新」。
 - 2026-08-28：補齊 Data Update 共用狀態投影，`date_mismatch`／`transport_error`／`registry_error`／磁碟空間不足／成本帳缺漏等診斷碼不再直接漏出英文；官方無資料維持「官方無資料」的可辨識狀態，不再在低階燈號中誤標成一般異常。
 - 2026-08-28：P0 Data Update／Research Console 的 coverage 欄位改名為「解析通過率」，明確標示 accepted／observed／blocked 分母；不再讓 parser 通過率被誤讀成官方市場 universe 完整覆蓋率。
 - 2026-08-28：Data Update 狀態卡補齊 `not_computable`、`pending_human_review`、`blocked`、`running` 等常見服務狀態的繁中投影，並讓「解析通過率」與既有期別／覆蓋提示一樣出現在卡片摘要；只改善可讀性，不改 readiness 或資料邊界。
