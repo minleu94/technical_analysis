@@ -216,6 +216,15 @@ alpha=`0` 與 broker disabled 仍不變，後續仍需 owner 的 future activati
 
 可用 `scripts\inspect_ml_formal_input_readiness.py --output-root <OUTPUT_ROOT> --training-as-of <TRAINING_AS_OF> --output <READINESS_JSON>` 做唯讀 readiness check。它會實際呼叫三個 production validator，記錄每項 input 的 `missing`／`invalid`／`ready`、file hash 與原因；即使三項皆 ready，也只表示可以進入受控 Direct/OOC refresh，不會直接解除 formal OOS、alpha 或 broker gate。當前 scheduled report 位於 `OUTPUT_ROOT\scheduled\ml_formal_input_readiness\latest.json`。此 CLI 在解析參數前設定 UTF-8 stdout/stderr，Windows 預設 CP1252 主控台也能正常使用 `--help`；指定的 readiness output 仍是明確路徑的受控 artifact，不會寫正式資料庫。
 
+Readiness inspector 也會在每項結果標示 `expected_schema_version`。若明確 path 指向
+`prospective-formal-*`、`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或
+`scope=prospective_only` 的 wrapper，結果會是
+`prospective_manifest_requires_formal_consumer_publication`、`source_lane=prospective_formal_simulation`
+與 `formal_consumer_compatible=false`；它不會把 prospective-only bytes 強行轉成正式
+`causal-portfolio-ledger.v1`／`rule-champion-snapshot-history.v1`／歷史 PIT input。明確設定的
+`BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 具有權威性：即使旁邊另有可 discovery 的 sidecar，
+只要指定檔案沒有通過 hash-bound production validation，結果仍是 invalid，不會靜默改用另一份檔案。
+
 最新 raw PIT publication 已自動更新至 `pit-a2f236fefac769e7346e04be`（decision
 `2026-08-13T08:30:00+08:00`、15,938,679 rows、52 features）。Direct
 `direct-ooc-6ff7650245ffea99ced5bf21` 已於 `2026-08-13T21:05:01Z` 完成 2014–2026；

@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from typing import Any, Mapping, Sequence
@@ -42,6 +43,16 @@ SECTOR_MEMBERSHIP_ENV = "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH"
 RULE_HMAC_KEY_ENV = "RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY"
 RULE_STORE_ID_ENV = "RULE_CHAMPION_CONTROLLED_STORE_ID"
 READINESS_SCHEMA_VERSION = "ml-formal-input-readiness.v1"
+_EXPECTED_SCHEMA_VERSION_BY_INPUT = {
+    "causal_non_cash_portfolio_ledger": "causal-portfolio-ledger.v1",
+    "formal_rule_champion_snapshot_history": (
+        "rule-champion-snapshot-history.v1"
+    ),
+    "pit_sector_membership": "pit-sector-membership-sidecar-v1",
+}
+_PROSPECTIVE_LANE = "prospective_formal_simulation"
+_PROSPECTIVE_READ_BYTES = 2_000_000
+_PROSPECTIVE_HEADER_BYTES = 256 * 1024
 _ATOMIC_REPLACE_RETRY_COUNT = 120
 _ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
 _CONTROLLED_RUNTIME_ENVIRONMENT_NAMES = (
@@ -121,6 +132,135 @@ def _error_reason(error: Exception) -> dict[str, str]:
     }
 
 
+def _path_looks_prospective(path: Path) -> bool:
+    """僅由明確命名推測 deferred/prospective 路徑，避免把它當正式 input。"""
+
+    parts = tuple(part.casefold() for part in path.parts)
+    return any(
+        part in {"formal_prospective", "prospective_formal"}
+        or "prospective-formal" in part
+        for part in parts
+    )
+
+
+def _prospective_manifest_hint(path: Path) -> dict[str, str] | None:
+    """以 bounded read 偵測 prospective wrapper，不載入 rows 或秘密值。"""
+
+    try:
+        size = path.stat().st_size
+        if size > _PROSPECTIVE_READ_BYTES:
+            raw = path.read_bytes()[:_PROSPECTIVE_HEADER_BYTES]
+            payload: object | None = None
+        else:
+            raw = path.read_bytes()
+            payload = json.loads(raw.decode("utf-8"))
+    except (
+        OSError,
+        UnicodeError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+    candidates: list[Mapping[str, object]] = []
+    if isinstance(payload, Mapping):
+        candidates.append(payload)
+        for key in ("manifest", "metadata"):
+            nested = payload.get(key)
+            if isinstance(nested, Mapping):
+                candidates.append(nested)
+
+    def _hint(
+        *,
+        schema: object,
+        mode: object,
+        scope: object,
+    ) -> dict[str, str] | None:
+        schema_text = schema.strip() if isinstance(schema, str) else ""
+        mode_text = mode.strip() if isinstance(mode, str) else ""
+        scope_text = scope.strip() if isinstance(scope, str) else ""
+        if not (
+            schema_text.startswith("prospective-formal-")
+            or "-prospective-" in schema_text
+            or mode_text == _PROSPECTIVE_LANE
+            or scope_text == "prospective_only"
+        ):
+            return None
+        result = {"lane": _PROSPECTIVE_LANE}
+        if schema_text:
+            result["schema_version"] = schema_text
+        if mode_text:
+            result["consumer_mode"] = mode_text
+        if scope_text:
+            result["scope"] = scope_text
+        return result
+
+    for candidate in candidates:
+        result = _hint(
+            schema=candidate.get("schema_version"),
+            mode=candidate.get("consumer_mode", candidate.get("mode")),
+            scope=candidate.get("scope"),
+        )
+        if result is not None:
+            return result
+
+    # Large PIT envelopes put rows after the manifest.  Regex is restricted to
+    # known marker fields and never returns arbitrary payload text.
+    schema_match = re.search(
+        rb'"schema_version"\s*:\s*"([^"]+)"',
+        raw,
+    )
+    mode_match = re.search(
+        rb'"(?:consumer_mode|mode)"\s*:\s*"([^"]+)"',
+        raw,
+    )
+    scope_match = re.search(
+        rb'"scope"\s*:\s*"([^"]+)"',
+        raw,
+    )
+    return _hint(
+        schema=(
+            schema_match.group(1).decode("utf-8", errors="replace")
+            if schema_match
+            else ""
+        ),
+        mode=(
+            mode_match.group(1).decode("utf-8", errors="replace")
+            if mode_match
+            else ""
+        ),
+        scope=(
+            scope_match.group(1).decode("utf-8", errors="replace")
+            if scope_match
+            else ""
+        ),
+    )
+
+
+def _prospective_invalid_result(
+    *,
+    input_name: str,
+    environment_name: str,
+    path: Path,
+    hint: Mapping[str, str],
+) -> dict[str, Any]:
+    return {
+        "input": input_name,
+        "state": "invalid",
+        "environment_variable": environment_name,
+        "path": str(path),
+        "expected_schema_version": _EXPECTED_SCHEMA_VERSION_BY_INPUT[
+            input_name
+        ],
+        "reason": "prospective_manifest_requires_formal_consumer_publication",
+        "source_lane": _PROSPECTIVE_LANE,
+        "prospective_manifest": dict(hint),
+        "formal_consumer_compatible": False,
+    }
+
+
 def _missing_result(
     *,
     input_name: str,
@@ -133,9 +273,16 @@ def _missing_result(
         "state": "missing",
         "environment_variable": environment_name,
         "reason": reason,
+        "expected_schema_version": _EXPECTED_SCHEMA_VERSION_BY_INPUT[
+            input_name
+        ],
     }
     if path is not None:
         result["path"] = str(path)
+        if _path_looks_prospective(path):
+            result["reason"] = "prospective_output_not_published"
+            result["source_lane"] = _PROSPECTIVE_LANE
+            result["formal_consumer_compatible"] = False
     return result
 
 
@@ -151,6 +298,10 @@ def _invalid_result(
         "state": "invalid",
         "environment_variable": environment_name,
         "path": str(path),
+        "expected_schema_version": _EXPECTED_SCHEMA_VERSION_BY_INPUT[
+            input_name
+        ],
+        "formal_consumer_compatible": False,
     }
     result.update(_error_reason(error))
     return result
@@ -173,6 +324,14 @@ def _ledger_readiness(
             environment_name=PORTFOLIO_LEDGER_ENV,
             reason="configured_path_is_not_a_file",
             path=path,
+        )
+    prospective_hint = _prospective_manifest_hint(path)
+    if prospective_hint is not None:
+        return _prospective_invalid_result(
+            input_name="causal_non_cash_portfolio_ledger",
+            environment_name=PORTFOLIO_LEDGER_ENV,
+            path=path,
+            hint=prospective_hint,
         )
     try:
         ledger = load_formal_portfolio_state_ledger(path)
@@ -221,6 +380,14 @@ def _rule_history_readiness(
             reason="configured_path_is_not_a_file",
             path=path,
         )
+    prospective_hint = _prospective_manifest_hint(path)
+    if prospective_hint is not None:
+        return _prospective_invalid_result(
+            input_name="formal_rule_champion_snapshot_history",
+            environment_name=RULE_HISTORY_ENV,
+            path=path,
+            hint=prospective_hint,
+        )
     try:
         history = load_verified_rule_champion_snapshot_history(
             path,
@@ -261,10 +428,24 @@ def _sector_readiness(
             reason="configured_path_is_not_a_file",
             path=configured,
         )
+    if configured is not None:
+        prospective_hint = _prospective_manifest_hint(configured)
+        if prospective_hint is not None:
+            return _prospective_invalid_result(
+                input_name="pit_sector_membership",
+                environment_name=SECTOR_MEMBERSHIP_ENV,
+                path=configured,
+                hint=prospective_hint,
+            )
     try:
         candidate = discover_valid_sector_membership(
             output_root=output_root,
             training_as_of=training_as_of,
+            **(
+                {"expected_file_hash": _file_sha256(configured)}
+                if configured is not None
+                else {}
+            ),
         )
     except Exception as error:
         result = _invalid_result(
@@ -284,6 +465,25 @@ def _sector_readiness(
                 "_operational_lineage"
             ),
             path=configured,
+        )
+    if configured is not None and candidate.resolve() != configured.resolve():
+        result = _invalid_result(
+            input_name="pit_sector_membership",
+            environment_name=SECTOR_MEMBERSHIP_ENV,
+            path=configured,
+            error=ValueError(
+                "configured PIT sector path was not the validated candidate"
+            ),
+        )
+        result["candidate_discovery"] = "configured_path_not_authoritative"
+        return result
+    prospective_hint = _prospective_manifest_hint(candidate)
+    if prospective_hint is not None:
+        return _prospective_invalid_result(
+            input_name="pit_sector_membership",
+            environment_name=SECTOR_MEMBERSHIP_ENV,
+            path=candidate,
+            hint=prospective_hint,
         )
     return {
         "input": "pit_sector_membership",

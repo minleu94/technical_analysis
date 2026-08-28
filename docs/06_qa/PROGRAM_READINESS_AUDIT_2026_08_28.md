@@ -6,6 +6,13 @@
 
 這仍不是完整產品 closeout。Data Update 的第一個 read-model slice 已把明確指定的 live audit route／fallback／publication-PIT／治理狀態投影到同一個唯讀畫面；Paper benchmark 建置入口已完成，但成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
+本輪已用 `clock:prospective:20260828:v1` 的實際官方 staging 在隔離 TEMP output
+完成一次 activation dry-run：PIT、Rule、simulated Portfolio 三個 producer 均能各自產出
+prospective manifest，strict readiness 也能產出；所有產物仍保留
+`prospective_formal_simulation`／`prospective_only` lane，沒有寫入正式 `BALDR_ML_FORMAL_*`
+path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 producer 路徑可運作；剩餘缺口是
+下一個有效 clock 的自然累積與 owner-controlled formal publication，不是把兩套 schema 直接改名。
+
 ## 目前真實狀態
 
 | 區域 | 先前觀感 | 2026-08-28 實測 | 真正剩餘缺口 | 可否繼續推進 |
@@ -13,7 +20,7 @@
 | P0 來源 | `13 contract_only`、像是全部沒資料 | live audit=`1 verified / 12 degraded / 0 missing`；Control Center=`0 contract_only`；13 個來源共 27 條候選 route，全部都有至少 2 條 route | 12 項 publication／decision-time provenance、13 項具名 owner/reviewer decision 與 license/use-case 證據；`accepted=0`、`limited=0` | 可以；資料取得與 governance 分流推進 |
 | Evidence Gate | weekly `0/3` | owner-approved weekly projection=`3/3`；multi-day dry-run=`3/3`；Pre-V2=`ready` | 另有 8 個 pending-human-review sidecar 期間；此 projection 不授予 Formal credit 或 production scheduler | 可以；Gate 顯示已修正，後續只累積真實週期與審核 |
 | Paper Portfolio | 只有 snapshot、週報不可算 | 21 筆 Paper snapshot；正式 Paper output Equal Weight ledger 21 筆，benchmark reader=`ready`；UI／CLI 已有受控 preview→confirm 建置流程 | 真實 fill／partial-fill／reject／override、Decimal 成本、turnover、execution gap；Paper Trade Ledger 缺失 | 可以；benchmark 已建立，execution evidence 不可推造 |
-| Formal／ML | formal input `0/3` | 仍是 `0/3`，三個受控 manifest path 都不存在 | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership | 只能 prospective 累積；不得拿 2026-08-25 之後的 prospective sector coverage 回填歷史 |
+| Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但正式受控 manifest path 仍不存在 | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費 | 可以工程化累積；不得拿 2026-08-25 之後的 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready` | 尚未做 Registry SQLite transaction＋rollback 的實寫證明 | 可以；路徑 ACL 不是目前 blocker，若要 DB transaction probe 需另行受控執行 |
 | 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
 | Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；明確 artifact 會顯示 actual route、fallback、PIT/公告、coverage、license、owner decision | 尚未自動抓取或掃描 audit；last successful capture 的時間序列仍需由後續 artifact／prospective clock 提供；缺失或格式錯誤時維持 `audit_unavailable`，不假裝成功 | 可以；接下來可做 live artifact refresh 與其時序證據，但不應繞過明確路徑與 candidate-only 邊界 |
@@ -44,7 +51,7 @@
 1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection 已完成；後續補 artifact refresh／capture history。）
 2. 以 5 組 owner packet 完成 13 項 source 的 license/use-case/reviewer 決議；可先 `limited`，不必等待全部來源一次 accepted。
 3. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
-4. 修正 prospective Formal input publisher 與現行 ML validator 的版本契約，但不做歷史回填；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積。
+4. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。
 5. 先量測 broker／technical indicator 各階段耗時、限流與 write contention，再實作 bounded worker＋single-writer queue。
 6. 完成整個 Update 使用流程的 live UI QA：成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 都要有不同且一致的顯示。
 
