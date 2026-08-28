@@ -627,6 +627,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_update_status_timeline.py": "general-unit-keep-in-pytest",
     "tests/test_update_view_formatters.py": "general-unit-keep-in-pytest",
     "tests/test_update_worker_coordinator.py": "general-unit-keep-in-pytest",
+    "tests/test_program_readiness_projection.py": "general-unit-keep-in-pytest",
     "tests/test_workbench_view_presenter.py": "general-unit-keep-in-pytest",
     "tests/test_analysis/test_signal_analysis_column_support.py": "general-unit-keep-in-pytest",
     "tests/test_analysis/test_technical_column_support.py": "general-unit-keep-in-pytest",

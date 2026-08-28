@@ -407,6 +407,56 @@ def test_update_view_marks_missing_p0_artifact_as_unavailable(tmp_path):
     assert "P0 稽核 artifact 不存在" in view.p0_source_control_summary_label.text()
 
 
+def test_update_view_projects_program_readiness_lanes(tmp_path):
+    readiness_path = tmp_path / "program-readiness.json"
+    readiness_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "program-readiness.v1",
+                "status": "action_required",
+                "generated_at": "2026-08-28T20:56:20+08:00",
+                "boundary": {
+                    "read_only": True,
+                    "writes_allowed": False,
+                    "broker_order_allowed": False,
+                    "formal_oos_allowed": False,
+                    "production_scheduler_allowed": False,
+                },
+                "workstreams": {
+                    "p0": {
+                        "status": "action_required",
+                        "blockers": ["source_acceptance_decision_missing"],
+                        "next_actions": ["完成 owner review"],
+                        "external_input_required": True,
+                    },
+                    "runtime": {
+                        "status": "ready",
+                        "blockers": [],
+                        "next_actions": ["維持觀察"],
+                        "external_input_required": False,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    app()
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        program_readiness_path=readiness_path,
+    )
+
+    status = view._get_overview_status()
+    view._on_status_checked(status)
+
+    assert status["program_readiness"]["status"] == "action_required"
+    assert view.program_readiness_table.rowCount() == 2
+    assert view.program_readiness_table.item(0, 0).text() == "P0 來源"
+    assert "source_acceptance_decision_missing" in view.program_readiness_table.item(0, 2).text()
+    assert "需外部輸入" in view.program_readiness_table.item(0, 3).text()
+    assert "整體狀態：需處理（action_required）" in view.program_readiness_summary_label.text()
+
+
 def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
     update_path = tmp_path / "update-status.json"
     freshness_path = tmp_path / "freshness-status.json"

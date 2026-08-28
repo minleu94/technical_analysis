@@ -293,6 +293,11 @@ class MainWindow(QMainWindow):
         configured_path = os.environ.get("P0_SOURCE_CONTROL_CENTER_LICENSE_EVIDENCE")
         return Path(configured_path).expanduser().resolve() if configured_path else None
 
+    def _program_readiness_path(self) -> Path | None:
+        """只接受顯式整體 readiness artifact；不掃描正式資料或暫存目錄。"""
+        configured_path = os.environ.get("PROGRAM_READINESS_ARTIFACT")
+        return Path(configured_path).expanduser().resolve() if configured_path else None
+
     def _monthly_revenue_availability_candidate_path(self) -> Path | None:
         """只接受顯式月營收 availability candidate；不掃描正式資料或暫存目錄。"""
         configured_path = os.environ.get("MONTHLY_REVENUE_AVAILABILITY_CANDIDATE")
@@ -458,6 +463,7 @@ class MainWindow(QMainWindow):
                 data_update_history_path=self._data_update_history_path(),
                 data_freshness_status_path=self._data_freshness_status_path(),
                 tpex_status_path=self._tpex_status_path(),
+                program_readiness_path=self._program_readiness_path(),
             )
             self.update_view = update_view
             print("[MainWindow] 數據更新視圖創建成功")

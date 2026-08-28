@@ -189,6 +189,55 @@ def format_manual_update_summary(
     return "\n".join(lines)
 
 
+def format_program_readiness_summary(payload: Mapping[str, Any]) -> str:
+    """Render the bounded, read-only program readiness projection."""
+
+    raw_status = str(payload.get("status") or "unknown").strip().lower() or "unknown"
+    lines = [
+        f"整體狀態：{format_status_token(raw_status)}（{raw_status}）",
+    ]
+    workstreams = payload.get("workstreams")
+    lane_values = (
+        [value for value in workstreams.values() if isinstance(value, Mapping)]
+        if isinstance(workstreams, Mapping)
+        else []
+    )
+    blocker_count = sum(
+        len(value.get("blockers") or [])
+        for value in lane_values
+        if isinstance(value.get("blockers"), (list, tuple))
+    )
+    external_count = sum(
+        value.get("external_input_required") is True for value in lane_values
+    )
+    lines.append(
+        f"Readiness lane：{len(lane_values)} 個；阻擋原因：{blocker_count} 個；"
+        f"需外部輸入：{external_count} 個"
+    )
+
+    generated_at = str(payload.get("generated_at") or "").strip()
+    if generated_at:
+        lines.append(f"產生時間：{generated_at}")
+    path = str(payload.get("path") or "").strip()
+    if path:
+        lines.append(f"Artifact：{path}")
+
+    boundary = payload.get("boundary")
+    if isinstance(boundary, Mapping):
+        lines.append(
+            "邊界：唯讀；"
+            f"writes_allowed={bool(boundary.get('writes_allowed') is True)}；"
+            f"broker_order_allowed={bool(boundary.get('broker_order_allowed') is True)}；"
+            f"formal_oos_allowed={bool(boundary.get('formal_oos_allowed') is True)}；"
+            f"production_scheduler_allowed={bool(boundary.get('production_scheduler_allowed') is True)}"
+        )
+
+    diagnostics = [str(item).strip() for item in payload.get("diagnostics", []) if str(item).strip()]
+    if diagnostics:
+        lines.append("診斷：" + "；".join(diagnostics[:3]))
+    return "\n".join(lines)
+
+
 def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[str]:
     """投影月營收數值 snapshot 與 availability mapping 候選的唯讀差異。"""
 

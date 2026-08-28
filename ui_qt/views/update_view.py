@@ -32,6 +32,11 @@ from app_module.p0_source_control_center import (
 )
 from app_module.update_source_status_projection import compose_source_status_projection
 from app_module.update_status_timeline import load_data_update_timeline
+from app_module.program_readiness_projection import (
+    PROGRAM_READINESS_LANE_LABELS,
+    PROGRAM_READINESS_LANE_ORDER,
+    load_program_readiness,
+)
 from data_module.source_acceptance_decision_registry import parse_source_acceptance_decisions
 from data_module.monthly_revenue_snapshot_selection import (
     select_latest_monthly_revenue_snapshot,
@@ -43,6 +48,7 @@ from ui_qt.views.update.update_formatters import (
     format_manual_update_summary,
     format_monthly_revenue_candidate_lines,
     format_p0_license_capture_status,
+    format_program_readiness_summary,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -364,6 +370,7 @@ class UpdateView(QWidget):
         data_update_history_path: str | Path | None = None,
         data_freshness_status_path: str | Path | None = None,
         tpex_status_path: str | Path | None = None,
+        program_readiness_path: str | Path | None = None,
     ):
         """初始化數據更新視圖
 
@@ -422,6 +429,11 @@ class UpdateView(QWidget):
         self.tpex_status_path = _status_path(
             tpex_status_path,
             Path(meta_data_dir) / "tpex_full_refresh_status.json",
+        )
+        self.program_readiness_path = (
+            Path(program_readiness_path).expanduser().resolve()
+            if program_readiness_path is not None
+            else None
         )
         self._p0_control_center_service = P0SourceControlCenterService()
         self.setMinimumWidth(0)
@@ -1093,6 +1105,55 @@ class UpdateView(QWidget):
         )
         p0_layout.addWidget(self.p0_source_control_table)
         all_layout.addWidget(p0_group)
+
+        # 整體 readiness 面板：只投影明確指定的 program-readiness artifact，
+        # 讓使用者在同一頁看見各 lane 的真實 blocker 與下一步；不在 UI
+        # 重新計算 readiness，也不因顯示結果授予任何正式權限。
+        readiness_group = QGroupBox("整體程式 readiness（唯讀）")
+        readiness_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                margin-top: 10px;
+                font-weight: bold;
+                color: #94a3b8;
+            }
+        """)
+        readiness_layout = QVBoxLayout(readiness_group)
+        readiness_layout.setSpacing(8)
+        readiness_layout.setContentsMargins(12, 12, 12, 12)
+        self.program_readiness_summary_label = QLabel(
+            "尚未檢查整體程式 readiness；此區只讀取明確指定的 readiness artifact。"
+        )
+        self.program_readiness_summary_label.setWordWrap(True)
+        self.program_readiness_summary_label.setTextFormat(Qt.PlainText)
+        self.program_readiness_summary_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+        )
+        self.program_readiness_summary_label.setStyleSheet(
+            "color: #cbd5e1; font-size: 11px;"
+        )
+        readiness_layout.addWidget(self.program_readiness_summary_label)
+        self.program_readiness_table = QTableWidget(0, 4)
+        self.program_readiness_table.setHorizontalHeaderLabels(
+            ("Lane", "狀態", "阻擋原因", "下一步")
+        )
+        self.program_readiness_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.program_readiness_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.program_readiness_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.program_readiness_table.setAlternatingRowColors(True)
+        self.program_readiness_table.verticalHeader().setVisible(False)
+        self.program_readiness_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
+        self.program_readiness_table.horizontalHeader().setStretchLastSection(True)
+        self.program_readiness_table.setMinimumHeight(120)
+        self.program_readiness_table.setMaximumHeight(280)
+        self.program_readiness_table.setToolTip(
+            "只讀取明確 readiness artifact；lane 狀態與 blocker 不會在 UI 被自動解除。"
+        )
+        readiness_layout.addWidget(self.program_readiness_table)
+        all_layout.addWidget(readiness_group)
 
         # 一鍵更新與輔助按鈕
         actions_layout = QHBoxLayout()
@@ -2488,6 +2549,7 @@ class UpdateView(QWidget):
             if 'tdcc_shareholding' not in res:
                 res['tdcc_shareholding'] = {'total_records': 0, 'latest_date': '無', 'status': 'MISSING'}
         res["data_update_timeline"] = self._get_data_update_timeline()
+        res["program_readiness"] = self._get_program_readiness()
         p0_center, p0_error, p0_reference = self._load_p0_source_control_center()
         return compose_source_status_projection(
             res,
@@ -2495,6 +2557,37 @@ class UpdateView(QWidget):
             p0_load_error=p0_error,
             p0_reference=p0_reference,
         )
+
+    def _get_program_readiness(self) -> Dict[str, Any]:
+        """讀取明確指定的整體 readiness artifact；不掃描或重新計算。"""
+
+        try:
+            return load_program_readiness(self.program_readiness_path)
+        except Exception as exc:
+            # loader 已將常見 malformed 狀態轉成 fail-closed payload；這層
+            # 仍保留最後防線，避免一個狀態 artifact 讓資料頁整體消失。
+            return {
+                "schema_version": "program-readiness.v1",
+                "status": "invalid",
+                "path": str(self.program_readiness_path)
+                if self.program_readiness_path is not None
+                else None,
+                "workstreams": {},
+                "lane_order": list(PROGRAM_READINESS_LANE_ORDER),
+                "boundary": {
+                    "read_only": True,
+                    "writes_allowed": False,
+                    "broker_order_allowed": False,
+                    "formal_oos_allowed": False,
+                    "production_scheduler_allowed": False,
+                    "historical_replay_backfill_allowed": False,
+                },
+                "diagnostics": [
+                    f"program_readiness_loader_error:{type(exc).__name__}:{exc}"
+                ],
+                "read_only": True,
+                "writes_allowed": False,
+            }
 
     def _get_data_update_timeline(self) -> Dict[str, Any]:
         """只讀取明確設定的更新狀態 artifact；讀取失敗時回傳可見的 fail-closed 結果。"""
@@ -2782,6 +2875,66 @@ class UpdateView(QWidget):
                 else:
                     item.setToolTip(cell)
                 history_table.setItem(row_index, column_index, item)
+
+    def _render_program_readiness(self, payload: Any) -> None:
+        """把整體 readiness 的 bounded lane 摘要投影到唯讀表格。"""
+
+        label = getattr(self, "program_readiness_summary_label", None)
+        table = getattr(self, "program_readiness_table", None)
+        if label is None or table is None:
+            return
+        value = payload if isinstance(payload, dict) else {}
+        status = str(value.get("status") or "unknown").strip().lower() or "unknown"
+        label.setText(format_program_readiness_summary(value))
+        label.setTextFormat(Qt.PlainText)
+        label.setStyleSheet(
+            f"color: {self._timeline_status_color(status)}; font-size: 11px;"
+        )
+
+        table.setRowCount(0)
+        workstreams = value.get("workstreams")
+        if not isinstance(workstreams, dict):
+            return
+        raw_order = value.get("lane_order")
+        lane_order = (
+            [str(item).strip() for item in raw_order if str(item).strip()]
+            if isinstance(raw_order, list)
+            else list(PROGRAM_READINESS_LANE_ORDER)
+        )
+        for lane in lane_order:
+            raw_lane = workstreams.get(lane)
+            if not isinstance(raw_lane, dict):
+                continue
+            raw_status = str(raw_lane.get("status") or "unknown").strip().lower() or "unknown"
+            blockers_raw = raw_lane.get("blockers")
+            blockers = (
+                [str(item).strip() for item in blockers_raw if str(item).strip()]
+                if isinstance(blockers_raw, list)
+                else []
+            )
+            next_actions_raw = raw_lane.get("next_actions")
+            next_actions = (
+                [str(item).strip() for item in next_actions_raw if str(item).strip()]
+                if isinstance(next_actions_raw, list)
+                else []
+            )
+            next_text = "；".join(next_actions) or "無"
+            if raw_lane.get("external_input_required") is True:
+                next_text = f"{next_text}（需外部輸入）"
+            cells = (
+                PROGRAM_READINESS_LANE_LABELS.get(lane, lane),
+                f"{format_status_token(raw_status)}（{raw_status}）",
+                "；".join(blockers) or "無",
+                next_text,
+            )
+            row_index = table.rowCount()
+            table.insertRow(row_index)
+            for column_index, cell in enumerate(cells):
+                item = QTableWidgetItem(cell)
+                item.setToolTip(cell)
+                if column_index == 1:
+                    item.setForeground(QColor(self._timeline_status_color(raw_status)))
+                table.setItem(row_index, column_index, item)
 
     def _load_p0_source_control_center(
         self,
@@ -3409,6 +3562,7 @@ class UpdateView(QWidget):
         ):
             self._render_source_detail_status(source, status)
         self._render_data_update_timeline(status.get("data_update_timeline"))
+        self._render_program_readiness(status.get("program_readiness"))
         self._render_p0_source_control_status(status.get("p0_source_control"))
         self._log(f"數據狀態檢查完成")
 
@@ -3472,6 +3626,19 @@ class UpdateView(QWidget):
                 "last_attempt_at": None,
                 "steps": [],
                 "diagnostics": [f"status_check_error:{error_msg}"],
+            }
+        )
+        self._render_program_readiness(
+            {
+                "status": "invalid",
+                "diagnostics": [f"status_check_error:{error_msg}"],
+                "boundary": {
+                    "read_only": True,
+                    "writes_allowed": False,
+                    "broker_order_allowed": False,
+                    "formal_oos_allowed": False,
+                    "production_scheduler_allowed": False,
+                },
             }
         )
         QMessageBox.critical(self, "錯誤", f"檢查數據狀態失敗：\n{error_msg}")
