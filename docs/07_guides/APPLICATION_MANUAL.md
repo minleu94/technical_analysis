@@ -1688,6 +1688,20 @@ Why Not / 風險提示 v1 會從既有已計算的區塊 DTO 中，推導出可�
 
 寫入正式 `DATA_ROOT/meta_data/monthly_revenue_availability.csv` 前，必須先以 `scripts\validate_monthly_revenue_availability.py --path <candidate-csv>` 驗證 v2 provenance、PIT 日期與 revision chain，並取得人工確認；此工具不會自動改寫正式 mapping、raw CSV 或 SQLite。
 
+若要把已驗證候選安全地併入既有 mapping，可先預覽 merge plan：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\apply_monthly_revenue_availability_candidate.py --candidate <candidate-csv> --target D:\Min\Python\Project\FA_Data\meta_data\monthly_revenue_availability.csv
+```
+
+此 plan 會保留既有列、以 `(stock_code, period)` 做 natural-key 去重；相同內容視為 idempotent，內容不同則以 conflict 停止，不會猜測覆蓋。只有人工確認後才可套用：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\apply_monthly_revenue_availability_candidate.py --candidate <candidate-csv> --target D:\Min\Python\Project\FA_Data\meta_data\monthly_revenue_availability.csv --apply --confirm apply-monthly-revenue-availability
+```
+
+套用前會將既有 mapping 備份到 `--backup-dir`（預設為 target 同層 `backup`），並在 target 同一目錄先完成 UTF-8 CSV 暫存檔後 atomic replace；candidate、raw CSV 與 SQLite 不會由此 CLI 改寫。套用 mapping 後，仍須另外對同一 candidate 與 MOPS snapshot 執行 `backfill_monthly_revenue_fundamentals.py --dry-run`，確認 0 diagnostics，再以 `--confirm apply-monthly-revenue-backfill` 明確回填 SQLite。兩個 apply 必須分開確認，避免 availability 日期與數值資料只更新一半時被誤認為完成。
+
 截至 2026-06-16，TWSE 上市 endpoint `/opendata/t187ap05_L` 與 TPEX 上櫃 endpoint `/openapi/v1/mopsfin_t187ap05_O` 均可提供最新月 `出表日期`；樣本為 `2330` / `9935` 的 `2026-05` 公告日 `2026-06-15`，以及 `3207` 的 `2026-05` 公告日 `2026-06-16`。這些 OpenAPI 目前未提供歷史 period query；MOPS historical static report 可透過新版 API 取得，且可看到 `113/04` 的 `2330`、`9935`、`3207` rows，但其 `出表日期` 是查詢當日，不能視為歷史公告日。正式 raw 月營收目前只到 `2024-04`，與最新月來源無交集，因此 `2020-01..2026-05` dry-run 產生 0 candidate rows。歷史公告日仍需可追溯的原始公告日批次來源或受控人工 mapping。
 
 #### 月營收 normalized backfill
@@ -1728,6 +1742,8 @@ MOPS snapshot 可以作月營收**數值**主來源，但不能自行證明歷�
 
 - `先檢查，不寫入`：只檢查可回填筆數與診斷結果，不寫入正式資料庫。
 - `確認後寫入月營收`：先跳出確認視窗，再建立 DB 備份並寫入 `fundamental_monthly_revenues`。此按鈕不抓取新 MOPS HTML、不修改 raw CSV，也不更新 availability mapping。
+
+更新頁目前只負責 SQLite backfill；若已有新的官方 availability candidate，先在外部執行上述 merge CLI，完成人工檢查與 mapping 備份後，再重新載入此分頁做 dry-run。UI 不會把「候選可用」誤顯示成「已套用」。
 
 若要補抓最新月份，先以 MOPS snapshot CLI 取得數值，再用 TWSE／TPEx historical availability builder 取得官方 `出表日期` 候選；兩者交集才可進 backfill dry-run。兩條來源缺一時，更新頁只應顯示候選／缺口，不可用 snapshot 查詢日或本機檔案日期推定公告日。
 

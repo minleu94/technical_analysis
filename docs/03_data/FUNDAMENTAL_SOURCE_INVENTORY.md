@@ -355,6 +355,8 @@ CLI 範例：
 - `--mops-static` 透過新版 MOPS `/mops/api/redirectToOld` 取得 `mopsov.twse.com.tw/nas/t21/...` historical static report，僅作 dry-run source validation
 - `--pit-csv <csv>` 讀取授權取得的 point-in-time 月營收公告日匯出檔；必須搭配非空 `--pit-source-version`，只產生候選 mapping，不寫正式檔
 
+`data_module/monthly_revenue_availability_merge.py` 與 `scripts/apply_monthly_revenue_availability_candidate.py` 提供候選 mapping 的獨立合併入口。預設只建立唯讀 merge plan；相同 `(stock_code, period)` 內容相同時 idempotent，內容衝突時 fail-closed。明確 `--apply --confirm apply-monthly-revenue-availability` 才會先保留 mapping backup，再以同目錄 atomic replace 發布完整 CSV。此步驟不寫 SQLite，SQLite backfill 仍需另一次 dry-run 與 `--confirm apply-monthly-revenue-backfill`。
+
 目前官方 OpenAPI 驗證結果：
 
 | 來源 | endpoint | 歷史支援判定 | 欄位 / 樣本 |
