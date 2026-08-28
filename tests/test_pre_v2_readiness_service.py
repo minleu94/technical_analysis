@@ -1029,8 +1029,8 @@ def test_program_readiness_rejects_invalid_technical_production_canary(
     canary_path.write_text(
         json.dumps(
             {
-                "schema_version": "technical-indicator-production-canary.v1",
-                "status": "confirmation_required",
+                "schema_version": "technical-indicator-production-canary.invalid",
+                "status": "malformed",
                 "production_write_attempted": False,
             }
         ),

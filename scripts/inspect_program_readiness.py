@@ -798,11 +798,12 @@ def _inspect_performance_lane(
         if broker_payload.get("network_enabled") is not True:
             blockers.append("broker_real_http_canary_not_completed")
     technical_canary_payload = artifacts.get("technical_canary")
-    if technical_canary_path is None and "technical_production_single_writer_canary_not_completed" not in blockers:
-        blockers.append("technical_production_single_writer_canary_not_completed")
-    elif technical_canary_path is not None and not _valid_technical_production_canary(technical_canary_payload):
-        if "technical_production_single_writer_canary_invalid" not in blockers:
-            blockers.append("technical_production_single_writer_canary_invalid")
+    canary_blocker = _technical_production_canary_blocker(
+        technical_canary_path,
+        technical_canary_payload,
+    )
+    if canary_blocker is not None:
+        blockers.append(canary_blocker)
     return _lane(
         "partial",
         blockers=tuple(blockers),
@@ -851,6 +852,22 @@ def _valid_technical_production_canary(payload: object) -> bool:
         and rollback.get("available") is True
         and rollback.get("succeeded") is not False
     )
+
+
+def _technical_production_canary_blocker(
+    path: Path | None,
+    payload: object,
+) -> str | None:
+    """Distinguish a valid preview from a malformed canary artifact."""
+
+    if path is None:
+        return "technical_production_single_writer_canary_not_completed"
+    if isinstance(payload, Mapping) and payload.get("schema_version") == "technical-indicator-production-canary.v1":
+        if payload.get("status") != "measured":
+            return "technical_production_single_writer_canary_not_completed"
+    if not _valid_technical_production_canary(payload):
+        return "technical_production_single_writer_canary_invalid"
+    return None
 
 
 def _execution_order(workstreams: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
