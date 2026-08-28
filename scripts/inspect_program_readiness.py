@@ -357,6 +357,21 @@ def _inspect_formal_ml_lane(
             next_actions=("明確指定 training_as_of，再檢查三項 owner-controlled formal input；不得由 inspector 猜日期。",),
             details={"output_root": str(output_root), "readiness": None},
         )
+    cutoff_error = _training_as_of_error(training_as_of)
+    if cutoff_error is not None:
+        return _lane(
+            "action_required",
+            blockers=(cutoff_error,),
+            next_actions=(
+                "training_as_of 必須是含時區的 ISO 8601 時間（例如 2026-08-28T00:00:00+08:00），再重跑 formal input readiness。",
+            ),
+            external_input_required=True,
+            details={
+                "output_root": str(output_root),
+                "training_as_of": training_as_of,
+                "readiness": None,
+            },
+        )
     try:
         payload = build_readiness_report(
             output_root=output_root,
@@ -894,6 +909,18 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, (list, tuple)):
         return []
     return [str(item) for item in value if str(item)]
+
+
+def _training_as_of_error(value: str) -> str | None:
+    """Return a stable readiness blocker for malformed or timezone-free cutoffs."""
+
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except (AttributeError, TypeError, ValueError):
+        return "training_as_of_invalid"
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return "training_as_of_timezone_required"
+    return None
 
 
 def _utc_now() -> str:

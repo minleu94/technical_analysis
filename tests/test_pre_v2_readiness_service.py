@@ -605,6 +605,21 @@ def test_program_readiness_marks_update_history_identity_mismatch(tmp_path: Path
     assert lane["details"]["unique_run_count"] == 1
 
 
+def test_program_readiness_explains_timezone_required_training_cutoff(tmp_path: Path) -> None:
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        training_as_of="2026-08-28",
+    )
+    lane = report["workstreams"]["formal_ml"]
+
+    assert lane["status"] == "action_required"
+    assert lane["blockers"] == ["training_as_of_timezone_required"]
+    assert lane["external_input_required"] is True
+    assert "含時區的 ISO 8601" in lane["next_actions"][0]
+    assert lane["details"]["training_as_of"] == "2026-08-28"
+
+
 def test_program_readiness_projects_scheduler_registration_diagnostics(tmp_path: Path) -> None:
     scheduler_path = tmp_path / "scheduler-status.json"
     scheduler_path.write_text(
