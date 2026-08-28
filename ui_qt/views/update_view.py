@@ -1375,8 +1375,8 @@ class UpdateView(QWidget):
                                       "若要開展兩年歷史可續跑 Candidate DB 回補，請使用下方 CLI 命令。",
                 "tdcc_shareholding": "『集保股權』目前僅 OpenAPI `id=1-5` 提供最新單週公開資料，不支援歷史多日期輪詢回補 (BLOCKED_NO_HISTORICAL_ENDPOINT)。\n"
                                     "可用下方受控命令把官方最新週 snapshot 寫入隔離 Candidate DB；資料日採官方 payload，不會冒充成執行日。",
-                "scheduler_status": "目前自動更新排程（Scheduler）處於 `Simulated/Waiting for time` 階段，且生產環境排程權限 `production_scheduler_allowed` 固定為 false。\n"
-                                    "此頁面提供唯讀日誌與排程狀態檢視，嚴禁在此處手動觸發排程寫入。"
+                "scheduler_status": "此頁只讀取明確的 scheduled artifacts 來觀測排程執行狀態；每日資料更新 task 的註冊／執行，與 Evidence／ML 的生產寫入授權是不同層次。\n"
+                                    "目前 `production_scheduler_allowed=false` 仍固定不變；此頁不手動觸發、不修改 Windows Task Scheduler，也不把單一工作成功解讀成整體排程或正式治理已通過。"
             }
 
             text_label = QLabel(status_desc.get(key, ""))
@@ -1427,7 +1427,12 @@ class UpdateView(QWidget):
                         log_box.setPlainText(json.dumps(status_data, ensure_ascii=False, indent=2))
                     except Exception as e:
                         log_box.setPlainText(f"加載排程狀態失敗: {e}")
-                info_layout.addWidget(QLabel("Scheduler 狀態 (latest_status.json)："))
+                info_layout.addWidget(
+                    QLabel(
+                        "初始預覽：data_freshness/latest_status.json（單一工作；非整體 Scheduler 狀態）。"
+                        "按「檢查此資料源狀態」後，才會載入 scheduled/* 的唯讀彙總。"
+                    )
+                )
                 info_layout.addWidget(log_box)
 
             layout.addWidget(info_group)

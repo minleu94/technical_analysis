@@ -25,6 +25,7 @@
 - 載入上述新 host P0 transport evidence 與 license capture 後的最新 unified readiness 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_post_commit_host_license_refresh_20260828.json`（status=`action_required`；SHA-256=`733E5C7E38549A1D6C6FB9B4946B7090DD9324C23079B4FE43F87002224935B7`）；`runtime=ready`、`update_history=ready`，其餘 blockers 仍逐 lane 保留，不以 2/3 license capture 代替 owner acceptance。
 - P0 Data Update／Research Console 的比例欄位已改名為「解析通過率」並標示 `accepted/observed`；這是 payload row-conservation 的品質訊號，不是官方市場 universe／日期 coverage。沒有獨立來源分母與 missingness evidence 時，UI 不會再用「覆蓋率」暗示完整來源。
 - P0 license projection 對同一來源多個官方條款 URL 的混合結果改以 `capture_partial` 顯示，並在 Data Update／Research Console 呈現「部分取得，仍需複核」；已取得的 hash 與失敗原因都保留，但不改變 `license_accepted=false`、owner review 或 `downstream_eligibility=none`。
+- Data Update 排程頁已移除過時的 `Simulated/Waiting for time` 固定文案；初始預覽明確標為單一 freshness artifact，按檢查後才顯示 `scheduled/*` 唯讀彙總，並把 daily task 執行與 `production_scheduler_allowed=false` 的生產寫入治理分開呈現。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 

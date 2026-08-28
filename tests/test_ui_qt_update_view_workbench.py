@@ -819,6 +819,17 @@ def test_update_view_does_not_auto_scan_status_on_open():
     assert view.check_status_btn.isEnabled()
 
 
+def test_scheduler_page_explains_artifact_scope_and_disabled_production_write():
+    view = make_view()
+    labels = [label.text() for label in view.findChildren(QLabel)]
+    joined = "\n".join(labels)
+
+    assert "只讀取明確的 scheduled artifacts" in joined
+    assert "production_scheduler_allowed=false" in joined
+    assert "單一工作；非整體 Scheduler 狀態" in joined
+    assert "Simulated/Waiting for time" not in joined
+
+
 def test_update_view_uses_workbench_navigation():
     view = make_view()
 
