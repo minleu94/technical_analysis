@@ -160,6 +160,14 @@ availability candidate SHA-256=`9CAE017074FE08B5EE14761FDAB8458D738AFD63AF0ED73F
 candidate 的 validator 與 merge preview：2026-07、1,851 rows、可用日 2026-08-18、
 新增 1,851、衝突 0、`ready_for_merge`；這只改善可見性，未改寫正式 mapping／SQLite。
 
+本輪另補上 `MONTHLY_REVENUE_SNAPSHOT_CANDIDATE=<絕對路徑>` 的明確唯讀入口，讓尚未放入
+正式 `OUTPUT_ROOT` 的 snapshot 也能被狀態卡投影；同一期候選會顯示抓取日，遺失或命名無效
+會保留缺漏／診斷，不會靜默退回另一份 snapshot。以 2026-08-28 TEMP 候選重查時，UI
+資料模型同時回報數值候選 `2026-07`、availability 候選 `2026-07`／`ready_for_merge`，
+正式 SQLite 仍是 `2026-06`。本輪月營收服務／格式化測試 `19 passed`、UpdateView 相關
+測試 `71 passed`、Data Update QA `23 passed / 0 failed / 4 skipped`；測試 inventory
+重算為 `654` 個測試檔、`3,730` 個 collected tests，無遺漏、過時路徑或 collection error。
+
 ## 為什麼有些東西不能直接補滿
 
 1. **Owner／license decision 是權限事實，不是資料欄位。** 程式可以蒐集官方 endpoint、條款 URL、hash、coverage 與 PIT 證據，但不能冒用具名 reviewer 作出 `accepted`／`limited` 決議。
