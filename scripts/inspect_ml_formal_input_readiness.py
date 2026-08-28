@@ -57,6 +57,19 @@ _PROSPECTIVE_CLOCK_COMPONENT_RE = re.compile(
     r"^clock-(?P<date>\d{8})(?:-|$)",
     re.IGNORECASE,
 )
+_PROSPECTIVE_OUTPUT_ROOT_NAMES = ("formal_prospective", "prospective_formal")
+_PROSPECTIVE_CLOCK_LIMIT = 24
+_PROSPECTIVE_FORMAL_RELATIVE_PATHS = {
+    "causal_non_cash_portfolio_ledger": Path(
+        "portfolio_ledger/manifest.json"
+    ),
+    "formal_rule_champion_snapshot_history": Path(
+        "rule_champion_history/manifest.json"
+    ),
+    "pit_sector_membership": Path(
+        "pit_sector_membership/manifest.json"
+    ),
+}
 _ATOMIC_REPLACE_RETRY_COUNT = 120
 _ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
 _CONTROLLED_RUNTIME_ENVIRONMENT_NAMES = (
@@ -145,6 +158,83 @@ def _path_looks_prospective(path: Path) -> bool:
         or "prospective-formal" in part
         for part in parts
     )
+
+
+def _inspect_prospective_output_roots(output_root: Path) -> dict[str, Any]:
+    """觀察 prospective clock/staging，但絕不將其當成正式 input。
+
+    Formal input readiness 必須遵守 owner 明確指定的 path；這個觀察只回答
+    「同一 output root 是否有另一個 prospective artifact」的診斷問題，避免
+    使用者看到 staging 檔案卻誤以為 validator 漏掃。它只讀取固定深度的
+    `formal_prospective`／`prospective_formal` 直屬 `clock-*` 目錄名稱與少量
+    marker path，不讀 rows、不做 schema validation，也不改變任何 input state。
+    """
+
+    candidates: list[dict[str, Any]] = []
+    observed_roots: list[str] = []
+    root = output_root.expanduser().resolve()
+    for root_name in _PROSPECTIVE_OUTPUT_ROOT_NAMES:
+        prospective_root = root / root_name
+        try:
+            if not prospective_root.is_dir():
+                continue
+            observed_roots.append(str(prospective_root))
+            children = sorted(
+                prospective_root.iterdir(),
+                key=lambda item: item.name.casefold(),
+            )
+        except OSError:
+            continue
+        for child in children:
+            if len(candidates) >= _PROSPECTIVE_CLOCK_LIMIT:
+                break
+            if not child.is_dir() or _PROSPECTIVE_CLOCK_COMPONENT_RE.match(
+                child.name
+            ) is None:
+                continue
+            clock_manifest = child / "clock" / "manifest.json"
+            try:
+                if not clock_manifest.is_file():
+                    continue
+                published_count = sum(
+                    (child / relative_path).is_file()
+                    for relative_path in _PROSPECTIVE_FORMAL_RELATIVE_PATHS.values()
+                )
+                staging_present = (child / "staging").is_dir()
+                readiness_present = (child / "readiness").is_dir()
+            except OSError:
+                continue
+            if not (published_count or staging_present or readiness_present):
+                continue
+            candidates.append(
+                {
+                    "clock_id": child.name,
+                    "clock_manifest_path": str(clock_manifest),
+                    "published_formal_input_count": published_count,
+                    "staging_present": staging_present,
+                    "readiness_present": readiness_present,
+                    "lane": _PROSPECTIVE_LANE,
+                    "formal_consumer_compatible": False,
+                    "authority": "diagnostic_only",
+                }
+            )
+    candidates.sort(key=lambda item: str(item["clock_id"]).casefold())
+    if not candidates:
+        status = "none_observed"
+    elif len(candidates) >= _PROSPECTIVE_CLOCK_LIMIT:
+        status = "observed_truncated"
+    else:
+        status = "staging_or_prospective_observed"
+    return {
+        "status": status,
+        "observed_roots": observed_roots,
+        "candidate_clock_count": len(candidates),
+        "candidate_clocks": candidates,
+        "diagnostic": (
+            "prospective artifacts are diagnostic-only; they never replace the "
+            "explicit owner-controlled BALDR_ML_FORMAL_* paths"
+        ),
+    }
 
 
 def _prospective_manifest_hint(path: Path) -> dict[str, str] | None:
@@ -577,6 +667,7 @@ def build_readiness_report(
         ),
     ]
     all_ready = all(item.get("state") == "ready" for item in results)
+    prospective_observation = _inspect_prospective_output_roots(resolved_root)
     body: dict[str, Any] = {
         "schema_version": READINESS_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -589,6 +680,7 @@ def build_readiness_report(
         "promotion_pass": False,
         "read_only": True,
         "inputs": results,
+        "prospective_output_observation": prospective_observation,
         "runtime_attestation": {
             "hmac_key_configured": bool(
                 os.environ.get(RULE_HMAC_KEY_ENV, "").strip()

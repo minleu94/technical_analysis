@@ -89,6 +89,49 @@ def test_missing_prospective_path_exposes_stale_configured_clock_hint(
     assert "update the explicit path" in portfolio["diagnostic"]
 
 
+def test_readiness_reports_prospective_staging_without_adopting_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_root = tmp_path / "output"
+    prospective_root = output_root / "formal_prospective" / "clock-20260828"
+    (prospective_root / "clock").mkdir(parents=True)
+    (prospective_root / "staging").mkdir()
+    (prospective_root / "clock" / "manifest.json").write_text(
+        "{}",
+        encoding="utf-8",
+    )
+    output_root.mkdir(exist_ok=True)
+    for name in (
+        readiness.PORTFOLIO_LEDGER_ENV,
+        readiness.RULE_HISTORY_ENV,
+        readiness.SECTOR_MEMBERSHIP_ENV,
+        readiness.RULE_HMAC_KEY_ENV,
+        readiness.RULE_STORE_ID_ENV,
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        readiness,
+        "discover_valid_sector_membership",
+        lambda **_: None,
+    )
+
+    report = readiness.build_readiness_report(
+        output_root=output_root,
+        training_as_of="2026-08-28T08:30:00+08:00",
+    )
+
+    observation = report["prospective_output_observation"]
+    assert observation["status"] == "staging_or_prospective_observed"
+    assert observation["candidate_clock_count"] == 1
+    candidate = observation["candidate_clocks"][0]
+    assert candidate["clock_id"] == "clock-20260828"
+    assert candidate["staging_present"] is True
+    assert candidate["formal_consumer_compatible"] is False
+    assert candidate["authority"] == "diagnostic_only"
+    assert report["status"] == "waiting_for_formal_inputs"
+
+
 def test_readiness_adopts_late_windows_owner_deposit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

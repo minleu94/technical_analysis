@@ -22,7 +22,7 @@
 ## 2026-08-28 Formal／ML prospective activation dry-run（current engineering）
 
 - 以實際 `clock:prospective:20260828:v1`、官方 TWSE／TPEX staging 與隔離 TEMP output 完成一次唯讀邊界驗證；PIT sector、Rule Champion、simulated Portfolio 三個 producer 均能產出各自的 prospective manifest，strict readiness 亦能產出。
-- `scripts/inspect_ml_formal_input_readiness.py` 現在明示每項正式 input 的 expected schema；遇到 `prospective-formal-*`／`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或 `scope=prospective_only` 時標成 `prospective_manifest_requires_formal_consumer_publication`，不會把 wrapper 當成正式 `3/3`。
+- `scripts/inspect_ml_formal_input_readiness.py` 現在明示每項正式 input 的 expected schema；遇到 `prospective-formal-*`／`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或 `scope=prospective_only` 時標成 `prospective_manifest_requires_formal_consumer_publication`，不會把 wrapper 當成正式 `3/3`。報告另提供 `prospective_output_observation`，只以固定深度列出同一 output root 的 clock/staging marker，明確標為 `diagnostic_only`，不會自動接線或改變 readiness。
 - readiness 對缺失的 prospective path 也會揭露 `configured_clock_id`／日期、`training_as_of_date` 與 stale hint；目前受控環境三個 path 指向缺失的 `clock-20260819`，早於 `training_as_of=2026-08-28`。同一輸出根的 `clock-20260828` staging 不會被自動猜測或升格，必須由 owner 發布並更新明確 path。
 - 明確設定的 `BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 以 hash-bound discovery 驗證並具有權威性；旁邊其他可 discovery sidecar 不得靜默取代它。正式 `BALDR_ML_FORMAL_*` path、Formal OOS、alpha、scheduler、promotion 與 broker 仍全部關閉；本次 dry-run 沒有寫正式資料根目錄。
 
