@@ -2,6 +2,8 @@
 
 from typing import Any, Mapping
 
+from app_module.program_readiness_projection import PROGRAM_READINESS_LANE_ORDER
+
 
 def _safe_nonnegative_int(value: Any) -> int:
     """把 malformed 計數 fail-closed 成 0，避免狀態頁因顯示而中止。"""
@@ -202,6 +204,19 @@ def format_program_readiness_summary(payload: Mapping[str, Any]) -> str:
         if isinstance(workstreams, Mapping)
         else []
     )
+    lane_order = payload.get("lane_order")
+    expected_lanes = (
+        [
+            str(item).strip()
+            for item in lane_order
+            if str(item).strip() in PROGRAM_READINESS_LANE_ORDER
+        ]
+        if isinstance(lane_order, list)
+        else list(PROGRAM_READINESS_LANE_ORDER)
+    )
+    expected_lanes = list(dict.fromkeys(expected_lanes)) or list(
+        PROGRAM_READINESS_LANE_ORDER
+    )
     blocker_count = sum(
         len(value.get("blockers") or [])
         for value in lane_values
@@ -211,8 +226,8 @@ def format_program_readiness_summary(payload: Mapping[str, Any]) -> str:
         value.get("external_input_required") is True for value in lane_values
     )
     lines.append(
-        f"Readiness lane：{len(lane_values)} 個；阻擋原因：{blocker_count} 個；"
-        f"需外部輸入：{external_count} 個"
+        f"Readiness lane：{len(lane_values)}/{len(expected_lanes)} 個（已載入/預期）；"
+        f"阻擋原因：{blocker_count} 個；需外部輸入：{external_count} 個"
     )
 
     generated_at = str(payload.get("generated_at") or "").strip()

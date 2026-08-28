@@ -85,7 +85,7 @@ def test_program_readiness_summary_keeps_status_and_boundary_visible(tmp_path: P
     summary = format_program_readiness_summary(load_program_readiness(path))
 
     assert "整體狀態：需處理（action_required）" in summary
-    assert "Readiness lane：2 個；阻擋原因：1 個；需外部輸入：1 個" in summary
+    assert "Readiness lane：2/7 個（已載入/預期）；阻擋原因：1 個；需外部輸入：1 個" in summary
     assert "writes_allowed=False" in summary
     assert "broker_order_allowed=False" in summary
     assert "source_acceptance_decision_missing" not in summary

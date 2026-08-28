@@ -450,10 +450,12 @@ def test_update_view_projects_program_readiness_lanes(tmp_path):
     view._on_status_checked(status)
 
     assert status["program_readiness"]["status"] == "action_required"
-    assert view.program_readiness_table.rowCount() == 2
+    assert view.program_readiness_table.rowCount() == 7
     assert view.program_readiness_table.item(0, 0).text() == "P0 來源"
     assert "source_acceptance_decision_missing" in view.program_readiness_table.item(0, 2).text()
     assert "需外部輸入" in view.program_readiness_table.item(0, 3).text()
+    assert view.program_readiness_table.item(2, 0).text() == "Paper Portfolio"
+    assert "readiness_lane_not_supplied:paper" in view.program_readiness_table.item(2, 2).text()
     assert "整體狀態：需處理（action_required）" in view.program_readiness_summary_label.text()
 
 

@@ -1143,14 +1143,20 @@ class UpdateView(QWidget):
         self.program_readiness_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.program_readiness_table.setAlternatingRowColors(True)
         self.program_readiness_table.verticalHeader().setVisible(False)
-        self.program_readiness_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
+        self.program_readiness_table.setWordWrap(True)
+        self.program_readiness_table.setTextElideMode(Qt.ElideNone)
+        readiness_header = self.program_readiness_table.horizontalHeader()
+        readiness_header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        readiness_header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        readiness_header.setSectionResizeMode(2, QHeaderView.Stretch)
+        readiness_header.setSectionResizeMode(3, QHeaderView.Stretch)
         self.program_readiness_table.horizontalHeader().setStretchLastSection(True)
         self.program_readiness_table.setMinimumHeight(120)
-        self.program_readiness_table.setMaximumHeight(280)
+        self.program_readiness_table.setMaximumHeight(360)
+        self.program_readiness_table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.program_readiness_table.setToolTip(
-            "只讀取明確 readiness artifact；lane 狀態與 blocker 不會在 UI 被自動解除。"
+            "固定顯示七個 readiness lane；缺少的 lane 會標示未提供。只讀取明確 readiness artifact；"
+            "lane 狀態與 blocker 不會在 UI 被自動解除。"
         )
         readiness_layout.addWidget(self.program_readiness_table)
         all_layout.addWidget(readiness_group)
@@ -2894,18 +2900,28 @@ class UpdateView(QWidget):
         table.setRowCount(0)
         workstreams = value.get("workstreams")
         if not isinstance(workstreams, dict):
-            return
+            workstreams = {}
         raw_order = value.get("lane_order")
         lane_order = (
-            [str(item).strip() for item in raw_order if str(item).strip()]
+            [
+                str(item).strip()
+                for item in raw_order
+                if str(item).strip() in PROGRAM_READINESS_LANE_ORDER
+            ]
             if isinstance(raw_order, list)
             else list(PROGRAM_READINESS_LANE_ORDER)
         )
+        lane_order = list(dict.fromkeys(lane_order)) or list(
+            PROGRAM_READINESS_LANE_ORDER
+        )
         for lane in lane_order:
             raw_lane = workstreams.get(lane)
-            if not isinstance(raw_lane, dict):
-                continue
-            raw_status = str(raw_lane.get("status") or "unknown").strip().lower() or "unknown"
+            lane_supplied = isinstance(raw_lane, dict)
+            raw_lane = raw_lane if lane_supplied else {}
+            raw_status = (
+                str(raw_lane.get("status") or "not_supplied").strip().lower()
+                or "not_supplied"
+            )
             blockers_raw = raw_lane.get("blockers")
             blockers = (
                 [str(item).strip() for item in blockers_raw if str(item).strip()]
@@ -2918,8 +2934,11 @@ class UpdateView(QWidget):
                 if isinstance(next_actions_raw, list)
                 else []
             )
+            if not lane_supplied:
+                blockers = [f"readiness_lane_not_supplied:{lane}"]
+                next_actions = ["重新產生包含此 lane 的完整 readiness artifact。"]
             next_text = "；".join(next_actions) or "無"
-            if raw_lane.get("external_input_required") is True:
+            if not lane_supplied or raw_lane.get("external_input_required") is True:
                 next_text = f"{next_text}（需外部輸入）"
             cells = (
                 PROGRAM_READINESS_LANE_LABELS.get(lane, lane),
@@ -2935,6 +2954,7 @@ class UpdateView(QWidget):
                 if column_index == 1:
                     item.setForeground(QColor(self._timeline_status_color(raw_status)))
                 table.setItem(row_index, column_index, item)
+        table.resizeRowsToContents()
 
     def _load_p0_source_control_center(
         self,

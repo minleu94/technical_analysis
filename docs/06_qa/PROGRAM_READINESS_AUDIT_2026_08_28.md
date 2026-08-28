@@ -138,6 +138,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 兩條 TPEx fallback 已有 source-specific parser、ROC compact date 正規化、row conservation 與日期 fail-closed 測試。這是「能取得另一條官方路徑」的工程完成，不是 source acceptance；TPEx OpenAPI 目前是 latest snapshot，不會被自動回填到較早或未證明的交易日。
 
+既有官方 market-event backfill 也已通過 host-context custody recheck：publication=`official-market-events-dc8e30d0a11eec68f955b354`，涵蓋 2014–2026 的 TWSE `TWTAWU`／`TWT49U`／`TWTAUU` 與 TPEx `sprcHis` 四個 endpoint，canonical=`28,599` 筆、new=`11`、四個 source coverage 均完整；manifest hash=`sha256:e0477b4a440e09e4b655e671104924c925ce82cc4ae728ddce8be8dc90286413`、canonical hash=`sha256:fc34c1db2ec06d3e2123dd927d2681ef6c194093563923385b72a7c867e2b36a`。publication safety 明確為 append-only、raw immutable、`active_sqlite_written=false`、result-only TWT49U／TWTAUU 只供 label／ledger；這補上正式事件 custody，但不代表 P0 license／publication/PIT／owner decision 已通過。
+
 漲跌停鎖死來源已由不相符的 `MI_INDEX` 改為官方 `TWT84U`。本次 `TWT84U` 原始 1,377 列、鎖死事件 0 列；這表示該交易日沒有符合條件的事件，不是 schema 或 endpoint 失敗。
 
 2026-08-28 重新以受控外部網路完成 bounded live audit：13/13 來源均有 machine row，`1 verified / 10 degraded / 2 official_no_data`；raw rows=`72,202`、accepted rows=`70,825`。主要 row count 為：除權息 251、減資／分割 2、停復牌 1、處置 4、分盤 4、全額交割 10、漲跌停行情 1,377（鎖死事件 0）、三大法人 0、信用交易 0、TDCC 68,578、TWSE 月營收 1,085、TPEx 月營收 890；三大法人與信用交易的 primary 0 列是官方當日無資料回覆，不是 network failure。新增的 fallback evidence 顯示：信用交易 TPEx OpenAPI 確實回 `2026-08-27`、但要求日為 `2026-08-28`，所以明確標成 `date_mismatch` 並拒絕；三大法人本次 fallback 遇到 response prematurely，明確標成 `network_error`，沒有把它誤算成資料。MOPS 季報 availability artifact 通過驗證。所有 route 仍固定 `candidate_evidence_only=true`、`formal_eligible=false`、scheduler／production ingestion 關閉。
@@ -164,6 +166,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 時間軸狀態字典同步共用 formatter；`in_progress`、`schema_mismatch`、`blocked_provenance` 等合法 token 現在也有中文說明，未辨識 token 仍保留原文，避免 UI 把未知狀態誤判為成功。
 
 Paper Portfolio readiness／weekly UI 也已將 `ready`、`not_computable_cost_ledger_missing` 等 machine token 加上中文解釋並保留原文；成本帳仍缺真實 fills 時，畫面只會更清楚地顯示不可計算，不會補造成本或績效。
+
+Readiness UI 的 lane 表格已固定顯示七個預期 lane；若明確 artifact 少了某列，畫面會顯示「未提供」、`readiness_lane_not_supplied:<lane>` 與重新產生完整 artifact 的動作，不再讓缺列看起來像功能不存在。阻擋原因／下一步欄位改為可換行並以 bounded scroll 呈現，摘要顯示已載入／預期比例；focused projection／UpdateView regression=`82 passed / 1 warning`，不改 readiness 或正式權限。
 
 ### Data Update 排程註冊觀察
 
