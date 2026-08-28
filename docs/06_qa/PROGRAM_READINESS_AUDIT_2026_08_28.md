@@ -4,7 +4,7 @@
 
 程式可以持續推進，而且原先六項 blocker 中有三項是舊投影或不完整診斷，不是資料真的不存在：P0 已取得 `13/13` 來源候選證據、Evidence Gate 已是 `3/3`、正式路徑的既有檔案 write-handle probe 在一般 host context 已通過。現在真正不能由程式自動補造的，只剩具名來源接受決議、真實 Paper execution evidence，以及必須隨 prospective clock 累積的 Formal inputs。
 
-這仍不是完整產品 closeout。Data Update 的第一個 read-model slice 已把明確指定的 live audit route／fallback／publication-PIT／治理狀態投影到同一個唯讀畫面；Paper benchmark 建置入口已完成，但成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
+這仍不是完整產品 closeout。Data Update 的 read-model 現在也保留 fallback attempted／實際替代 route／date mismatch／network error 等拒絕診斷，並在 P0 表格與 summary 明確區分「已採用」和「已嘗試但未採用」；Paper benchmark 建置入口已完成，但成本後週報與 ML Formal lane 仍尚未可計算。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 本輪已用 `clock:prospective:20260828:v1` 的實際官方 staging 在隔離 TEMP output
 完成一次 activation dry-run：PIT、Rule、simulated Portfolio 三個 producer 均能各自產出
@@ -23,7 +23,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 | Formal／ML | formal input `0/3` | 仍是 `0/3`；隔離 dry-run 已驗證三個 prospective producer 可產出，但受控環境目前把三個 path 指向缺失且早於 `training_as_of=2026-08-28` 的 `clock-20260819`；readiness 已明示 stale-clock hint，並列出同 output root 下 6 個 `diagnostic_only` prospective clock/staging marker | causal portfolio ledger、rule champion history、可供該 validator 使用的歷史 PIT sector membership；prospective wrapper 不可直接消費；owner 必須發布當前 clock 並更新明確 path | 可以工程化累積；不得自動改接 `clock-20260828`、也不得拿 prospective sector coverage 回填歷史 |
 | Runtime | 只有 `os.access` 提示 | 一般 host context 對既有 `config.log`／Research Registry 的零位元 write-handle probe 通過，overall=`ready`；隔離 staging probe 已能以正式 Registry schema 完成 insert／讀回／rollback／清除 | 正式 Registry 本身仍未做實寫；production ACL／鎖定仍需 owner 在正式環境確認 | 可以；路徑 ACL 不是目前 blocker，schema transaction 能力已可在非正式 staging 驗證 |
 | 效能工程 | 尚未設計 | 既有 batch backtest、optimizer 與部分 TPEX refresh 已有受控平行化 | 券商來源 rate limit／retry／Selenium 邊界；技術指標 process pool＋SQLite/CSV single writer 設計 | 可以；先量測、再做 bounded worker 與 single-writer，不直接拉高 thread 數 |
-| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；`data-update-timeline.v1` 明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness；runner／UI 已接 `data-update-status-history.v1` append-only 歷史 | 現有正式 latest status 尚未回填 history，需等下一次真實排程自然產生第一筆；live refresh／歷史 retention 尚未完成 | 可以；下一步觀察真實排程 history 並再做 live UI QA，不掃描目錄、不回放補歷史或繞過 candidate-only 邊界 |
+| Data Update 顯示 | 卡片／頁面狀態容易互相矛盾 | fail-closed 顯示、台灣市場日期、候選分頁、inline summary、P0 13 列唯讀 projection 與 Research Console 共用欄位已接上；`data-update-timeline.v1` 明確顯示排程 run、最後成功完成時間、12 個步驟結果與 freshness；runner／UI 已接 `data-update-status-history.v1` append-only 歷史；P0 fallback attempted／date mismatch／network error 已保留並以不同文字呈現 | 現有正式 latest status 尚未回填 history，需等下一次真實排程自然產生第一筆；live refresh／歷史 retention 尚未完成；仍需在正式環境走完全流程 live UI QA | 可以；先觀察真實排程 history，再依成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 做 live QA，不掃描目錄、不回放補歷史或繞過 candidate-only 邊界 |
 
 ## P0 多路徑取得結果
 
@@ -55,12 +55,12 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 ## 持續推進順序
 
-1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection 與 append-only history producer 已完成；後續觀察真實排程並補 live refresh／retention。）
+1. 將 live P0 audit、actual route、fallback reason、publication/PIT class 與 owner decision 投影接進 Data Update／Research Console，同時保留 candidate-only 安全邊界。（Data Update 的唯讀 projection、fallback 拒絕診斷與 append-only history producer 已完成；後續觀察真實排程並補 live refresh／retention。）
 2. 以 5 組 owner packet 完成 13 項 source 的 license/use-case/reviewer 決議；可先 `limited`，不必等待全部來源一次 accepted。
 3. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
 4. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。
 5. 先量測 broker／technical indicator 各階段耗時、限流與 write contention，再實作 bounded worker＋single-writer queue。
-6. 完成整個 Update 使用流程的 live UI QA：成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 都要有不同且一致的顯示。
+6. 完成整個 Update 使用流程的 live UI QA：程式端已先以 fixture 覆蓋成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 的狀態投影；剩餘是正式環境真實排程／權限／歷史 retention 的觀察與截圖證據。
 
 ## 本次程式與證據
 

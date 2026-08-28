@@ -988,6 +988,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 全部資料頁的卡片下方另有「資料更新時間軸（唯讀）」：按「檢查數據狀態」後會讀取固定的 `OUTPUT_ROOT/scheduled/data_update_quick/latest_status.json`、`OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`、`OUTPUT_ROOT/scheduled/data_freshness/latest_status.json` 與 `DATA_ROOT/meta_data/tpex_full_refresh_status.json`，顯示最後成功完成時間、run、目標資料日、每個更新步驟、最近執行歷史、freshness 結果與診斷。時間軸狀態 `最新`、`部分可用`、`freshness 異常`、`已過期`、`執行中`、`失敗`、`缺漏`、`格式異常`、`未設定` 的判讀彼此不同；缺檔或讀取失敗會清掉本輪步驟列與歷史列，不沿用上一輪成功結果。這個投影只讀檔，不掃描其他 `latest_status`、不發網路、不寫資料庫，也不把檔案修改時間當成成功完成時間。
 
+同一頁的「P0 官方來源證據（候選／唯讀）」表格固定顯示 13 個來源及其治理／machine 狀態、實際 route、PIT／公告、coverage、license 與 owner／下游邊界。Fallback 欄位會區分：`是` 代表替代路徑真的被採用；`否（已嘗試但未採用）` 代表曾 probe 但因 `date_mismatch`、`official_no_data`、`network_error` 或其他 fail-closed 結果沒有採用；`否`／`未提供` 則表示沒有可觀測的 fallback 嘗試。日期不符會同時列出要求日與觀測日，傳輸／解析錯誤會在滑鼠提示中保留 error type、endpoint、HTTP／payload evidence；summary 另顯示 fallback 已嘗試、已採用與未採用計數。這些欄位只改善診斷，不授予 source acceptance，`downstream_eligibility` 永遠為 `none`。
+
 快速更新排程會在 `latest_status.json` 旁以 append-only 方式保存 `data-update-status-history.v1` JSONL；每次真實執行會記錄 `running` 與 terminal status 的 run／時間／步驟摘要。預設 history 路徑為 `OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`，也可用 runner 的 `--history-path` 或 UI 的 `DATA_UPDATE_HISTORY_ARTIFACT` 指定。這個功能不會回放既有 latest status、不會把檔案 mtime 當成完成時間；既有環境的 history 缺檔會顯示「缺漏」，等下一次真實排程自然產生，不得手動複製舊結果補足。
 
 若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT` 或 `TPEX_REFRESH_STATUS_ARTIFACT`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。

@@ -1,5 +1,11 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-08-28 Data Update fallback diagnostics projection（current engineering）
+
+- P0 evidence matrix 的 fallback lineage 現在完整保留到 `P0SourceControlRow`／UpdateView read-model：`fallback_attempted`、實際替代 endpoint／route、probe outcome、HTTP／payload evidence、要求日／觀測日、quarantine 與 transport error 不再於投影時遺失。
+- Data Update P0 表格會區分「已採用」、「已嘗試但未採用」與「未嘗試／未提供」；`date_mismatch`、`official_no_data`、`network_error` 會在列內及 tooltip 顯示，summary 另列 fallback 嘗試／採用／拒絕計數。已採用 route 才能顯示採用，不會把 fallback 嘗試誤報成成功。
+- 更新時間軸的 steps／history 保留原始 status token，同時提供可讀 tooltip 與狀態色；不改變唯讀、明確路徑、無網路／無寫入邊界。新增 projection／UI regression 涵蓋 rejected fallback 日期與傳輸診斷。
+
 ## 2026-08-28 Data Update live status timeline（current engineering）
 
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
@@ -48,7 +54,7 @@
 ## 2026-08-27 Data Update × P0 source status projection（current engineering）
 
 - `UpdateView` 的全域狀態檢查現在以 `compose_source_status_projection()` 統一保留核心 SQLite/CSV 狀態與 P0 Control Center 狀態；主視窗將既有的 `P0_SOURCE_CONTROL_CENTER_AUDIT`／`P0_SOURCE_CONTROL_CENTER_DECISIONS` 明確路徑傳入更新頁，不掃描正式資料目錄、不發網路請求。
-- Data Update「全部資料」新增 13 列 P0 唯讀表格，逐列顯示 governance／machine、實際 `acquisition_route_id`、可用 route、fallback 來源與原因、PIT／公告與 availability、整數基點 coverage／accepted-observed-blocked rows、license 狀態、owner decision 與 `downstream_eligibility=none`。P0 route／fallback／PIT 欄位由 `P0SourceControlCenterRow` 保留，Research Console 與更新頁共用同一個 read model。
+- Data Update「全部資料」新增 13 列 P0 唯讀表格，逐列顯示 governance／machine、實際 `acquisition_route_id`、可用 route、fallback 來源與原因、PIT／公告與 availability、整數基點 coverage／accepted-observed-blocked rows、license 狀態、owner decision 與 `downstream_eligibility=none`。P0 route／fallback／PIT 欄位由 `P0SourceControlCenterRow` 保留，Research Console 與更新頁共用同一個 read model；2026-08-28 起也保留 fallback attempted／拒絕原因／要求與觀測日期，避免「有 probe 但未採用」在 UI 消失。
 - 未設定 audit 時仍明示 `contract_only`；artifact 遺失、格式錯誤或安全旗標不符時則顯示 `audit_unavailable` 並保留 13 列 fail-closed contract rows，不把讀取失敗誤報成成功。這個 projection 只改善可觀測性，不升格 source acceptance、不寫 SQLite、不開啟 Scoring／Advice／Portfolio／scheduler／broker。
 - 本 slice targeted regression=`95 passed / 1 warning`，mypy（512 source files）與 `scripts/qa_validate_update_tab.py`（23 passed / 0 failed / 4 skipped）通過；完整 Data Update live artifact refresh／capture history 仍是後續工程工作。
 
@@ -83,8 +89,8 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
-- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard 測試並完成既有 inventory 登錄後為 `639/639`、`3612 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
-- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3611 passed / 1 skipped / 26 warnings`（`521.38s`）；warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示，沒有新的 test failure。`3607 passed` 為 TPEx fallback 測試加入前的中間結果。
+- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard 測試並完成既有 inventory 登錄後為 `639/639`、`3614 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3612 collected` 與 `638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
+- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3613 passed / 1 skipped / 26 warnings`（`518.58s`）；warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示，沒有新的 test failure。`3611 passed` 為本輪 UI fallback diagnostics 測試加入前的中間結果。
 
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
 - Workbench 的 Pre-V2 readiness 現在會把 weekly history 的 projection 未設定／找不到與各 readiness item 的 blocker/diagnostic 帶到首頁 warnings；目前環境若設定通過驗證的 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`，CLI／畫面會一致揭露 owner-approved weekly `3/3`（只供 UI／Pre-V2 顯示、不授予 formal credit），清除該變數時則明示只計算正式 DB legacy review history，不再只顯示模糊的「等待中」。
