@@ -22,6 +22,11 @@
 
 - Workbench 證據門檻摘要現在會在 weekly `observed/required` ratio 旁投影 sidecar 的 `pending_human_review` 期數與日期區間（最多前三期），並固定保留 `formal_credit_authorized=false`。這只改善「已觀測 3/3」與「尚待人工核准」的區分，不會自動寫入 approved history、授予 Formal credit 或啟用 production scheduler。
 
+## 2026-08-28 Paper weekly evidence current observation（current evidence）
+
+- 以正式 Paper snapshot／Equal Weight SQLite 唯讀重建 `2026-08-24..2026-08-28`：5 筆 snapshot、5 筆 benchmark 都存在，但 Paper Trade Ledger 不存在，因此 `cost_record_count=0`、`weekly_report_status=not_computable`。這不是缺 benchmark，也不是可用 snapshot 反推 fills；仍需真實受控 execution event。
+- 空白 `paper-trade-import.v1` fills template 已輸出至 TEMP，欄位包含 status、requested／filled、Decimal 成本、turnover、execution gap、source event 與 override；row count 固定為 0，未建立 ledger、未寫正式資料。
+
 ## 2026-08-28 Data Update live status timeline（current engineering）
 
 - `UpdateView` 現在會把固定出口 `output/scheduled/data_update_quick/latest_status.json`、`output/scheduled/data_freshness/latest_status.json` 與 `meta_data/tpex_full_refresh_status.json` 投影成唯讀 `data-update-timeline.v1`；可見最後成功完成時間、run、目標資料日、每個步驟結果與 freshness 狀態，不再只看 SQLite 筆數猜測更新是否完成。
