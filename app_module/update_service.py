@@ -3325,6 +3325,96 @@ class UpdateService :
         except Exception :
             return None
 
+    def _run_technical_indicator_process_pool(
+        self,
+        *,
+        calculator,
+        tasks: List[tuple[str, Any]],
+        ignore_existing: bool,
+        max_workers: int,
+        max_in_flight: Optional[int],
+        max_retries: int,
+        cancel_callback: Optional[Callable[[], bool]],
+        progress_callback,
+        logger,
+    ) -> Dict[str, Any]:
+        """執行受控技術指標 worker，並由父程序逐股保存結果。
+
+        ``tasks`` 已由 ``calculate_technical_indicators`` 完成日期與 warm-up
+        判斷，因此這裡不重新篩資料。worker 回傳的 DataFrame 只在記憶體中
+        傳回，所有 CSV／SQLite 寫入仍走既有 calculator 與後續整合 writer。
+        """
+        from app_module.technical_indicator_process_pool import (
+            run_bounded_indicator_pool,
+        )
+        import pandas as pd
+
+        pool = run_bounded_indicator_pool(
+            tasks,
+            max_workers=max_workers,
+            max_in_flight=max_in_flight,
+            max_retries=max_retries,
+            cancel_callback=cancel_callback,
+            logger=logger,
+        )
+        raw_results = pool.get("results", {})
+        successful: List[str] = []
+        failed: List[str] = list(pool.get("failed_ids", []))
+        stored: List[Any] = []
+
+        total = len(tasks)
+        for index, (stock_id, group_df) in enumerate(tasks, start=1):
+            if _is_cancel_requested(cancel_callback):
+                break
+            precomputed = raw_results.get(stock_id)
+            if not isinstance(precomputed, pd.DataFrame) or precomputed.empty:
+                if stock_id not in failed:
+                    failed.append(stock_id)
+                continue
+            if progress_callback:
+                progress_callback(
+                    f"process-pool 父程序寫入 {stock_id} ({index}/{total})...",
+                    20 + int((index / max(total, 1)) * 70),
+                )
+            try:
+                result = calculator.calculate_and_store_indicators(
+                    group_df,
+                    stock_id,
+                    output_dir=self.config.technical_dir,
+                    ignore_existing=ignore_existing,
+                    precomputed_result=precomputed,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("process-pool 父程序保存股票 %s 失敗: %s", stock_id, exc)
+                result = None
+            if isinstance(result, pd.DataFrame):
+                stored.append(result)
+                successful.append(stock_id)
+            elif stock_id not in failed:
+                failed.append(stock_id)
+
+        cancelled = _is_cancel_requested(cancel_callback) or pool.get("status") == "cancelled"
+        unique_failed = list(dict.fromkeys(str(stock_id) for stock_id in failed))
+        summary = {
+            key: value
+            for key, value in pool.items()
+            if key != "results"
+        }
+        summary["parent_single_writer"] = True
+        summary["parent_written_stock_count"] = len(stored)
+        summary["parent_write_failed_count"] = len(unique_failed)
+        summary["cancelled"] = cancelled
+        summary["production_worker_enabled"] = True
+        return {
+            "report": summary,
+            "all_data": stored,
+            "success_count": len(successful),
+            "updated_stocks": successful,
+            "fail_count": len(unique_failed),
+            "failed_stocks": unique_failed,
+            "cancelled": cancelled,
+        }
+
     def calculate_technical_indicators (
     self ,
     target_stock :Optional [str ]=None ,
@@ -3333,7 +3423,11 @@ class UpdateService :
     progress_callback =None ,
     cancel_callback :Optional [Callable[[],bool ]]=None ,
     ignore_existing_files :bool =False ,
-    incremental_lookback_days :int =120
+    incremental_lookback_days :int =120 ,
+    technical_process_pool :Optional [bool ]=None ,
+    technical_process_pool_workers :Optional [int ]=None ,
+    technical_process_pool_max_in_flight :Optional [int ]=None ,
+    technical_process_pool_max_retries :Optional [int ]=None
     )->Dict [str ,Any ]:
         """計算技術指標
 
@@ -3345,6 +3439,10 @@ class UpdateService :
             cancel_callback: 合作式取消回調；只在安全邊界停止後續計算／寫入
             ignore_existing_files: 是否忽略現有指標文件，直接覆蓋（用於修復有問題的文件）
             incremental_lookback_days: 增量更新時往前回補的交易日數，避免技術指標缺少歷史序列
+            technical_process_pool: 明確覆寫 process-pool feature flag；預設讀取 config，且預設關閉
+            technical_process_pool_workers: process-pool worker 上限；僅在 feature flag 開啟時使用
+            technical_process_pool_max_in_flight: parent queue 的最大 in-flight 任務數
+            technical_process_pool_max_retries: 單一股票 worker 失敗時的有限重試次數
 
         Returns:
             dict: {
@@ -3368,9 +3466,31 @@ class UpdateService :
 
         logger =logging .getLogger (__name__ )
 
+        process_pool_enabled = (
+            bool(getattr(self.config, "technical_process_pool_enabled", False))
+            if technical_process_pool is None
+            else bool(technical_process_pool)
+        )
+        process_pool_workers = int(
+            technical_process_pool_workers
+            if technical_process_pool_workers is not None
+            else getattr(self.config, "technical_process_pool_workers", 2)
+        )
+        process_pool_max_in_flight = (
+            technical_process_pool_max_in_flight
+            if technical_process_pool_max_in_flight is not None
+            else getattr(self.config, "technical_process_pool_max_in_flight", 4)
+        )
+        process_pool_max_retries = int(
+            technical_process_pool_max_retries
+            if technical_process_pool_max_retries is not None
+            else getattr(self.config, "technical_process_pool_max_retries", 1)
+        )
+
         logger .info (
         f"[UpdateService] 開始計算技術指標: "
-        f"target_stock={target_stock}, force_all={force_all}, start_date={start_date}"
+        f"target_stock={target_stock}, force_all={force_all}, start_date={start_date}, "
+        f"process_pool_enabled={process_pool_enabled}"
         )
 
         if _is_cancel_requested(cancel_callback):
@@ -3533,10 +3653,16 @@ class UpdateService :
             'failed_stocks':[],
             'insufficient_stocks':[],
             'start_date':'',
-            'end_date':''
+            'end_date':'',
+            'technical_process_pool': {
+                'enabled': process_pool_enabled,
+                'production_worker_enabled': process_pool_enabled,
+                'parent_single_writer': True,
+            },
             }
 
             all_data =[]
+            pending_process_pool_tasks :List [tuple[str ,pd .DataFrame ]]=[]
             min_date ="9999-12-31"
             max_date ="1900-01-01"
 
@@ -3638,6 +3764,11 @@ class UpdateService :
                     'message':f'技術指標計算已取消（尚未處理 {stock_id}）',
                     **results
                     }
+                if process_pool_enabled:
+                    # 日期／增量 warm-up 已在父程序決定；worker 只接收這個
+                    # 精確 frame 做純計算，之後仍由父程序逐股寫入。
+                    pending_process_pool_tasks.append((str(stock_id), group_df.copy()))
+                    continue
                 try :
                     result =calculator .calculate_and_store_indicators (
                     group_df ,
@@ -3680,6 +3811,35 @@ class UpdateService :
                         }
 
                     # 更新結果日期範圍
+            process_pool_report = None
+            if process_pool_enabled and pending_process_pool_tasks:
+                process_pool_result = self._run_technical_indicator_process_pool(
+                    calculator=calculator,
+                    tasks=pending_process_pool_tasks,
+                    ignore_existing=ignore_existing_files or force_all,
+                    max_workers=process_pool_workers,
+                    max_in_flight=process_pool_max_in_flight,
+                    max_retries=process_pool_max_retries,
+                    cancel_callback=cancel_callback,
+                    progress_callback=progress_callback,
+                    logger=logger,
+                )
+                process_pool_report = process_pool_result["report"]
+                results["technical_process_pool"] = process_pool_report
+                all_data.extend(process_pool_result["all_data"])
+                results["success_count"] += process_pool_result["success_count"]
+                results["updated_stocks"].extend(process_pool_result["updated_stocks"])
+                results["fail_count"] += process_pool_result["fail_count"]
+                results["failed_stocks"].extend(process_pool_result["failed_stocks"])
+                if process_pool_result["cancelled"]:
+                    results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
+                    results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
+                    return {
+                    'success':False ,
+                    'cancelled':True ,
+                    'message':'技術指標 process-pool 計算已取消（已停止後續合併）',
+                    **results
+                    }
             results ['start_date']=min_date if min_date !="9999-12-31"else "未知"
             results ['end_date']=max_date if max_date !="1900-01-01"else "未知"
 
@@ -3855,8 +4015,12 @@ class UpdateService :
             f"處理數據日期範圍: {results['start_date']} 至 {results['end_date']}"
             )
 
+            process_pool_failed = bool(
+                process_pool_report
+                and process_pool_report.get("status") in {"failed", "partial"}
+            )
             return {
-            'success':True ,
+            'success':not process_pool_failed ,
             'message':message ,
             **results
             }

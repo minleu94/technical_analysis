@@ -658,7 +658,14 @@ class TechnicalIndicatorCalculator:
             self.logger.error(traceback.format_exc())
             return None
     
-    def calculate_and_store_indicators(self, df, stock_id=None, output_dir=None, ignore_existing=False):
+    def calculate_and_store_indicators(
+        self,
+        df,
+        stock_id=None,
+        output_dir=None,
+        ignore_existing=False,
+        precomputed_result=None,
+    ):
         """計算技術指標並保存結果（會合併現有數據，避免覆蓋）
         
         Args:
@@ -666,13 +673,20 @@ class TechnicalIndicatorCalculator:
             stock_id: 股票代號
             output_dir: 輸出目錄，如果為None則使用默認目錄
             ignore_existing: 如果為 True，忽略現有文件，直接覆蓋（用於修復有問題的文件）
+            precomputed_result: 可選的 worker 計算結果；傳入時跳過重算，仍由父程序
+                執行現有資料合併與單一寫入流程
             
         Returns:
             DataFrame: 計算好的技術指標DataFrame（包含合併後的完整數據）
         """
         try:
-            # 計算所有指標
-            result_df = self.calculate_all_indicators(df, stock_id)
+            # 計算所有指標；process-pool worker 已計算時由父程序傳入結果，
+            # 仍由本方法統一負責合併與寫入，避免 worker 直接碰檔案／SQLite。
+            result_df = (
+                precomputed_result.copy()
+                if isinstance(precomputed_result, pd.DataFrame)
+                else self.calculate_all_indicators(df, stock_id)
+            )
             if result_df is None:
                 return None
                 

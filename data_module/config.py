@@ -37,6 +37,13 @@ class TWStockConfig:
     research_run_parquet_dir: Path = field(init=False)  # Research Run 詳細資料目錄
     research_run_staging_dir: Path = field(init=False)  # Research Run 暫存目錄
     use_sqlite: bool = True  # 是否使用 SQLite 儲存
+
+    # 技術指標 process-pool（預設關閉；只有受控 caller 明確開啟才會使用）
+    # worker 僅回傳計算結果，CSV／SQLite 一律由父程序單一寫入者處理。
+    technical_process_pool_enabled: bool = field(default=False, kw_only=True)
+    technical_process_pool_workers: int = field(default=2, kw_only=True)
+    technical_process_pool_max_in_flight: int = field(default=4, kw_only=True)
+    technical_process_pool_max_retries: int = field(default=1, kw_only=True)
     
     # 關鍵檔案路徑
     market_index_file: Path = field(init=False)
