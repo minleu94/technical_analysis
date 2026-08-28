@@ -26,6 +26,7 @@
 - P0 Data Update／Research Console 的比例欄位已改名為「解析通過率」並標示 `accepted/observed`；這是 payload row-conservation 的品質訊號，不是官方市場 universe／日期 coverage。沒有獨立來源分母與 missingness evidence 時，UI 不會再用「覆蓋率」暗示完整來源。
 - P0 license projection 對同一來源多個官方條款 URL 的混合結果改以 `capture_partial` 顯示，並在 Data Update／Research Console 呈現「部分取得，仍需複核」；已取得的 hash 與失敗原因都保留，但不改變 `license_accepted=false`、owner review 或 `downstream_eligibility=none`。
 - Data Update 排程頁已移除過時的 `Simulated/Waiting for time` 固定文案；初始預覽明確標為單一 freshness artifact，按檢查後才顯示 `scheduled/*` 唯讀彙總，並把 daily task 執行與 `production_scheduler_allowed=false` 的生產寫入治理分開呈現。
+- 更新時間軸的步驟／歷史與 freshness／TPEX 摘要現在以「中文說明（machine token）」呈現，例如 `完成（passed）`；保留 token 供排錯，不放寬任何正式 gate。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 

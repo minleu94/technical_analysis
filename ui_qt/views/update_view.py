@@ -2479,13 +2479,19 @@ class UpdateView(QWidget):
                     if isinstance(freshness_age, int)
                     else ""
                 )
-                lines.append(f"Freshness 檢查：{freshness_status}{freshness_suffix}")
+                lines.append(
+                    f"Freshness 檢查：{self._timeline_status_text(freshness_status)}"
+                    f"（{freshness_status}）{freshness_suffix}"
+                )
         tpex = value.get("artifacts", {}).get("tpex") if isinstance(value.get("artifacts"), dict) else None
         if isinstance(tpex, dict) and tpex.get("available"):
             tpex_status = str(tpex.get("status") or "unknown")
             tpex_at = str(tpex.get("completed_at") or "").strip()
             tpex_suffix = f"（{tpex_at}）" if tpex_at else ""
-            lines.append(f"TPEX 背景：{tpex_status}{tpex_suffix}")
+            lines.append(
+                f"TPEX 背景：{self._timeline_status_text(tpex_status)}"
+                f"（{tpex_status}）{tpex_suffix}"
+            )
         history = value.get("history")
         if isinstance(history, dict):
             history_status = str(history.get("status") or "unknown").strip()
@@ -2519,7 +2525,7 @@ class UpdateView(QWidget):
             raw_status = str(raw_step.get("status") or "unknown").strip().lower()
             cells = (
                 str(raw_step.get("name") or "未命名步驟"),
-                raw_status,
+                f"{self._timeline_status_text(raw_status)}（{raw_status}）",
                 str(raw_step.get("message") or ""),
             )
             for column_index, cell in enumerate(cells):
@@ -2556,7 +2562,7 @@ class UpdateView(QWidget):
             raw_status = str(raw_record.get("status") or "unknown").strip().lower()
             cells = (
                 completed_at,
-                raw_status,
+                f"{self._timeline_status_text(raw_status)}（{raw_status}）",
                 str(raw_record.get("run_id") or "未知"),
                 period,
             )

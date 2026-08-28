@@ -444,8 +444,10 @@ def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
     assert "最後成功完成：2026-08-28T09:00:00+08:00" in view.data_update_timeline_summary_label.text()
     assert "目標資料日：2026-08-28" in view.data_update_timeline_summary_label.text()
     assert "明確路徑" in view.data_update_timeline_summary_label.text()
+    assert "Freshness 檢查：完成（passed）" in view.data_update_timeline_summary_label.text()
     assert view.data_update_timeline_table.rowCount() == 2
     assert view.data_update_timeline_table.item(1, 0).text() == "SQLite"
+    assert view.data_update_timeline_table.item(1, 1).text() == "完成（passed）"
     assert UpdateView._timeline_status_text("date_mismatch") == "日期不符"
     assert UpdateView._timeline_status_text("official_no_data") == "官方無資料"
     assert UpdateView._timeline_status_color("official_no_data") == "#fbbf24"
@@ -533,7 +535,7 @@ def test_update_view_projects_append_only_data_update_history(tmp_path):
     assert status["history"]["record_count"] == 2
     assert "執行歷史：2 筆 append-only" in view.data_update_timeline_summary_label.text()
     assert view.data_update_timeline_history_table.rowCount() == 2
-    assert view.data_update_timeline_history_table.item(0, 1).text() == "passed"
+    assert view.data_update_timeline_history_table.item(0, 1).text() == "完成（passed）"
     assert view.data_update_timeline_history_table.item(0, 2).text() == "run-current"
 
 

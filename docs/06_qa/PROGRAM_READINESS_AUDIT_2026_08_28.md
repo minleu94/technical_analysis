@@ -136,6 +136,8 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 排程分頁的初始 JSON 預覽也已修正語意：`data_freshness/latest_status.json` 只代表單一 freshness 工作，不再顯示成整體 Scheduler 的 `Simulated/Waiting for time`。按「檢查此資料源狀態」後才會以明確 `scheduled/*/latest_status.json` 產生唯讀彙總；每日資料更新 task 的註冊／執行與 Evidence／ML 生產寫入授權分開判讀，`production_scheduler_allowed=false` 不變。
 
+同一輪也將更新時間軸的步驟／歷史表格及 freshness／TPEX 摘要統一成「中文說明（machine token）」；例如 `完成（passed）`、`失敗（failed）`。原始 token 未被移除，方便稽核與排錯，不會改變任何 readiness 或寫入邊界。
+
 ### Data Update 排程註冊觀察
 
 沙盒帳號 `codexsandboxoffline` 以 `cmd /c scripts\\scheduled\\query_baldr_scheduled_tasks.cmd` 做唯讀查詢時曾得到 `13 of 13 task(s) missing or unavailable`；這只代表該 token 無法呼叫 `schtasks.exe`，沒有刪除或修改任何 task。另一方面，2026-08-28 quick runner 已由既有程序完成真實 `running`／terminal history（run=`20260828-29472`）。實際 Windows host-context 重新 query 已確認 13/13 task `Enabled`／`Ready`、action wiring 全部相符，因此目前缺的是下一個自然週期的 freshness／history 與 owner governance，不是 scheduler registration；不應在這個 host 重複註冊。
