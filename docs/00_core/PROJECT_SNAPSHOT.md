@@ -27,6 +27,7 @@
 - P0 license projection 對同一來源多個官方條款 URL 的混合結果改以 `capture_partial` 顯示，並在 Data Update／Research Console 呈現「部分取得，仍需複核」；已取得的 hash 與失敗原因都保留，但不改變 `license_accepted=false`、owner review 或 `downstream_eligibility=none`。
 - Data Update 排程頁已移除過時的 `Simulated/Waiting for time` 固定文案；初始預覽明確標為單一 freshness artifact，按檢查後才顯示 `scheduled/*` 唯讀彙總，並把 daily task 執行與 `production_scheduler_allowed=false` 的生產寫入治理分開呈現。
 - 更新時間軸的步驟／歷史與 freshness／TPEX 摘要現在以「中文說明（machine token）」呈現，例如 `完成（passed）`；保留 token 供排錯，不放寬任何正式 gate。
+- 時間軸已與共用 formatter 對齊，`in_progress`、`schema_mismatch`、`blocked_provenance` 等合法狀態也會中文化；未知 token 仍原文顯示。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 

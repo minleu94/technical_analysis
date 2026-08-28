@@ -2353,7 +2353,8 @@ class UpdateView(QWidget):
 
     @staticmethod
     def _timeline_status_text(value: Any) -> str:
-        return {
+        raw_status = str(value or "").strip().lower()
+        known_text = {
             "current": "最新",
             "partial": "部分可用",
             "degraded": "freshness 異常",
@@ -2393,7 +2394,13 @@ class UpdateView(QWidget):
             "error": "錯誤",
             "blocked": "阻擋",
             "unknown": "未知",
-        }.get(str(value or "").strip().lower(), str(value or "未知"))
+        }.get(raw_status)
+        if known_text is not None:
+            return known_text
+        # Keep the timeline in sync with the shared formatter for valid tokens
+        # introduced by scheduled workers, while still exposing an unknown raw
+        # token instead of silently claiming success.
+        return format_status_token(raw_status)
 
     @staticmethod
     def _timeline_status_color(value: Any) -> str:
