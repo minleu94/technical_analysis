@@ -285,7 +285,7 @@ Recommendation、Portfolio Advice、Alert 與 Exit 是否被持續、可比較�
 
 2026-08-28 進度：Equal Weight builder 已抽至 `app_module/paper_equal_weight_benchmark_builder.py`，CLI 與 Portfolio UI 共用 preview／確認／輸入重驗證／新檔拒絕覆寫流程；Paper readiness／weekly evidence 預設讀取 `<OUTPUT_ROOT>/paper_portfolio/paper_equal_weight_benchmark.sqlite`（仍可由 `PAPER_EQUAL_WEIGHT_BENCHMARK_PATH` 覆寫）。Portfolio UI 新增「預覽／建立 Equal Weight」入口，建立後只補 benchmark observation；Paper Trade Ledger、真實 fill／partial-fill／reject／override、成本與 execution gap 仍不可由 snapshot 或手動交易推導。
 
-2026-08-28 台北日期刷新：`taiwan_market_today()` 已進入 `2026-08-28`，上述 raw snapshot 不再是 future row；Paper readiness 目前為 `partial`。已在 QA output 以 3 檔 frozen constituents 產生 21 筆 Equal Weight staging preview（最新 `472302.39`），但正式 output 尚未配置；真正缺口是正式 Equal Weight ledger、Paper Trade Ledger 與可計算的週報／forward outcome。future-date guard 仍保留，下一筆超過台北市場日的資料仍必須 fail-closed。
+2026-08-28 台北日期刷新：`taiwan_market_today()` 已進入 `2026-08-28`，上述 raw snapshot 不再是 future row；Paper readiness 目前為 `partial`。已在 QA output 以 3 檔 frozen constituents 產生 21 筆 Equal Weight staging preview（最新 `472302.39`），並於受控確認後建立正式 Paper output ledger `<OUTPUT_ROOT>/paper_portfolio/paper_equal_weight_benchmark.sqlite`；真正缺口縮小為 Paper Trade Ledger 與可計算的成本後週報／forward outcome。future-date guard 仍保留，下一筆超過台北市場日的資料仍必須 fail-closed。
 
 ### Testing
 

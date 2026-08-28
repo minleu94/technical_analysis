@@ -2385,7 +2385,7 @@ $env:PAPER_EQUAL_WEIGHT_BENCHMARK_PATH = '<EQUAL_WEIGHT_LEDGER.sqlite>'
 
 此環境變數只供唯讀檢查定位既有 ledger；預設檔案不存在時會顯示 `equal_weight_benchmark_db_missing`，不會由 readiness／weekly evidence 自動建立 schema。持倉管理 > Paper Portfolio 的「預覽／建立 Equal Weight」會使用 baseline、Paper snapshot 與 `TWStockConfig.db_file` 的市場資料，先產生只讀 preview；使用者明確確認後才建立新的研究用 append-only ledger，且若目標已存在會拒絕覆寫。這個入口不改市場 DB、Paper snapshot、手動 Portfolio 或 Paper Trade Ledger，也不把 benchmark 當成成交紀錄。
 
-最近一次實測有 `21` 筆 raw snapshot，raw 最新日 `2026-08-28`、總值 `490950.00`；本次台北市場日同為 `2026-08-28`，該列可作當日 current projection。受控 QA staging 已以 frozen constituents `1418／1536／1615` 建立 `21` 筆 Equal Weight observation，指定該 ledger 時 benchmark reader 為 ready；這只證明 benchmark builder 與讀取契約可用，不會自動套用正式 output，也不補足 Paper Trade Ledger。正式 readiness 仍為 `partial`，不能因此宣稱成本後績效或投資有效性。若執行時台北市場日早於 snapshot 日期，readiness 會將該列標成 future、排除於 current NAV，並只保留 blocker／diagnostic。
+最近一次實測有 `21` 筆 raw snapshot，raw 最新日 `2026-08-28`、總值 `490950.00`；本次台北市場日同為 `2026-08-28`，該列可作當日 current projection。受控流程已以 frozen constituents `1418／1536／1615` 在 `<OUTPUT_ROOT>/paper_portfolio/paper_equal_weight_benchmark.sqlite` 建立 `21` 筆 Equal Weight observation，benchmark reader 為 ready；這只補齊研究用 benchmark 輸入，不補足 Paper Trade Ledger，也不代表成本後績效或投資有效性。正式 readiness 仍為 `partial`。若執行時台北市場日早於 snapshot 日期，readiness 會將該列標成 future、排除於 current NAV，並只保留 blocker／diagnostic。
 
 若 Paper Portfolio、weekly evidence 或 Equal Weight builder 遇到 `paper_snapshot_future_dated`、`paper_daily_status_future_dated` 或 `paper_weekly_report_future_period`，先停止採用該期間，不要刪除、回填或手動改寫正式資料；請由 owner 追查排程時鐘、時區與來源事件。現行排程入口已改採最近已到達 cutoff，且 writer 對明確未到達的 `--decision-at` fail-closed；既有 future row 仍只作 blocker／diagnostic。Equal Weight builder 也會在 preview／apply 前拒絕 future snapshot，避免 look-ahead 污染 benchmark。
 
