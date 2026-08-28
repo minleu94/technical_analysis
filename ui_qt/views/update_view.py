@@ -53,6 +53,15 @@ def _taiwan_market_qdate() -> QDate:
     return QDate(today.year, today.month, today.day)
 
 
+def _safe_nonnegative_int(value: Any) -> int:
+    """把服務層計數安全投影到 UI；malformed 值不可中止整個狀態畫面。"""
+
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 
 
 
@@ -2917,7 +2926,7 @@ class UpdateView(QWidget):
 
     @staticmethod
     def _format_candidate_status_card(value: Dict[str, Any]) -> str:
-        record_count = int(value.get("total_records") or 0)
+        record_count = _safe_nonnegative_int(value.get("total_records"))
         earliest = value.get("earliest_date") or "無"
         latest = value.get("latest_date") or "無"
         coverage = value.get("coverage_pct") or "0.0%"
@@ -2941,8 +2950,11 @@ class UpdateView(QWidget):
 
     @staticmethod
     def _format_status_card_text(key: str, value: Dict[str, Any]) -> str:
-        latest_date = value.get("latest_date", "未知")
-        total_records = int(value.get("total_records") or 0)
+        latest_date = value.get("latest_date") or "未知"
+        try:
+            total_records = max(0, int(value.get("total_records") or 0))
+        except (TypeError, ValueError):
+            total_records = 0
         status = value.get("status", "unknown")
         if key in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
             return UpdateView._format_candidate_status_card(value)
@@ -2951,7 +2963,10 @@ class UpdateView(QWidget):
             latest_available_period = value.get("latest_available_period") or "尚無"
             latest_available_date = value.get("latest_available_date") or "尚無"
             next_available_date = value.get("next_available_date")
-            pending_period_count = int(value.get("pending_period_count") or 0)
+            try:
+                pending_period_count = max(0, int(value.get("pending_period_count") or 0))
+            except (TypeError, ValueError):
+                pending_period_count = 0
             lines = [
                 f"最新可用日：{latest_available_date}",
                 f"已匯入期別：{latest_period}",
@@ -2970,10 +2985,10 @@ class UpdateView(QWidget):
         if key == "broker_branch":
             lines = [
                 f"最新日期：{latest_date}\n"
-                f"實際天數：{int(value.get('date_count') or 0):,} 天\n"
-                f"雙榜紀錄 (E&B)：{int(value.get('dual_count') or 0):,}\n"
-                f"張數榜專屬 (E-only)：{int(value.get('e_only_count') or 0):,}\n"
-                f"金額榜專屬 (B-only)：{int(value.get('b_only_count') or 0):,}\n"
+                f"實際天數：{_safe_nonnegative_int(value.get('date_count')):,} 天\n"
+                f"雙榜紀錄 (E&B)：{_safe_nonnegative_int(value.get('dual_count')):,}\n"
+                f"張數榜專屬 (E-only)：{_safe_nonnegative_int(value.get('e_only_count')):,}\n"
+                f"金額榜專屬 (B-only)：{_safe_nonnegative_int(value.get('b_only_count')):,}\n"
                 f"總記錄數：{total_records:,}\n"
                 f"狀態：{status}"
             ]
@@ -2985,7 +3000,7 @@ class UpdateView(QWidget):
             f"狀態：{status}",
         ]
         if key == "technical_indicators" and value.get("file_count") is not None:
-            lines.append(f"指標檔數：{int(value.get('file_count') or 0):,}")
+            lines.append(f"指標檔數：{_safe_nonnegative_int(value.get('file_count')):,}")
         UpdateView._append_status_diagnostics(lines, value)
         return "\n".join(lines)
 

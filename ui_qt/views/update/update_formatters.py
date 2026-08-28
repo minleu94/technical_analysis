@@ -3,6 +3,15 @@
 from typing import Any, Mapping
 
 
+def _safe_nonnegative_int(value: Any) -> int:
+    """把 malformed 計數 fail-closed 成 0，避免狀態頁因顯示而中止。"""
+
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 def format_status_token(status: Any) -> str:
     raw_status = str(status or "").strip()
     normalized = raw_status.lower()
@@ -44,13 +53,13 @@ def format_status_token(status: Any) -> str:
 
 def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
     latest_date = detail.get("latest_date") or "未知"
-    total_records = int(detail.get("total_records") or 0)
+    total_records = _safe_nonnegative_int(detail.get("total_records"))
     if source == "monthly_revenue":
         latest_period = detail.get("latest_period") or latest_date
         latest_available_period = detail.get("latest_available_period") or "尚無"
         latest_available_date = detail.get("latest_available_date") or "尚無"
         next_available_date = detail.get("next_available_date")
-        pending_period_count = int(detail.get("pending_period_count") or 0)
+        pending_period_count = _safe_nonnegative_int(detail.get("pending_period_count"))
         lines = [
             f"最新可用日：{latest_available_date}",
             f"已匯入期別：{latest_period}",
@@ -73,17 +82,17 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
     if source == "daily":
         csv_count = detail.get("csv_file_count") or detail.get("file_count")
         if csv_count is not None:
-            lines.append(f"CSV 日檔數：{int(csv_count):,}")
+            lines.append(f"CSV 日檔數：{_safe_nonnegative_int(csv_count):,}")
         missing_dates = detail.get("missing_dates") or []
         if missing_dates:
             lines.append("缺漏日期：" + "、".join(str(date) for date in missing_dates[:8]))
     elif source == "broker_branch":
-        lines.append(f"實際天數：{int(detail.get('date_count') or 0):,}")
-        lines.append(f"雙榜紀錄：{int(detail.get('dual_count') or 0):,}")
-        lines.append(f"張數榜專屬：{int(detail.get('e_only_count') or 0):,}")
-        lines.append(f"金額榜專屬：{int(detail.get('b_only_count') or 0):,}")
+        lines.append(f"實際天數：{_safe_nonnegative_int(detail.get('date_count')):,}")
+        lines.append(f"雙榜紀錄：{_safe_nonnegative_int(detail.get('dual_count')):,}")
+        lines.append(f"張數榜專屬：{_safe_nonnegative_int(detail.get('e_only_count')):,}")
+        lines.append(f"金額榜專屬：{_safe_nonnegative_int(detail.get('b_only_count')):,}")
     elif source in {"technical", "technical_indicators"} and detail.get("file_count") is not None:
-        lines.append(f"指標檔數：{int(detail.get('file_count') or 0):,}")
+        lines.append(f"指標檔數：{_safe_nonnegative_int(detail.get('file_count')):,}")
     read_mode = str(detail.get("read_mode") or "").strip()
     if read_mode:
         lines.append(f"讀取模式：{read_mode}")

@@ -52,6 +52,28 @@ def test_format_source_detail_summary_handles_missing_broker_fields() -> None:
     )
 
 
+def test_format_source_detail_summary_fail_closes_malformed_counts_and_dates() -> None:
+    summary = format_source_detail_summary(
+        "broker_branch",
+        {
+            "latest_date": None,
+            "total_records": "not-a-number",
+            "date_count": "-5",
+            "dual_count": object(),
+            "e_only_count": None,
+            "b_only_count": "3",
+            "status": "ok",
+        },
+    )
+
+    assert "最新日期：未知" in summary
+    assert "SQLite 筆數：0" in summary
+    assert "實際天數：0" in summary
+    assert "雙榜紀錄：0" in summary
+    assert "張數榜專屬：0" in summary
+    assert "金額榜專屬：3" in summary
+
+
 def test_format_source_detail_summary_exposes_monthly_pit_availability() -> None:
     detail = {
         "latest_date": "2026-06-30",
