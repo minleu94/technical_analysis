@@ -1196,10 +1196,13 @@ New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_a
 ```
 
 此 probe 會以真實 `TechnicalIndicatorCalculator` 驗證 `BrokenProcessPool` 後重建
-executor、取消 queued work 與丟棄取消後才完成的結果；worker 不持有 CSV／SQLite writer，
-staging 結束後會清理。`status=measured` 仍只代表 recovery／取消 staging contract，
-`production_single_writer_integration=not_completed`；未完成正式整合前 production
-worker 數維持 1。
+executor、取消 queued work 與丟棄取消後才完成的結果；接著在 ephemeral staging
+由父程序依序寫入逐股／aggregate CSV 與既有 `DBManager` SQLite writer，並驗證
+SQLite lock／retry。worker 不持有 CSV／SQLite writer，staging 結束後會清理。
+`status=measured` 代表 recovery／取消與 parent writer staging contract 通過，
+而 `production_single_writer_integration=staging_measured`、scope=`isolated_staging`
+仍不是正式啟用證明；未完成 production batch feature flag／scheduler lifecycle、
+backup／rollback 與 owner-approved canary 前，production worker 數維持 1。
 
 若要驗證券商 HTTP fetch 的 bounded queue、global rate-limit、retry、duplicate 與
 single-writer 契約，可使用離線 transport probe：

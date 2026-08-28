@@ -162,8 +162,28 @@ crash recovery=`measured`（`BrokenProcessPool` → recovery `120` rows）、can
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`，
 SHA-256=`3068F4947AB076CD171961D5D021C0E5298690D0209EB57D43AE4F62B4B92B95`。
 
-這只補足 staging 的 recovery／取消前置條件；`production_single_writer_integration`
-仍為 `not_completed`，因此 readiness 仍不會把 technical worker 切到 production。
+這只補足 staging 的 recovery／取消前置條件；本輪再把同一批 real calculator
+結果接到既有 parent CSV／`DBManager.write_dataframe`，並在 ephemeral SQLite
+實測 lock／retry。`production_single_writer_integration` 現為
+`staging_measured`（scope=`isolated_staging`），不是 production 啟用證明；因此
+readiness 仍保留 production single-writer blocker，technical worker 仍維持關閉。
+
+### 2026-08-28 10:28 UTC parent single-writer integration staging（本輪新增）
+
+同一個 `qa_technical_indicator_worker_recovery.py` 現在會在 recovery／cancellation
+通過後，使用 2 個 real calculator worker、`max_in_flight=2`，由父程序依序寫入
+2 份逐股 CSV、1 份 aggregate CSV，再透過正式 `DBManager.write_dataframe`
+寫入 ephemeral `technical_indicators.sqlite`。240 rows 寫入成功，SQLite
+`database is locked` contention 被觀察到，holder 釋放後 retry 成功；worker
+write attempts=`0`、production CSV／SQLite write=`false`、staging cleanup 與
+raw input hash 均通過。
+
+artifact 暫存於
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`，
+SHA-256=`983FDEB4C1829137857F49513463BA48579910BF5A3882B73260F096F0454A8D`。
+這讓 production integration 的剩餘工作縮小為：把同一 writer contract 接入正式
+technical batch 的 feature flag／scheduler lifecycle，並由 owner 先核准 rollback、
+backup 與小範圍 canary；在此之前不得把 `staging_measured` 升格成 production。
 
 ### 2026-08-28 09:50 UTC broker bounded fetch acceptance probe（本輪新增）
 
@@ -232,9 +252,10 @@ rate-limit 仍未完成，因此 production worker 仍維持關閉。
 
 ## 下一個可實作切點（尚未啟用）
 
-1. real process-pool staging 的 crash recovery、queued cancellation 與 partial-result
-   discard 已有 acceptance；下一步只剩把相同 contract 接到正式 single-writer integration，
-   保留每段 row count、error、cancel 與 file hash，完成前不開 production worker。
+1. real process-pool staging 的 crash recovery、queued cancellation、partial-result
+   discard 與 parent single-writer integration 已有 acceptance；下一步是把相同
+   contract 接到正式 technical batch 的 feature flag／scheduler lifecycle，保留每段
+   row count、error、cancel、file hash 與 rollback，完成前不開 production worker。
 2. Broker 只在 owner／環境允許的真實 canary 中考慮 bounded HTTP fetch pool；每個 task
    必須含 global rate-limit、retry budget、source/date identity，Selenium fallback 維持
    serialized，結果交給上述 single writer。離線 parser／queue acceptance 已完成，

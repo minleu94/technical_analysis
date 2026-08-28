@@ -100,7 +100,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 3. 持續收集真實 weekly sidecar 並完成 owner review；目前已接入明確 sidecar 參數，不能用 pending 或 projection 直接取得 Formal credit。
 4. 將 QA Equal Weight builder 納入明確受控的 Paper benchmark 建置流程（已完成 CLI／UI 共用 preview→confirm 與不可覆寫 ledger）；由真實 paper execution producer 或使用者提供完整 fills CSV，建立 Paper Trade Ledger 後才計算成本後週報。
 5. 保持 prospective publisher 與歷史 ML validator 的 schema 分離；讓 portfolio ledger、rule history、PIT sector 三個 manifest 自下一個有效 clock 起自然累積，並用 readiness inspector 的 lane／schema 診斷避免把 shadow bytes 誤接到正式 consumer。
-6. 已完成 technical indicator 各階段耗時、writer contention、real staging bounded process-pool 與 worker recovery／取消 acceptance，以及 broker 離線 fetch contract；下一步只剩 production single-writer integration，再由 owner 允許真實 broker canary。
+6. 已完成 technical indicator 各階段耗時、writer contention、real staging bounded process-pool、worker recovery／取消 acceptance，以及 parent single-writer integration staging；下一步是把相同 contract 接入 production technical batch 的 feature flag／scheduler lifecycle，再由 owner 允許真實 broker canary。
 7. 完成整個 Update 使用流程的 live UI QA：程式端已先以 fixture 覆蓋成功、官方無資料、fallback、schema mismatch、network failure、資料落後與 governance blocked 的狀態投影；剩餘是正式環境真實排程／權限／歷史 retention 的觀察與截圖證據。
 
 ## 本次程式與證據
@@ -117,14 +117,14 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 - Control Center：`C:\Users\archi\AppData\Local\Temp\p0-source-control-center-20260827.json`
 - Evidence readiness（既有 projection readout）：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`
 - V2.2 current weekly collection（正式 SQLite `mode=ro`、`2026-08-24..2026-08-28`、`pending_human_review`，不計 Gate credit）：sidecar `C:\Users\archi\AppData\Local\Temp\technical_analysis_evidence_20260828\scheduled\v2_2_weekly_collection\evidence_scheduler.db`（SHA-256=`B5331161E4E96C6FC4AED055B3B4BEC6F566E8699C2C96CF6C2A15254AA3F666`）；report `C:\Users\archi\AppData\Local\Temp\technical_analysis_evidence_20260828\scheduled\v2_2_weekly_collection\v2_2_weekly_collection_20260828.json`（SHA-256=`86DAE1280B09B26435A0BE745C7362A16BE41045C27DB4A21D119AB2E2D56A88`）
-- 2026-08-28 最終 unified readiness（載入 live P0、approved projection、pending sidecar、Paper／Formal／Runtime／performance artifacts）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final.json`（status=`action_required`；SHA-256=`8803627F53EC73B3ADDB113EA4A763B7A8218EA43BBBBC69A42389FB337E7025`）
+- 2026-08-28 最終 unified readiness（載入 live P0、approved projection、pending sidecar、Paper／Formal／Runtime／performance artifacts）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final.json`（status=`action_required`；SHA-256=`BFCF66C300EABA7A5FF4384BE3C5BF0104BCDC861CBD8FCD693C45604F7038E3`）
 - 2026-08-28 Formal input readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_formal_input_readiness_20260828.json`（`0/3`、`formal_oos_allowed=false`；SHA-256=`F9C896F2D2196F0BFAB18E9C9A06B2CE08618C5F83BC6E5EFCD4B8AA0F7AF960`）
 - ML Formal readiness（既有 baseline readout）：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
 - Runtime readiness：2026-08-28T06:32:33Z 以 `scripts/inspect_runtime_environment_readiness.py --format json` 在一般 host context 重跑；overall=`ready`、`write_probe=os.access_plus_existing_handle`、diagnostics=`[]`。同日 06:58:30Z 另在 OS TEMP 的明確 staging 目錄執行 `--confirm-write-probe`：`file_write_succeeded=true`、`sqlite_write_succeeded=true`、`registry_transaction_succeeded=true`、`cleanup_succeeded=true`；正式 Registry 仍未被寫入。
 - QA Equal Weight preview：`D:\Min\Python\Project\FA_Data\output\qa\readiness_refresh_20260828\paper_equal_weight_preview.sqlite`
 - Paper Equal Weight output：`D:\Min\Python\Project\FA_Data\output\paper_portfolio\paper_equal_weight_benchmark.sqlite`（21 筆；research-only benchmark，不是成交帳）
 - Equal Weight workflow service：`app_module/paper_equal_weight_benchmark_builder.py`；Portfolio UI 入口為持倉管理 > Paper Portfolio >「預覽／建立 Equal Weight」
-- Technical worker recovery／取消 staging：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`（SHA-256=`3068F4947AB076CD171961D5D021C0E5298690D0209EB57D43AE4F62B4B92B95`）；real calculator 2/2 stock groups、crash=`BrokenProcessPool` 後 recovery 120 rows、queued cancellation 6 筆、all checks 通過；production single-writer integration 仍 `not_completed`
+- Technical worker recovery／取消與 parent single-writer integration staging：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`（SHA-256=`983FDEB4C1829137857F49513463BA48579910BF5A3882B73260F096F0454A8D`）；real calculator 2/2 stock groups、crash=`BrokenProcessPool` 後 recovery 120 rows、queued cancellation 6 筆、parent 依序寫 240 rows CSV／SQLite、SQLite lock/retry 通過、all checks 通過；`production_single_writer_integration.status=staging_measured`、scope=`isolated_staging`，production worker 仍關閉
 
 ## 安全邊界
 
