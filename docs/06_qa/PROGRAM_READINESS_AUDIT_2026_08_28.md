@@ -69,7 +69,7 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 - Control Center：`C:\Users\archi\AppData\Local\Temp\p0-source-control-center-20260827.json`
 - Evidence readiness：`C:\Users\archi\AppData\Local\Temp\pre-v2-readiness-20260828.json`
 - ML Formal readiness：`C:\Users\archi\AppData\Local\Temp\ml-formal-input-readiness-20260828.json`
-- Runtime readiness：2026-08-28T06:32:33Z 以 `scripts/inspect_runtime_environment_readiness.py --format json` 在一般 host context 重跑；overall=`ready`、`write_probe=os.access_plus_existing_handle`、diagnostics=`[]`（CLI 唯讀輸出，未建立 probe artifact）。另以 isolated staging test 驗證正式 Research Run Registry schema 的 insert／rollback probe；正式 Registry 仍未被寫入。
+- Runtime readiness：2026-08-28T06:32:33Z 以 `scripts/inspect_runtime_environment_readiness.py --format json` 在一般 host context 重跑；overall=`ready`、`write_probe=os.access_plus_existing_handle`、diagnostics=`[]`。同日 06:58:30Z 另在 OS TEMP 的明確 staging 目錄執行 `--confirm-write-probe`：`file_write_succeeded=true`、`sqlite_write_succeeded=true`、`registry_transaction_succeeded=true`、`cleanup_succeeded=true`；正式 Registry 仍未被寫入。
 - QA Equal Weight preview：`D:\Min\Python\Project\FA_Data\output\qa\readiness_refresh_20260828\paper_equal_weight_preview.sqlite`
 - Paper Equal Weight output：`D:\Min\Python\Project\FA_Data\output\paper_portfolio\paper_equal_weight_benchmark.sqlite`（21 筆；research-only benchmark，不是成交帳）
 - Equal Weight workflow service：`app_module/paper_equal_weight_benchmark_builder.py`；Portfolio UI 入口為持倉管理 > Paper Portfolio >「預覽／建立 Equal Weight」
