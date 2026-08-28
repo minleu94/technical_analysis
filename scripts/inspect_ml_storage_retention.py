@@ -104,7 +104,7 @@ def _manifest_metadata(path: Path) -> dict[str, Any]:
     for name in ("manifest.json", "run_manifest.json", "status.json"):
         manifest_path = path / name
         try:
-            if not manifest_path.is_file() or manifest_path.stat().st_size > 2 * 1024**2:
+            if not manifest_path.is_file() or manifest_path.stat().st_size > 16 * 1024**2:
                 continue
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
