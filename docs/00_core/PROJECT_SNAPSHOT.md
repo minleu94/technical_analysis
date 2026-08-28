@@ -141,6 +141,7 @@
 - Decision Desk／Pre-V2／Workbench／Evidence source coverage 的 current 查詢現在共用台灣市場日期上限；本次 `2026-08-28` 台灣市場日重查時，正式 DB latest active snapshot `2026-08-28` 已可作 current，超過當日的 future row 仍只保留 blocker／diagnostic。`EvidenceSourceCoverageService` 與 `inspect_decision_desk_snapshots.py` 使用 query-only 讀取，正式唯讀 DB 不會因 writer repository 初始化 schema 而報錯；capture／runner 也拒絕 future decision date，避免再產生 look-ahead row。
 - 每日排程的日期選擇已修正為最近已到達的台北 08:30 cutoff；Paper writer 對明確未到達的 `--decision-at` 會在開啟 state／market DB 前回報 `skipped_future_decision`。這只阻止新的 future row，不自動刪除或回填既有正式 raw snapshot。
 - Data Update 顯示邊界已再收斂：UpdateView 的全域／各來源「今日」日期控件統一採台灣市場日期；localized `不可用` 會落到異常燈號；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要，並同步保留共同錯誤原因，避免卡片與頁面內容分裂；候選資料源分頁也會投影自己的檢查結果。窄版小於 720px 時導覽、卡片與操作按鈕改用可讀的單欄／雙欄排列，頁面可垂直捲動，不改變更新服務或寫入契約。
+- 2026-08-28 18:44 UTC host-context Runtime recheck 已通過 `config.log`／Research Registry 既有檔案 write-handle，overall=`ready`；先前 `codexsandboxoffline` 沙盒 token 的 `PermissionError` 僅代表執行環境限制，不是正式 ACL 缺口。staging Registry transaction／rollback 仍有獨立 artifact；正式 schema transaction 仍須依受控 writer 流程留下 rollback evidence。
 
 ## 2026-08-28 Taiwan market date readiness refresh（current observation）
 
