@@ -70,6 +70,7 @@ def inspect_program_readiness(
     technical_write_performance_path: str | Path | None = None,
     technical_worker_acceptance_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
+    runtime_write_probe_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -111,7 +112,11 @@ def inspect_program_readiness(
             resolved_output_root,
             training_as_of=training_as_of,
         ),
-        "runtime": _inspect_runtime_lane(resolved_data_root, resolved_output_root),
+        "runtime": _inspect_runtime_lane(
+            resolved_data_root,
+            resolved_output_root,
+            _optional_path(runtime_write_probe_path),
+        ),
         "update_history": _inspect_update_history_lane(
             _safe_resolve(
                 Path(update_history_path)
@@ -372,7 +377,11 @@ def _inspect_formal_ml_lane(
     )
 
 
-def _inspect_runtime_lane(data_root: Path, output_root: Path) -> dict[str, Any]:
+def _inspect_runtime_lane(
+    data_root: Path,
+    output_root: Path,
+    write_probe_path: Path | None = None,
+) -> dict[str, Any]:
     try:
         snapshot = EnvironmentReadinessService(data_root, output_root).get_snapshot()
         payload = {
@@ -412,10 +421,37 @@ def _inspect_runtime_lane(data_root: Path, output_root: Path) -> dict[str, Any]:
     raw_status = str(payload.get("overall_state") or "unknown")
     status = "ready" if raw_status == "ready" else "action_required"
     blockers = _string_list(payload.get("diagnostics"))
-    actions = (
-        "Runtime host 已可觀察；若要證明實際寫入，另在非正式 staging 目錄明確執行 write probe，不能把 os.access hint 當成正式 Registry transaction。",
-    )
-    return _lane(status, blockers=tuple(blockers), next_actions=actions, details={"readiness": payload})
+    details: dict[str, Any] = {"readiness": payload}
+    staging_probe: Mapping[str, Any] | None = None
+    if write_probe_path is not None:
+        try:
+            staging_probe = _read_json_mapping(write_probe_path)
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+            blockers.append(f"runtime_write_probe_invalid:{type(error).__name__}")
+        if staging_probe is None:
+            blockers.append("runtime_write_probe_not_supplied_or_missing")
+        else:
+            details["staging_write_probe"] = dict(staging_probe)
+            probe_passed = (
+                staging_probe.get("status") == "passed"
+                and staging_probe.get("file_write_succeeded") is True
+                and staging_probe.get("sqlite_write_succeeded") is True
+                and staging_probe.get("registry_transaction_succeeded") is True
+                and staging_probe.get("cleanup_succeeded") is True
+            )
+            if not probe_passed:
+                blockers.append("runtime_staging_write_probe_failed")
+            elif status != "ready":
+                status = "partial"
+    if staging_probe is not None and staging_probe.get("status") == "passed":
+        actions = (
+            "Runtime staging 的實際 Registry transaction／rollback 已通過；正式 config.log／Registry ACL 仍依目前 host 權限顯示，需由 owner 在正式環境確認。",
+        )
+    else:
+        actions = (
+            "Runtime host 已可觀察；若要證明實際寫入，另在非正式 staging 目錄明確執行 write probe，不能把 os.access hint 當成正式 Registry transaction。",
+        )
+    return _lane(status, blockers=tuple(blockers), next_actions=actions, details=details)
 
 
 def _inspect_update_history_lane(
@@ -764,6 +800,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--technical-write-performance-baseline", type=Path)
     parser.add_argument("--technical-worker-acceptance-baseline", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
+    parser.add_argument("--runtime-write-probe", type=Path)
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
@@ -795,6 +832,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         technical_write_performance_path=args.technical_write_performance_baseline,
         technical_worker_acceptance_path=args.technical_worker_acceptance_baseline,
         broker_performance_path=args.broker_performance_baseline,
+        runtime_write_probe_path=args.runtime_write_probe,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
     )

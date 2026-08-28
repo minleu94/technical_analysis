@@ -58,6 +58,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="明確確認執行 ephemeral file／Registry SQLite transaction／rollback probe；禁止指向 DATA_ROOT／OUTPUT_ROOT。",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="可選的 JSON／Markdown 報告輸出路徑；不指定則只輸出 stdout。",
+    )
     args = parser.parse_args(argv)
 
     if args.confirm_write_probe and args.write_probe_root is None:
@@ -73,18 +79,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.write_probe_root,
             confirm=args.confirm_write_probe,
         )
-        if args.format == "markdown":
-            print(_render_write_probe(result))
-        else:
-            print(json.dumps(_write_probe_payload(result), ensure_ascii=False, indent=2))
+        rendered = (
+            _render_write_probe(result)
+            if args.format == "markdown"
+            else json.dumps(_write_probe_payload(result), ensure_ascii=False, indent=2)
+        )
+        _emit_rendered(rendered, args.output)
         return 0 if result.status == "passed" else 2
 
     snapshot = service.get_snapshot()
-    if args.format == "markdown":
-        print(_render_markdown(snapshot))
-    else:
-        print(json.dumps(_to_payload(snapshot), ensure_ascii=False, indent=2))
+    rendered = (
+        _render_markdown(snapshot)
+        if args.format == "markdown"
+        else json.dumps(_to_payload(snapshot), ensure_ascii=False, indent=2)
+    )
+    _emit_rendered(rendered, args.output)
     return 0 if snapshot.overall_state == "ready" else 2
+
+
+def _emit_rendered(rendered: str, output: Path | None) -> None:
+    if output is not None:
+        target = output.expanduser().resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(rendered.rstrip("\n") + "\n", encoding="utf-8")
+    print(rendered)
 
 
 def _to_payload(snapshot: Any) -> dict[str, Any]:

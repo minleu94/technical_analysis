@@ -2,7 +2,7 @@
 
 ## 2026-08-28 整體程式 readiness 聚合入口（current engineering）
 
-- 新增唯讀 `scripts/inspect_program_readiness.py`，將 P0、Evidence、Paper、Formal/ML、Runtime、Data Update history 與 performance 七個 lane 收斂到 `program-readiness.v1`；每個 lane 都保留實際 read model、blockers、外部輸入需求與下一步，並以 `execution_order` 對齊 [Program Readiness Audit](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md) 的推進順序。
+- 新增唯讀 `scripts/inspect_program_readiness.py`，將 P0、Evidence、Paper、Formal/ML、Runtime、Data Update history 與 performance 七個 lane 收斂到 `program-readiness.v1`；每個 lane 都保留實際 read model、blockers、外部輸入需求與下一步，並以 `execution_order` 對齊 [Program Readiness Audit](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md) 的推進順序；`--runtime-write-probe` 可載入明確 staging transaction artifact，避免把 staging 能力與正式 ACL 混成同一個診斷。
 - 這個入口不建立 `TWStockConfig`，避免 readiness 檢查因 log／目錄初始化產生副作用；只讀取明確路徑，history 另檢查 JSONL schema、duplicate record、terminal run、latest status／history run identity 與 8 MiB bounded retention。
 - 報告固定揭露 `read_only=true`、`writes_allowed=false`、`formal_oos_allowed=false`、`production_scheduler_allowed=false`、`broker_order_allowed=false`。目前它將「可以工程化」與「必須等待 owner／真實時間／執行事實」分開，不會用 replay、prospective、snapshot 或舊 latest status 補造缺件。
 - focused regression 已加入既有 `tests/test_pre_v2_readiness_service.py`；本 slice 未寫正式資料、未發網路、未啟用 scheduler／broker。
@@ -99,7 +99,7 @@
 - Gate 4 的空白 Paper fills CSV 入口也補上 Windows UTF-8 console guard；`export_paper_trade_csv_template.py --help` 在 CP1252 主控台不再因繁中說明崩潰，仍維持只產生欄位標題、不建立 ledger 的安全契約。
 - P0 parser／probe 已支援 `TWT84U` 漲跌停行情、TDCC OpenAPI JSON、月營收 JSON／MOPS CSV fallback，以及 TPEx 三大法人／信用交易 OpenAPI fallback；新增 ROC compact date 正規化與要求日期 fail-closed，並將官方無事件、schema mismatch、fallback date mismatch 與 network failure 分開。這些證據仍是 candidate-only；13 筆 decision 均為 `not_supplied`，不推導 acceptance。Gate 7 ML 仍 `waiting_for_formal_inputs`／`0/3`：2026-08-25 的 1,932 列 prospective PIT sector artifact 不能回填成 historical ML input，portfolio ledger 與 rule champion history 也尚不存在，`formal_oos_allowed=false`。
 - 為釐清 2026-08-28 的官方無資料是否只是日期語意，本輪另以 2026-08-27 做 bounded live cross-date capture：TWSE T86=`18,307` 列、MI_MARGN=`1,295` 列，13/13 均有 machine row，raw=`91,824`、accepted=`90,447`。這只證明 8/27 的官方日資料可取得，不把它回填到 8/28，也不解除 PIT／license／owner acceptance blocker；artifact 與 packet 均留在 TEMP。
-- Runtime 先前在受限 sandbox 看到的既有檔案 `Permission denied` 已由一般 host context 重跑排除；對正式 `config.log` 與 Research Registry 的零位元 existing-file write-handle probe 通過，overall=`ready`、`write_probe=os.access_plus_existing_handle`。另已補上受控 staging probe：2026-08-28T06:58:30Z 在明確 OS TEMP 目錄以正式 `ResearchRunRepository` schema 完成 file write、insert／讀回／rollback／清除，`registry_transaction_succeeded=true`、`cleanup_succeeded=true`；它仍不碰正式 Registry，也不代表正式 ACL 已核准。觀測 JSON 保留於 OS TEMP；QA Equal Weight preview 位於 `output/qa/readiness_refresh_20260828/`，正式 Paper Equal Weight ledger 已另存於 `output/paper_portfolio/paper_equal_weight_benchmark.sqlite`。
+- Runtime 先前在受限 sandbox 看到的既有檔案 `Permission denied` 已由一般 host context 重跑排除；對正式 `config.log` 與 Research Registry 的零位元 existing-file write-handle probe 通過，overall=`ready`、`write_probe=os.access_plus_existing_handle`。另已補上受控 staging probe：2026-08-28T09:56:23Z 在明確 OS TEMP 目錄以正式 `ResearchRunRepository` schema 完成 file write、insert／讀回／rollback／清除，`registry_transaction_succeeded=true`、`cleanup_succeeded=true`；artifact SHA-256=`59FEB7FCC63B8D3D4149850CF9413FD31596A8923D54D96532FA81B0B4A389DF`。它仍不碰正式 Registry，也不代表正式 ACL 已核准；統一 readiness 載入後若正式 host handle 仍被拒絕，狀態為 `partial` 而非誤判為功能未完成。
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 

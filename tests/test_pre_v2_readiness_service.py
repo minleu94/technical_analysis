@@ -738,3 +738,31 @@ def test_program_readiness_accepts_bounded_broker_fetch_contract(tmp_path: Path)
     assert "broker_bounded_fetch_acceptance_not_completed" not in blockers
     assert "broker_bounded_fetch_acceptance_invalid" not in blockers
     assert "broker_real_http_canary_not_completed" in blockers
+
+
+def test_program_readiness_records_actual_runtime_staging_probe(tmp_path: Path) -> None:
+    probe_path = tmp_path / "runtime-write-probe.json"
+    probe_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "runtime-environment-write-probe.v1",
+                "status": "passed",
+                "file_write_succeeded": True,
+                "sqlite_write_succeeded": True,
+                "registry_transaction_succeeded": True,
+                "cleanup_succeeded": True,
+                "write_probe": "actual_ephemeral_registry_transaction",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        runtime_write_probe_path=probe_path,
+    )
+
+    runtime = report["workstreams"]["runtime"]
+    assert runtime["status"] == "partial"
+    assert runtime["details"]["staging_write_probe"]["status"] == "passed"

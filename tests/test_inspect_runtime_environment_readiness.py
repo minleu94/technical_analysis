@@ -118,3 +118,35 @@ def test_environment_readiness_cli_write_probe_without_confirmation_does_not_wri
     assert payload["status"] == "confirmation_required"
     assert payload["side_effect_free"] is True
     assert not list(probe_root.iterdir())
+
+
+def test_environment_readiness_cli_can_save_write_probe_artifact(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    data_root = tmp_path / "formal-data"
+    output_root = tmp_path / "formal-output"
+    probe_root = tmp_path / "staging"
+    artifact = tmp_path / "runtime-write-probe.json"
+    data_root.mkdir()
+    output_root.mkdir()
+    probe_root.mkdir()
+
+    result = main(
+        [
+            "--data-root",
+            str(data_root),
+            "--output-root",
+            str(output_root),
+            "--write-probe-root",
+            str(probe_root),
+            "--confirm-write-probe",
+            "--output",
+            str(artifact),
+        ]
+    )
+
+    assert result == 0
+    assert json.loads(artifact.read_text(encoding="utf-8"))["status"] == "passed"
+    assert json.loads(capsys.readouterr().out)["status"] == "passed"
+    assert not list(probe_root.iterdir())
