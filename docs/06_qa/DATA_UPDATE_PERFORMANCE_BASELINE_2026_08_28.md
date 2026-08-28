@@ -152,15 +152,16 @@ SHA-256=`C662A26E0937363547022FEB30ADAFD0185875AFBBDD7A3FD08AEF9323765FFF`。
 CSV 跑 real `TechnicalIndicatorCalculator` bounded process pool，再在隔離 staging
 故意讓一個 worker process 結束，確認 `BrokenProcessPool` 後重建 executor 能完成
 下一個 120-row 計算；另以單 worker、8 個延遲 task 驗證取消時至少 6 個 queued task
-被取消，2 個已開始但取消後完成的結果被丟棄。worker 沒有 writer 或 SQLite handle，
-產物只保存 metadata，不把 production worker 開啟。
+被取消，2 個已開始但取消後完成的結果被丟棄。worker 沒有 writer／SQLite handle；
+parent writer integration 只寫入 ephemeral
+staging，不把 production worker 開啟。
 
 實測使用 `all_stocks_data_top10.csv` 的 `2330`／`2308` 兩組、
 `max_workers=2`、`max_in_flight=2`、`max_retries=1`；real calculator 2/2 groups、
 crash recovery=`measured`（`BrokenProcessPool` → recovery `120` rows）、cancellation
 =`measured`（6 cancelled／2 discarded），所有 combined checks 通過。artifact 暫存於
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_worker_recovery_20260828.json`，
-SHA-256=`3068F4947AB076CD171961D5D021C0E5298690D0209EB57D43AE4F62B4B92B95`。
+SHA-256=`983FDEB4C1829137857F49513463BA48579910BF5A3882B73260F096F0454A8D`。
 
 這只補足 staging 的 recovery／取消前置條件；本輪再把同一批 real calculator
 結果接到既有 parent CSV／`DBManager.write_dataframe`，並在 ephemeral SQLite
