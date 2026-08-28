@@ -426,6 +426,45 @@ def test_update_view_projects_append_only_data_update_history(tmp_path):
     assert view.data_update_timeline_history_table.item(0, 2).text() == "run-current"
 
 
+def test_update_view_explains_missing_history_without_backfilling_latest(tmp_path):
+    update_path = tmp_path / "update-status.json"
+    update_path.write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "run_id": "run-before-history",
+                "started_at": "2026-08-28T08:30:00+08:00",
+                "completed_at": "2026-08-28T09:00:00+08:00",
+                "end_date": "2026-08-28",
+                "steps": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    history_path = tmp_path / "history.jsonl"
+    freshness_path = tmp_path / "freshness-status.json"
+    freshness_path.write_text(
+        json.dumps({"status": "passed", "checked_at": "2026-08-28T09:05:00+08:00"}),
+        encoding="utf-8",
+    )
+    view = _TestableUpdateView(
+        FakeUpdateService(),
+        data_update_status_path=update_path,
+        data_update_history_path=history_path,
+        data_freshness_status_path=freshness_path,
+    )
+
+    status = view._get_data_update_timeline()
+    view._render_data_update_timeline(status)
+
+    assert status["status"] == "current"
+    assert status["history"]["status"] == "missing"
+    summary = view.data_update_timeline_summary_label.text()
+    assert "新版 runner 尚未產生" in summary
+    assert "不回填舊 latest" in summary
+    assert view.data_update_timeline_history_table.rowCount() == 0
+
+
 def test_update_view_date_controls_use_taiwan_market_date(monkeypatch):
     monkeypatch.setattr(
         "ui_qt.views.update_view.taiwan_market_today",

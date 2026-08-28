@@ -2433,6 +2433,12 @@ class UpdateView(QWidget):
             history_count = history.get("record_count")
             if history_status == "current" and isinstance(history_count, int):
                 lines.append(f"執行歷史：{history_count} 筆 append-only")
+            elif history_status == "missing":
+                lines.append("執行歷史：缺漏（新版 runner 尚未產生；不回填舊 latest）")
+            elif history_status == "empty":
+                lines.append("執行歷史：尚未建立（等待下一次真實排程）")
+            elif history_status == "invalid":
+                lines.append("執行歷史：格式異常（請修復 JSONL）")
             elif history.get("configured"):
                 lines.append(f"執行歷史：{self._timeline_status_text(history_status)}")
         diagnostics = [str(item) for item in value.get("diagnostics", []) if str(item).strip()]
