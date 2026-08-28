@@ -772,7 +772,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 
 `scripts/inspect_p0_intake_readiness.py` 是把外部 P0 治理資料交給程式檢查的第一個接入口。它只接受明確的 `p0-source-intake.v1` JSON，要求完整 13 個 `source-acceptance-dossier.v1`，逐列驗證欄位型別、source denominator、license／PIT／quality checklist 與安全旗標；不會建立 decision registry、不會寫正式資料，也不會自動接受來源。
 
-若已經有 `p0-source-evidence-audit.v1`，不必人工抄寫每個 machine row。可用下列唯讀轉接器建立一份 candidate intake；它只帶入 audit 的 raw／accepted／quarantine／blocked 計數、payload hash 與 machine status，所有 source owner、license、publication、available-date、PIT、revision 與 reviewer 欄位仍標成 `unverified`／`requires_review`，所以結果一定維持 `deferred`：
+若已經有 `p0-source-evidence-audit.v1`，不必人工抄寫每個 machine row。可用下列唯讀轉接器建立一份 candidate intake；每列 dossier 只帶入 audit 的 raw／accepted／quarantine／blocked 計數、payload hash 與 machine status，另外在 intake envelope 的 `machine_evidence_by_source` 保留 allowlist 內的實際 route、fallback lineage、schema／probe outcome、timestamp semantics 與 acquisition route 清單。所有 source owner、license、publication、available-date、PIT、revision 與 reviewer 欄位仍標成 `unverified`／`requires_review`，所以結果一定維持 `deferred`：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\build_p0_intake_from_audit.py `
@@ -787,7 +787,9 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 
 此轉接器的輸出只允許位於 OS TEMP，且明確保留 `auto_accept_allowed=false`、
 `downstream_eligibility=none`；它可以縮短 owner review 的資料整理工作，但不能
-替代官方 publication／PIT／license 證據或具名決議。
+替代官方 publication／PIT／license 證據或具名決議。`machine_evidence_by_source`
+只是一份安全投影，不屬於 `source-acceptance-dossier.v1` 的治理欄位，也不會被
+intake validator 解讀成 acceptance authority。
 
 ```powershell
 # 先產生 13 列候選範本；路徑必須明確且位於 DATA_ROOT 之外

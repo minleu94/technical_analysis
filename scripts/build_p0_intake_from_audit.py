@@ -42,6 +42,57 @@ _SAFETY_FLAGS = {
     "auto_accept_allowed": False,
 }
 
+# Machine evidence is deliberately kept at the intake envelope level rather
+# than added to ``source-acceptance-dossier.v1``.  The dossier schema is the
+# owner-governed decision contract; widening it with probe details would make
+# an evidence transport change look like an authority decision.  This allowlist
+# also prevents arbitrary probe fields (including a future secret-like field)
+# from leaking into the candidate handoff.
+_MACHINE_EVIDENCE_FIELDS = (
+    "source_id",
+    "family",
+    "provider",
+    "endpoint_or_artifact_type",
+    "acquisition_mode",
+    "machine_status",
+    "pit_status",
+    "timestamp_kind",
+    "availability",
+    "schema_status",
+    "probe_outcome",
+    "payload_sha256",
+    "raw_row_count",
+    "accepted_row_count",
+    "quarantine_row_count",
+    "blocked_row_count",
+    "remaining_blocker",
+    "endpoint_id",
+    "acquisition_route_id",
+    "fallback_used",
+    "fallback_from_endpoint_id",
+    "fallback_from_acquisition_route_id",
+    "fallback_attempted",
+    "fallback_endpoint_id",
+    "fallback_acquisition_route_id",
+    "fallback_probe_outcome",
+    "fallback_official_status",
+    "fallback_http_status",
+    "fallback_payload_sha256",
+    "fallback_payload_size_bytes",
+    "fallback_observation_dates",
+    "fallback_requested_date",
+    "fallback_quarantine_reasons",
+    "fallback_error_type",
+    "fallback_error",
+    "primary_official_status",
+    "timestamp_semantics",
+    "acquisition_routes",
+)
+
+_SECRET_KEYS = frozenset(
+    {"api_key", "authorization", "cookie", "credential", "password", "secret", "token"}
+)
+
 
 def build_candidate_intake(audit: Mapping[str, Any]) -> dict[str, Any]:
     """從 machine audit 建立完整 13 列、仍 fail-closed 的 intake payload。"""
@@ -74,8 +125,43 @@ def build_candidate_intake(audit: Mapping[str, Any]) -> dict[str, Any]:
             "machine_evidence_only": True,
             "owner_attestation_required": True,
         },
+        # Keep the machine-side route/fallback evidence available to the owner
+        # without changing the governed dossier contract.  Every row is
+        # allowlisted and recursively redacted before it leaves this builder.
+        "machine_evidence_by_source": {
+            source_id: _project_machine_evidence(rows_by_id[source_id])
+            for source_id in P0_SOURCE_IDS
+        },
         "dossiers": dossiers,
     }
+
+
+def _project_machine_evidence(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Project only safe, observed probe fields for owner handoff."""
+
+    projected: dict[str, Any] = {}
+    for field_name in _MACHINE_EVIDENCE_FIELDS:
+        if field_name not in row:
+            continue
+        # Audit payloads are already redacted, but perform a second boundary
+        # pass here because this function is also a public Python entry point.
+        projected[field_name] = redact_secrets(row[field_name])
+    return projected
+
+
+def redact_secrets(value: Any) -> Any:
+    """Recursively redact secret-like keys in machine evidence containers."""
+
+    if isinstance(value, Mapping):
+        return {
+            str(key): "[REDACTED]" if str(key).lower() in _SECRET_KEYS else redact_secrets(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_secrets(item) for item in value]
+    if isinstance(value, tuple):
+        return [redact_secrets(item) for item in value]
+    return value
 
 
 def _build_dossier(

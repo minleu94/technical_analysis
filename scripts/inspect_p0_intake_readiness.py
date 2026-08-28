@@ -95,6 +95,7 @@ _REQUIRED_TEXT_FIELDS = (
 )
 _OPTIONAL_TEXT_FIELDS = ("reviewer_role", "decision_timestamp", "decision_revision_id")
 _COLLECTION_FIELDS = ("downstream_use_cases", "disable_conditions", "evidence_artifact_ids")
+_MACHINE_EVIDENCE_KEY = "machine_evidence_by_source"
 
 
 def build_p0_intake_template() -> dict[str, Any]:
@@ -169,6 +170,7 @@ def inspect_p0_intake(payload: Mapping[str, Any]) -> dict[str, Any]:
     """檢查一份 P0 intake JSON，回傳固定 13 列的唯讀診斷。"""
 
     _validate_intake_envelope(payload)
+    machine_evidence = _inspect_machine_evidence_projection(payload)
     raw_dossiers = payload["dossiers"]
     assert isinstance(raw_dossiers, list)
 
@@ -284,6 +286,7 @@ def inspect_p0_intake(payload: Mapping[str, Any]) -> dict[str, Any]:
         "rows": rows,
         "global_blockers": sorted(blockers),
         "boundary": dict(_BOUNDARY),
+        "machine_evidence_projection": machine_evidence,
         "input_payload_sha256": _payload_hash(payload),
     }
 
@@ -389,6 +392,75 @@ def _validate_intake_envelope(payload: Mapping[str, Any]) -> None:
     dossiers = payload.get("dossiers")
     if not isinstance(dossiers, list):
         raise ValueError("P0 intake dossiers must be an array")
+    _inspect_machine_evidence_projection(payload)
+
+
+def _inspect_machine_evidence_projection(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate and summarize the optional machine-only evidence envelope."""
+
+    raw = payload.get(_MACHINE_EVIDENCE_KEY)
+    if raw is None:
+        return {
+            "present": False,
+            "source_count": 0,
+            "route_count": 0,
+            "fallback_attempted_count": 0,
+        }
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"{_MACHINE_EVIDENCE_KEY} must be an object")
+
+    supplied_ids = {str(key) for key in raw}
+    expected_ids = set(P0_SOURCE_IDS)
+    if supplied_ids != expected_ids:
+        missing = sorted(expected_ids - supplied_ids)
+        extra = sorted(supplied_ids - expected_ids)
+        raise ValueError(
+            f"{_MACHINE_EVIDENCE_KEY} source denominator mismatch: "
+            f"missing={missing}, extra={extra}"
+        )
+
+    route_count = 0
+    fallback_count = 0
+    for source_id in P0_SOURCE_IDS:
+        row = raw.get(source_id)
+        if not isinstance(row, Mapping):
+            raise ValueError(f"{_MACHINE_EVIDENCE_KEY}.{source_id} must be an object")
+        observed_source_id = row.get("source_id")
+        if observed_source_id is not None and observed_source_id != source_id:
+            raise ValueError(
+                f"{_MACHINE_EVIDENCE_KEY}.{source_id}.source_id mismatch"
+            )
+        _reject_secret_like_keys(row, path=f"{_MACHINE_EVIDENCE_KEY}.{source_id}")
+        routes = row.get("acquisition_routes", ())
+        if routes is not None:
+            if isinstance(routes, (str, bytes)) or not isinstance(routes, Sequence):
+                raise ValueError(
+                    f"{_MACHINE_EVIDENCE_KEY}.{source_id}.acquisition_routes must be an array"
+                )
+            route_count += len(routes)
+        if row.get("fallback_attempted") is True:
+            fallback_count += 1
+
+    return {
+        "present": True,
+        "source_count": len(P0_SOURCE_IDS),
+        "route_count": route_count,
+        "fallback_attempted_count": fallback_count,
+    }
+
+
+def _reject_secret_like_keys(value: Any, *, path: str) -> None:
+    """Reject secret-like keys in the optional machine evidence envelope."""
+
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            key_text = str(key).lower()
+            if key_text in _SECRET_KEYS:
+                raise ValueError(f"{path} contains forbidden secret-like field: {key}")
+            _reject_secret_like_keys(nested, path=f"{path}.{key}")
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for index, nested in enumerate(value):
+            _reject_secret_like_keys(nested, path=f"{path}[{index}]")
 
 
 def _validate_dossier_shape(raw: Mapping[str, Any]) -> None:

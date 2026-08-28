@@ -72,6 +72,12 @@ def test_machine_audit_is_projected_without_authority_upgrade() -> None:
     assert dossiers[0]["downstream_eligibility"] == "none"
     assert all("unverified" in item["publication_time_policy"] for item in dossiers)
 
+    machine = payload["machine_evidence_by_source"]
+    assert isinstance(machine, dict)
+    assert machine[P0_SOURCE_IDS[0]]["payload_sha256"] == "payload-0"
+    assert machine[P0_SOURCE_IDS[0]]["raw_row_count"] == 100
+    assert "api_key" not in machine[P0_SOURCE_IDS[0]]
+
     inspected = inspect_p0_intake(payload)
     assert inspected["status"] == "deferred"
     assert inspected["valid_dossier_count"] == 13
@@ -106,6 +112,43 @@ def test_absent_machine_counts_remain_missing_not_zero_observation() -> None:
     assert dossiers[-1]["row_conservation_counts"] == {}
     assert dossiers[-1]["coverage_numerator"] == 0
     assert dossiers[-1]["coverage_denominator"] == 0
+
+
+def test_machine_route_and_fallback_lineage_is_projected_without_dossier_widening() -> None:
+    payload = _audit_payload()
+    matrix = payload["machine_evidence_matrix"]
+    assert isinstance(matrix, list)
+    matrix[0].update(
+        {
+            "api_key": "must-not-leak",
+            "acquisition_route_id": "twse.TWT49U",
+            "fallback_attempted": True,
+            "fallback_endpoint_id": "tpex.tpex_exright_daily",
+            "fallback_error_type": "network_error",
+            "acquisition_routes": [
+                {
+                    "route_id": "twse.TWT49U",
+                    "endpoint": "https://www.twse.com.tw/exchangeReport/TWT49U",
+                    "license_evidence_url": "https://www.twse.com.tw/zh/terms/use.html",
+                }
+            ],
+        }
+    )
+
+    candidate = build_candidate_intake(payload)
+    machine = candidate["machine_evidence_by_source"]
+    assert isinstance(machine, dict)
+    first = machine[P0_SOURCE_IDS[0]]
+    assert first["acquisition_route_id"] == "twse.TWT49U"
+    assert first["fallback_attempted"] is True
+    assert first["fallback_endpoint_id"] == "tpex.tpex_exright_daily"
+    assert first["acquisition_routes"][0]["license_evidence_url"].startswith("https://")
+    assert "api_key" not in first
+
+    # The governed dossier remains the original strict v1 shape and is still
+    # accepted by the read-only intake inspector.
+    inspected = inspect_p0_intake(candidate)
+    assert inspected["status"] == "deferred"
 
 
 def test_cli_writes_temp_candidate_and_rejects_production_path(tmp_path: Path) -> None:

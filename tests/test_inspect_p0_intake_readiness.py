@@ -79,6 +79,12 @@ def test_incomplete_template_is_deferred_but_not_invalid() -> None:
     assert all(row["status"] == "deferred" for row in result["rows"])
     assert all(row["decision_preview"]["status"] == "deferred" for row in result["rows"])
     assert result["boundary"]["writes_allowed"] is False
+    assert result["machine_evidence_projection"] == {
+        "present": False,
+        "source_count": 0,
+        "route_count": 0,
+        "fallback_attempted_count": 0,
+    }
 
 
 def test_complete_dossiers_are_ready_for_owner_review_but_never_accepted() -> None:
@@ -173,3 +179,30 @@ def test_invalid_cli_input_returns_two_and_does_not_write_report(tmp_path) -> No
 
     assert main(["--input", str(input_path), "--output", str(report_path)]) == 2
     assert not report_path.exists()
+
+
+def test_machine_evidence_envelope_is_validated_without_granting_authority() -> None:
+    payload = build_p0_intake_template()
+    payload["machine_evidence_by_source"] = {
+        source_id: {
+            "source_id": source_id,
+            "acquisition_routes": [{"route_id": f"route.{index}"}],
+            "fallback_attempted": index == 0,
+        }
+        for index, source_id in enumerate(P0_SOURCE_IDS)
+    }
+
+    result = inspect_p0_intake(payload)
+    assert result["status"] == "deferred"
+    assert result["machine_evidence_projection"] == {
+        "present": True,
+        "source_count": 13,
+        "route_count": 13,
+        "fallback_attempted_count": 1,
+    }
+    assert result["boundary"]["downstream_eligibility"] == "none"
+
+    unsafe = copy.deepcopy(payload)
+    unsafe["machine_evidence_by_source"][P0_SOURCE_IDS[0]]["token"] = "secret"
+    with pytest.raises(ValueError, match="secret-like"):
+        inspect_p0_intake(unsafe)

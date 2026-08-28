@@ -7,6 +7,11 @@
 - 報告固定揭露 `read_only=true`、`writes_allowed=false`、`formal_oos_allowed=false`、`production_scheduler_allowed=false`、`broker_order_allowed=false`。目前它將「可以工程化」與「必須等待 owner／真實時間／執行事實」分開，不會用 replay、prospective、snapshot 或舊 latest status 補造缺件。
 - focused regression 已加入既有 `tests/test_pre_v2_readiness_service.py`；本 slice 未寫正式資料、未發網路、未啟用 scheduler／broker。
 
+## 2026-08-28 P0 machine evidence handoff projection（current engineering）
+
+- `scripts/build_p0_intake_from_audit.py` 現在在不改變 `source-acceptance-dossier.v1` 的前提下，於 `p0-source-intake.v1` envelope 新增 `machine_evidence_by_source`；每個 canonical source 會保留 allowlist 內的實際 acquisition route、fallback lineage、schema／probe outcome、timestamp semantics、row counts 與 payload hash。
+- 這個投影會遞迴遮罩 secret-like 欄位，只能輸出到 OS TEMP，且不會把 machine evidence 當 owner／license／PIT 決議；既有 intake validator 仍維持 `deferred`、`downstream_eligibility=none`。它讓 13 組 owner packet 可直接沿用 live audit 的多路徑證據，縮短人工抄寫但不縮短治理 gate。
+
 ## 2026-08-28 Data Update fallback diagnostics projection（current engineering）
 
 - P0 evidence matrix 的 fallback lineage 現在完整保留到 `P0SourceControlRow`／UpdateView read-model：`fallback_attempted`、實際替代 endpoint／route、probe outcome、HTTP／payload evidence、要求日／觀測日、quarantine 與 transport error 不再於投影時遺失。
@@ -109,8 +114,8 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
-- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard、scheduled-task registration inspector、technical process-pool／worker recovery acceptance、P0 audit → candidate intake projection、freshness ACL-safe status/log route 測試並完成 inventory 登錄後為 `646/646`、`3659 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3614`／`3612 collected` 與 `639/639`／`638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
-- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3658 passed / 1 skipped / 26 warnings`（`581.10s`）；warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示，沒有新的 test failure。`3613 passed` 為前一輪 inventory 登錄前的中間結果。
+- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard、scheduled-task registration inspector、technical process-pool／worker recovery acceptance、P0 audit → candidate intake projection、freshness ACL-safe status/log route 與 machine evidence handoff projection／intake envelope guard 測試並完成 inventory 登錄後為 `646/646`、`3661 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3614`／`3612 collected` 與 `639/639`／`638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
+- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3660 passed / 1 skipped / 26 warnings`（`576.78s`）；新增 machine evidence handoff projection／intake envelope guard 後的完整回歸沒有新增 failure。warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示。`3613 passed` 為前一輪 inventory 登錄前的中間結果。
 
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
 - Workbench 的 Pre-V2 readiness 現在會把 weekly history 的 projection 未設定／找不到與各 readiness item 的 blocker/diagnostic 帶到首頁 warnings；目前環境若設定通過驗證的 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`，CLI／畫面會一致揭露 owner-approved weekly `3/3`（只供 UI／Pre-V2 顯示、不授予 formal credit），清除該變數時則明示只計算正式 DB legacy review history，不再只顯示模糊的「等待中」。
