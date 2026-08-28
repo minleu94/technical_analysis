@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any
 
@@ -812,7 +813,32 @@ def _evidence_gate_status_summary(readiness_report: PreV2ReadinessReport) -> str
             "formal_credit_authorized=false；目前只代表 read-only readiness，"
             "不授予 Formal evidence credit 或 production scheduler"
         )
-    return f"{weekly_text}；{credit_text}。"
+    pending_text = _pending_weekly_review_summary(weekly)
+    return f"{weekly_text}{pending_text}；{credit_text}。"
+
+
+def _pending_weekly_review_summary(weekly: PreV2ReadinessItem | None) -> str:
+    """Expose pending weekly periods without implying approval or Gate credit."""
+
+    if weekly is None:
+        return ""
+    pending = weekly.evidence.get("pending_collection_periods")
+    if not isinstance(pending, list):
+        return ""
+    period_labels: list[str] = []
+    for item in pending:
+        if not isinstance(item, Mapping):
+            continue
+        start = str(item.get("period_start") or "").strip()
+        end = str(item.get("period_end") or "").strip()
+        if start and end:
+            period_labels.append(f"{start}→{end}")
+    if not period_labels:
+        return ""
+    preview = ", ".join(period_labels[:3])
+    if len(period_labels) > 3:
+        preview += ", …"
+    return f"；pending_human_review {len(period_labels)} 期（{preview}）"
 
 
 def _status_to_severity(status: str) -> str:
