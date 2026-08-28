@@ -15,6 +15,7 @@
 - 新增候選-only `scripts/capture_p0_license_evidence.py`：預設不連線；確認後只對 route registry allowlist 的 3 個唯一官方條款／OpenAPI URL 做 bounded GET，保存 response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不修改 source acceptance、正式 DB 或 scheduler。這只能補齊 Owner／Reviewer 的 machine evidence，不能自動解除 `legal_and_license_acceptance_required`。
 - 已產生 2026-08-28 no-network preview：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence\preview_20260828.json`，SHA-256=`07C6DC0ECAC4E19AEEF523A5B649DBB4AE1A959F944954FC770A9B43CE0255D2`（preview artifact 僅列 3 個 allowlisted target，未做 HTTP GET）。
 - 已將 confirmed candidate capture（3 個 target 均 `transport_error / WinError 10013`）載入 P0 Control Center 唯讀 projection：`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_source_control_center_with_license_20260828.json`，SHA-256=`B0FDFAF61160256D7FB8A23C8F1BF4E6F9E309A00578E15A31C35D19CED4DB76`；UI／readiness 會顯示觀測失敗，但 `license_accepted=false` 不變。
+- 之後在可連線 host 以同一精確 confirmation 重試：3 個 allowlist target 中 2 個 captured（TWSE／TDCC），TPEX 條款回 `HTTP 520`；候選輸出=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence_capture_20260828_110645.json`，`captured_count=2`、`failed_count=1`。這補上 machine fingerprint 但不改變 `13 blocked_provenance`、`accepted=0`、`limited=0`、`license_accepted=false` 或 downstream eligibility；TPEX endpoint 與 13 筆 owner／reviewer acceptance 仍需外部處理，詳見 [P0 license capture QA](../06_qa/P0_LICENSE_EVIDENCE_CAPTURE_2026_08_28.md)。
 
 ## 2026-08-28 Scheduler wrapper／action wiring（current engineering）
 

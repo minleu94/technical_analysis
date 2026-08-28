@@ -199,6 +199,7 @@
 | `scripts/qa_broker_real_http_canary.py` | 單一受控 MoneyDJ real HTTP canary；需 explicit confirm，固定一個 GET、只解析 response，並可與離線 bounded baseline 合併供 readiness 讀取。 |
 | `scripts/qa_technical_indicator_production_canary.py` | 單股 technical process-pool production canary；預設唯讀預演，需 owner token／無並行 writer acknowledgement／explicit confirm，先 backup、失敗可 rollback，並輸出 single-writer readiness artifact。 |
 | `scripts/capture_p0_license_evidence.py` | P0 官方條款／OpenAPI 授權候選證據擷取器；預設不連線，確認後僅對 registry allowlist 的 3 個 URL 做 bounded GET，保存 response metadata／SHA-256／關鍵限制 flags，不保存頁面全文、不自動接受來源。 |
+| [P0_LICENSE_EVIDENCE_CAPTURE_2026_08_28.md](../06_qa/P0_LICENSE_EVIDENCE_CAPTURE_2026_08_28.md) | P0 條款／OpenAPI bounded capture 實際結果（2 captured、1 HTTP error）、hash、candidate-only 與 owner acceptance 邊界。 |
 | `data_module/official_calendar_bundle.py` / `scripts/capture_official_calendar_bundle.py` | 官方 TWSE 年表／TPEX 月表 raw response 的候選-only 正規化入口；支援 fixture 或明確 bounded network capture，輸出 TEMP、create-only 的 `official-trading-calendar-bundle.v1`，不建立 formal clock。 |
 | `data_module/monthly_revenue_snapshot_harvester.py` / `scripts/fetch_mops_monthly_revenue_snapshot.py` | Month 5 MOPS 月營收完整市場 snapshot 候選抓取器；保存 raw HTML 與營收值 candidate CSV，不推定 available_date，不寫正式 mapping 或 SQLite。 |
 | `data_module/finmind_monthly_revenue_create_time.py` / `scripts/fetch_finmind_monthly_revenue_create_time.py` | Month 5 FinMind 月營收 create_time 候選抓取器；使用 DPAPI / 環境變數 token、支援 resume 與請求節流，輸出 create_time 分組候選，不寫正式 mapping 或 SQLite。 |
