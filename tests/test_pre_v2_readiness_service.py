@@ -367,6 +367,7 @@ def test_pre_v2_readiness_reports_parallel_ready_and_time_waiting_items(tmp_path
     assert report.required_human_action is False
     assert report.automatic_revalidation_enabled is True
     assert report.blocking_scope == "formal_evidence_credit_only"
+    assert report.formal_credit_authorized is False
     assert "V2.0" in render_pre_v2_readiness_markdown(report)
 
 

@@ -62,6 +62,7 @@ class PreV2ReadinessReport:
     required_human_action: bool = False
     automatic_revalidation_enabled: bool = True
     blocking_scope: str = "formal_evidence_credit_only"
+    formal_credit_authorized: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +73,7 @@ class PreV2ReadinessReport:
             "required_human_action": self.required_human_action,
             "automatic_revalidation_enabled": self.automatic_revalidation_enabled,
             "blocking_scope": self.blocking_scope,
+            "formal_credit_authorized": self.formal_credit_authorized,
             "items": [item.to_dict() for item in self.items],
             "limitations": list(self.limitations),
         }
@@ -397,6 +399,7 @@ def render_pre_v2_readiness_markdown(report: PreV2ReadinessReport) -> str:
         f"- rule_operational_scheduler_allowed: `{str(report.rule_operational_scheduler_allowed).lower()}`",
         f"- required_human_action: `{str(report.required_human_action).lower()}`",
         f"- blocking_scope: `{report.blocking_scope}`",
+        f"- formal_credit_authorized: `{str(report.formal_credit_authorized).lower()}`",
         "",
         "| Item | Status | Observed | Required | Blocking reasons |",
         "|---|---|---:|---:|---|",

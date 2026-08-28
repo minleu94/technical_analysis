@@ -108,6 +108,7 @@ def test_pre_v2_readiness_cli_reports_json_without_creating_missing_db(tmp_path:
     assert payload["rule_operational_scheduler_allowed"] is True
     assert payload["required_human_action"] is False
     assert payload["blocking_scope"] == "formal_evidence_credit_only"
+    assert payload["formal_credit_authorized"] is False
     assert any(item["item_id"] == "weekly_history" for item in payload["items"])
     assert not missing_db.exists()
 
@@ -156,4 +157,5 @@ def test_pre_v2_readiness_cli_reads_approved_projection_from_environment(tmp_pat
     assert weekly["observed_count"] == 3
     assert weekly["evidence"]["approved_projection_configured"] is True
     assert weekly["evidence"]["approved_projection_path"] == str(projection_path.resolve())
+    assert payload["formal_credit_authorized"] is False
     assert "approved_weekly_history_projection_not_configured" not in weekly["diagnostics"]
