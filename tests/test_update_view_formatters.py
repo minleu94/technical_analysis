@@ -27,6 +27,7 @@ def test_format_status_token_preserves_known_unknown_and_missing_values() -> Non
     assert format_status_token("transport_error") == "傳輸失敗"
     assert format_status_token("registry_error") == "登錄檔異常"
     assert format_status_token("blocked_insufficient_storage") == "磁碟空間不足"
+    assert format_status_token("production_canary_storage_preflight_blocked") == "正式 canary 磁碟空間不足"
     assert (
         format_status_token("not_computable_cost_ledger_missing")
         == "尚不可計算（成本帳缺漏）"

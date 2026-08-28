@@ -40,6 +40,7 @@ NO_CONCURRENT_WRITER_TOKEN = "no-concurrent-writer"
 MAX_WORKERS = 4
 MAX_IN_FLIGHT = 16
 MAX_RETRIES = 3
+DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
 
 
 def inspect_production_state(
@@ -135,6 +136,7 @@ def execute_production_canary(
     workers: int = 2,
     max_in_flight: int = 2,
     max_retries: int = 1,
+    minimum_free_space_bytes: int = DEFAULT_MINIMUM_FREE_SPACE_BYTES,
 ) -> dict[str, Any]:
     """Run the guarded one-stock production canary after explicit approval."""
 
@@ -170,6 +172,8 @@ def execute_production_canary(
         "workers": workers,
         "max_in_flight": max_in_flight,
         "max_retries": max_retries,
+        "minimum_free_space_bytes": minimum_free_space_bytes,
+        "storage_preflight": None,
         "backup": None,
         "rollback": {"available": False, "attempted": False, "succeeded": None},
     }
@@ -183,6 +187,7 @@ def execute_production_canary(
         workers=workers,
         max_in_flight=max_in_flight,
         max_retries=max_retries,
+        minimum_free_space_bytes=minimum_free_space_bytes,
     )
     if input_error:
         return {**base, "status": "blocked", "blocker": input_error}
@@ -258,6 +263,31 @@ def execute_production_canary(
             **base,
             "status": "blocked",
             "blocker": "backup_root_must_be_inside_data_root",
+        }
+
+    try:
+        storage_preflight = _storage_preflight(
+            backup_dir,
+            minimum_free_space_bytes=minimum_free_space_bytes,
+        )
+    except OSError as error:
+        return {
+            **base,
+            "status": "blocked",
+            "blocker": "production_canary_storage_preflight_failed",
+            "error_type": type(error).__name__,
+            "error": str(error),
+        }
+    base["storage_preflight"] = storage_preflight
+    if not storage_preflight["within_minimum_free_space"]:
+        return {
+            **base,
+            "status": "blocked",
+            "blocker": "production_canary_storage_preflight_blocked",
+            "next_safe_step": (
+                "先處理 canary backup 所在檔案系統容量；在最低 headroom 通過前，"
+                "不建立 backup、不啟動 technical writer。"
+            ),
         }
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -420,6 +450,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--max-in-flight", type=int, default=2)
     parser.add_argument("--max-retries", type=int, default=1)
+    parser.add_argument(
+        "--minimum-free-space-bytes",
+        type=int,
+        default=DEFAULT_MINIMUM_FREE_SPACE_BYTES,
+        help="fail closed before backup when the canary filesystem has less free space",
+    )
     parser.add_argument("--output-json", type=Path)
     return parser
 
@@ -458,6 +494,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             workers=args.workers,
             max_in_flight=args.max_in_flight,
             max_retries=args.max_retries,
+            minimum_free_space_bytes=args.minimum_free_space_bytes,
         )
     except (OSError, TypeError, ValueError, sqlite3.Error) as error:
         report = {
@@ -487,6 +524,7 @@ def _validate_inputs(
     workers: int,
     max_in_flight: int,
     max_retries: int,
+    minimum_free_space_bytes: int,
 ) -> str | None:
     if not protected_roots:
         return "protected_root_required"
@@ -510,7 +548,34 @@ def _validate_inputs(
         return "max_in_flight_out_of_range"
     if max_retries < 0 or max_retries > MAX_RETRIES:
         return "max_retries_out_of_range"
+    if minimum_free_space_bytes <= 0:
+        return "minimum_free_space_bytes_must_be_positive"
     return None
+
+
+def _storage_preflight(
+    path: Path,
+    *,
+    minimum_free_space_bytes: int,
+) -> dict[str, Any]:
+    """Read backup filesystem headroom without creating or mutating anything."""
+
+    if minimum_free_space_bytes <= 0:
+        raise ValueError("minimum_free_space_bytes must be positive")
+    probe_path = path
+    while not probe_path.exists() and probe_path != probe_path.parent:
+        probe_path = probe_path.parent
+    usage = shutil.disk_usage(probe_path)
+    free_bytes = int(usage.free)
+    minimum = int(minimum_free_space_bytes)
+    return {
+        "probe_path": str(probe_path),
+        "total_bytes": int(usage.total),
+        "used_bytes": int(usage.used),
+        "free_bytes": free_bytes,
+        "minimum_free_space_bytes": minimum,
+        "within_minimum_free_space": free_bytes >= minimum,
+    }
 
 
 def _validate_post_state(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from types import SimpleNamespace
 from pathlib import Path
 
 from scripts import qa_technical_indicator_production_canary as canary
@@ -53,7 +54,7 @@ def test_canary_preview_is_read_only_and_requires_confirmation(tmp_path, monkeyp
     assert not (data_root / "sqlite" / "backups").exists()
 
 
-def test_canary_confirmation_still_requires_both_operator_tokens(tmp_path):
+def test_canary_confirmation_and_storage_guards(tmp_path, monkeypatch):
     data_root, output_root = _production_fixture(tmp_path)
     report = canary.execute_production_canary(
         data_root=data_root,
@@ -68,6 +69,29 @@ def test_canary_confirmation_still_requires_both_operator_tokens(tmp_path):
 
     assert report["status"] == "blocked"
     assert report["blocker"] == "owner_approval_token_required"
+    assert not (data_root / "sqlite" / "backups").exists()
+    monkeypatch.setattr(
+        canary.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(total=1000, used=950, free=50),
+    )
+
+    report = canary.execute_production_canary(
+        data_root=data_root,
+        output_root=output_root,
+        protected_roots=(tmp_path,),
+        stock_id="2330",
+        expected_latest_date="2026-08-28",
+        owner_approval=canary.OWNER_APPROVAL_TOKEN,
+        no_concurrent_writer_ack=canary.NO_CONCURRENT_WRITER_TOKEN,
+        confirm=True,
+        minimum_free_space_bytes=100,
+    )
+
+    assert report["status"] == "blocked"
+    assert report["blocker"] == "production_canary_storage_preflight_blocked"
+    assert report["storage_preflight"]["free_bytes"] == 50
+    assert report["storage_preflight"]["within_minimum_free_space"] is False
     assert not (data_root / "sqlite" / "backups").exists()
 
 

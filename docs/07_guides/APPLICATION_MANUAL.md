@@ -1426,6 +1426,9 @@ production writer 已通過；後續仍需 owner review，broker pool 維持關�
 `--no-concurrent-writer-ack no-concurrent-writer` 及
 `--confirm-production-technical-canary`，並先停止其他資料寫入者，才會建立 SQLite online backup
 與單股 technical CSV backup，接著以 bounded process pool 重算一檔；worker 不寫檔，parent 才寫 CSV／SQLite。
+建立 backup 前還會唯讀檢查 backup 所在檔案系統的 headroom，預設至少需要 20 GiB；不足時回報
+`production_canary_storage_preflight_blocked`，不建立 backup、不啟動 writer。只有在受控環境明確調整
+`--minimum-free-space-bytes` 且容量可追溯時才可降低門檻。
 若 post-state 驗證失敗，工具會嘗試以 backup 回復並在 artifact 記錄 rollback 結果；canary 不下載行情、
 不啟動 broker／Selenium，也不會註冊 scheduler。`status=measured` 只代表這一次 owner-approved
 canary 的 backup／single-writer／post-state 驗收通過，不能直接把 scheduler worker 數提高。

@@ -46,6 +46,7 @@ def format_status_token(status: Any) -> str:
         "blocked_provenance": "來源證據受阻",
         "blocked_insufficient_storage": "磁碟空間不足",
         "direct_chain_storage_preflight_blocked": "磁碟空間不足",
+        "production_canary_storage_preflight_blocked": "正式 canary 磁碟空間不足",
         "research_shadow": "研究影子",
         "contract_only": "僅有契約",
         "candidate_only": "僅限候選",
