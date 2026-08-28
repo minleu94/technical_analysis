@@ -216,6 +216,10 @@ alpha=`0` 與 broker disabled 仍不變，後續仍需 owner 的 future activati
 
 可用 `scripts\inspect_ml_formal_input_readiness.py --output-root <OUTPUT_ROOT> --training-as-of <TRAINING_AS_OF> --output <READINESS_JSON>` 做唯讀 readiness check。`TRAINING_AS_OF` 必須是含時區的 ISO 8601 時間（例如 `2026-08-28T00:00:00+08:00`，不可只給 `2026-08-28`），避免 cutoff 時區歧義。它會實際呼叫三個 production validator，記錄每項 input 的 `missing`／`invalid`／`ready`、file hash 與原因，並在報告與 CLI 摘要提供 `ready_input_ratio`（例如 `0/3`）；即使三項皆 ready，也只表示可以進入受控 Direct/OOC refresh，不會直接解除 formal OOS、alpha 或 broker gate。當前 scheduled report 位於 `OUTPUT_ROOT\scheduled\ml_formal_input_readiness\latest.json`。報告另會提供 `prospective_output_observation`，以固定深度列出同一 output root 下已觀察到的 `clock-*` staging／prospective marker；這只是解釋「為何看得到檔案卻仍是 0/3」的診斷，不會自動 discovery、替換 owner-controlled `BALDR_ML_FORMAL_*` path，也不會把 prospective bytes 當成正式 input。此 CLI 在解析參數前設定 UTF-8 stdout/stderr，Windows 預設 CP1252 主控台也能正常使用 `--help`；指定的 readiness output 仍是明確路徑的受控 artifact，不會寫正式資料庫。
 
+若需要回答「候選目錄裡是否其實有檔案」而不改變正式接線，可另用
+`scripts\inspect_formal_input_candidates.py --candidate-root <CANDIDATE_ROOT> --output <INVENTORY_JSON>`。
+這個盤點器只讀 bounded 的 `manifest.json`（預設最多 512 份），以固定 allowlist 投影 schema／日期／安全旗標並計算 manifest hash；會將檔案分為 `research_only`、`prospective_only`、`formal_schema_candidate` 或 `other`，也會明示 invalid／超過上限的項目。它不讀資料列、不執行 formal loader、不改環境變數，且報告必須寫在候選根目錄之外；`formal_ready_input_count` 永遠不由此工具升格，仍須由 owner-controlled publisher 產出三份正式 manifest，再重跑本節的 readiness check。
+
 Readiness inspector 也會在每項結果標示 `expected_schema_version`。若明確 path 指向
 `prospective-formal-*`、`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或
 `scope=prospective_only` 的 wrapper，結果會是

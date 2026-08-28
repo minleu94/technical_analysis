@@ -36,6 +36,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_fubon_readonly_marketdata_probe.py": "service-oracle-data-market",
     "tests/test_inspect_formal_clock_readiness.py": "governance-doc-tooling",
     "tests/test_inspect_ml_formal_input_readiness.py": "governance-doc-tooling",
+    "tests/test_inspect_formal_input_candidates.py": "governance-doc-tooling",
     "tests/test_inspect_p0_intake_readiness.py": "governance-doc-tooling",
     "tests/test_append_source_acceptance_decision.py": "governance-doc-tooling",
     "tests/test_inspect_fubon_dossier.py": "governance-doc-tooling",

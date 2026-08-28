@@ -64,6 +64,12 @@
 - readiness 對缺失的 prospective path 也會揭露 `configured_clock_id`／日期、`training_as_of_date` 與 stale hint；目前受控環境三個 path 指向缺失的 `clock-20260819`，早於 `training_as_of=2026-08-28`。同一輸出根的 `clock-20260828` staging 不會被自動猜測或升格，必須由 owner 發布並更新明確 path。
 - 明確設定的 `BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH` 以 hash-bound discovery 驗證並具有權威性；旁邊其他可 discovery sidecar 不得靜默取代它。正式 `BALDR_ML_FORMAL_*` path、Formal OOS、alpha、scheduler、promotion 與 broker 仍全部關閉；本次 dry-run 沒有寫正式資料根目錄。
 
+## 2026-08-28 Formal candidate inventory（current engineering）
+
+- 新增唯讀 `scripts/inspect_formal_input_candidates.py`。呼叫端必須明確指定候選根目錄；工具只掃描 bounded 的 `manifest.json`、讀取有限 allowlist 欄位並計算 manifest hash，不讀取資料列、不執行 formal loader、不修改環境變數或正式資料。
+- 以正式 `D:/Min/Python/Project/FA_Data/output` 做一次 bounded inventory（上限 512）：解析 511 份、另有 1 份無法解析，因達上限標記 `truncated=true`；其中 31 份是 research-only、7 份是 prospective-only，沒有任何一份以三個 expected schema 進入 `formal_schema_candidate`。可識別的 3 份 causal ledger 都是 `research-causal-baseline-ledger.v1`（non-cash 2,493 日但 `formal_consumer_compatible=false`），唯一 PIT sidecar 是 prospective clock-bound artifact，不能回填歷史。
+- inventory 只回答「現有候選檔案與拒絕原因」，`formal_ready_input_count` 固定為 0；後續仍須 owner-controlled publisher 產出三份正式 manifest，再由 `scripts/inspect_ml_formal_input_readiness.py` 重跑 hash／cutoff／loader 驗證。報告不會把改名、複製或重播當成補資料。
+
 ## 2026-08-28 Data Update 效能基線與 single-writer 護欄（current engineering）
 
 - 新增 `scripts/qa_bounded_worker_acceptance.py` synthetic acceptance：以 `max_workers=2`、`max_in_flight=4` 驗證有限 retry、permanent failure 不寫入、duplicate idempotency、cooperative cancellation 與 main-thread single writer；2026-08-28 09:30 UTC 8/8 checks 通過（取消 3 pending、丟棄 2 個取消後完成結果、`worker_write_attempts=0`）。這是 orchestration 契約證據，`production_worker_enabled=false`，不代表 real indicator process pool 或 broker concurrency 已啟用；artifact SHA-256=`107DC6DD7391A2AF20D070BC7CCC040BB00041499A1B77319AC788BCC0BCF9DC`。
@@ -123,8 +129,8 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
-- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard、scheduled-task registration inspector、technical process-pool／worker recovery acceptance、P0 audit → candidate intake projection、freshness ACL-safe status/log route、machine evidence handoff projection／intake envelope guard、explicit freshness readiness projection、freshness probe ACL fail-soft regression、PowerShell freshness wrapper canonical delegation 與 owner packet route evidence 測試並完成 inventory 登錄後為 `646/646`、`3666 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3614`／`3612 collected` 與 `639/639`／`638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
-- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3665 passed / 1 skipped / 26 warnings`（`558.10s`）；freshness probe ACL fail-soft、freshness readiness projection、Evidence Workbench pending-period 與 formal cutoff 診斷、PowerShell wrapper canonical delegation 納入後的完整回歸沒有新增 failure。warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示。`3664 passed` 為前序中間結果。
+- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard、scheduled-task registration inspector、technical process-pool／worker recovery acceptance、P0 audit → candidate intake projection、freshness ACL-safe status/log route、machine evidence handoff projection／intake envelope guard、explicit freshness readiness projection、freshness probe ACL fail-soft regression、PowerShell freshness wrapper canonical delegation、owner packet route evidence 與 Formal candidate inventory 測試並完成 inventory 登錄後為 `647/647`、`3669 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `3614`／`3612 collected` 與 `639/639`／`638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
+- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3668 passed / 1 skipped / 26 warnings`（`542.69s`）；Formal candidate inventory 與 freshness probe ACL fail-soft、freshness readiness projection、Evidence Workbench pending-period、formal cutoff 診斷、PowerShell wrapper canonical delegation 納入後的完整回歸沒有新增 failure。warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示。`3665 passed` 為前序中間結果。
 
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
 - Workbench 的 Pre-V2 readiness 現在會把 weekly history 的 projection 未設定／找不到與各 readiness item 的 blocker/diagnostic 帶到首頁 warnings；目前環境若設定通過驗證的 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`，CLI／畫面會一致揭露 owner-approved weekly `3/3`（只供 UI／Pre-V2 顯示、不授予 formal credit），清除該變數時則明示只計算正式 DB legacy review history，不再只顯示模糊的「等待中」。
