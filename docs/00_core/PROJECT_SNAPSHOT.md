@@ -83,8 +83,8 @@
 
 ## 2026-08-26 Data Update trust UX slice（current engineering）
 
-- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard 測試並完成既有 inventory 登錄後為 `639/639`、`3608 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `638/638`／`3604`、`637/637`／`3596` 讀數屬前序中間基準。
-- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3607 passed / 1 skipped / 26 warnings`（`518.78s`）；warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示，沒有新的 test failure。`3606 passed` 為新增 console guard 測試前的中間結果。
+- 測試 inventory 機器重算（2026-08-28）：新增 P0 audit CLI CP1252 console guard 測試並完成既有 inventory 登錄後為 `639/639`、`3612 collected`，inventory audit 的 machine-checkable blockers=`0`；本節較早的 `638/638`／`3604`、`637/637`／`3596`、`3608 collected` 讀數屬前序中間基準。
+- 2026-08-28 全量 pytest 以 `-o addopts=` 通過 `3611 passed / 1 skipped / 26 warnings`（`521.38s`）；warnings 仍是既有 joblib physical-core fallback、研究回測同日成交假設與 pytest cache 權限提示，沒有新的 test failure。`3607 passed` 為 TPEx fallback 測試加入前的中間結果。
 
 - Data Update 狀態卡已改為 fail-closed 顯示：只有明確 `ok`／`success`／`current`／`normal` 才顯示綠色「最新」；`error`、`missing`、`empty`、`unavailable`、部分 payload 缺漏與整體狀態檢查失敗不再沿用舊數字或假綠。
 - Workbench 的 Pre-V2 readiness 現在會把 weekly history 的 projection 未設定／找不到與各 readiness item 的 blocker/diagnostic 帶到首頁 warnings；目前環境若設定通過驗證的 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`，CLI／畫面會一致揭露 owner-approved weekly `3/3`（只供 UI／Pre-V2 顯示、不授予 formal credit），清除該變數時則明示只計算正式 DB legacy review history，不再只顯示模糊的「等待中」。
