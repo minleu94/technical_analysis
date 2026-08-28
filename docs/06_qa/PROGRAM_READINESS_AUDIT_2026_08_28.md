@@ -89,6 +89,14 @@ path，也沒有取得 Formal `3/3` credit。這證明目前的資料與 produce
 
 本機以 `cmd /c scripts\\scheduled\\query_baldr_scheduled_tasks.cmd` 做唯讀查詢，結果為 `13 of 13 task(s) missing or unavailable`；沒有刪除或修改任何 task。這解釋了為什麼正式 output 仍只有舊的 `latest_status.json` 而沒有新版 runner 產生的 `history.jsonl`：目前缺的是排程註冊／真實執行證據，不是可以安全複製的歷史檔。重新註冊屬於 host 狀態變更，需由 owner 在正確 Windows 帳號與路徑下執行 `scripts\\scheduled\\register_baldr_scheduled_tasks.cmd` 的受控流程，然後再以 query 與實際 terminal status 驗證。
 
+本輪新增 `scripts\\inspect_scheduled_task_registration.py`，以同樣的 `schtasks /Query` 產生
+可供 unified readiness 讀取的 `scheduled-task-registration.v1` 摘要；它不保存完整 LIST、
+不寫 task，也不會把缺 task 自動註冊。2026-08-28 實測 artifact 為
+`C:\\Users\\archi\\AppData\\Local\\Temp\\technical_analysis_program_readiness\\scheduled_task_status_20260828.json`，
+`available=0/13`、`all_available=false`，SHA-256=`880FB764D8B44D9F37F99D22147B2A37692D62A0F097B6C02D2F577318B5B13C`。
+將它以 `--scheduled-task-status` 傳給 `inspect_program_readiness.py` 後，Update History lane
+會明確保留 `scheduled_tasks_missing_or_unavailable:0/13`，並維持等待真實 history 的狀態。
+
 ## 為什麼有些東西不能直接補滿
 
 1. **Owner／license decision 是權限事實，不是資料欄位。** 程式可以蒐集官方 endpoint、條款 URL、hash、coverage 與 PIT 證據，但不能冒用具名 reviewer 作出 `accepted`／`limited` 決議。

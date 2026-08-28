@@ -74,6 +74,7 @@ def inspect_program_readiness(
     runtime_write_probe_path: str | Path | None = None,
     update_history_path: str | Path | None = None,
     update_status_path: str | Path | None = None,
+    scheduled_task_status_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """以既有服務建立整體唯讀 readiness report。"""
 
@@ -136,6 +137,7 @@ def inspect_program_readiness(
                 / "data_update_quick"
                 / "latest_status.json"
             ),
+            _optional_path(scheduled_task_status_path),
         ),
         "performance": _inspect_performance_lane(
             _optional_path(technical_performance_path),
@@ -461,12 +463,28 @@ def _inspect_runtime_lane(
 def _inspect_update_history_lane(
     history_path: Path,
     latest_status_path: Path,
+    scheduled_task_status_path: Path | None = None,
 ) -> dict[str, Any]:
     history = read_update_status_history(history_path)
     diagnostics = _string_list(history.get("diagnostics"))
     records = [item for item in history.get("records", []) if isinstance(item, Mapping)]
     latest = history.get("latest") if isinstance(history.get("latest"), Mapping) else None
     latest_status = _read_optional_json_mapping(latest_status_path)
+    scheduled_status = (
+        _read_optional_json_mapping(scheduled_task_status_path)
+        if scheduled_task_status_path is not None
+        else None
+    )
+    if scheduled_task_status_path is not None and scheduled_status is None:
+        diagnostics.append("scheduled_task_status_missing_or_invalid")
+    elif scheduled_status is not None:
+        available_count = _as_int(scheduled_status.get("available_count"), default=-1)
+        task_count = _as_int(scheduled_status.get("task_count"), default=-1)
+        if scheduled_status.get("all_available") is not True:
+            diagnostics.append(
+                "scheduled_tasks_missing_or_unavailable:"
+                f"{max(available_count, 0)}/{max(task_count, 0)}"
+            )
     if latest_status is not None and latest is not None:
         latest_status_run = str(latest_status.get("run_id") or "").strip()
         latest_history_run = str(latest.get("run_id") or "").strip()
@@ -503,6 +521,10 @@ def _inspect_update_history_lane(
         ),
         "terminal_record_count": terminal_count,
         "unique_run_count": unique_run_count,
+        "scheduled_task_status_path": (
+            str(scheduled_task_status_path) if scheduled_task_status_path is not None else None
+        ),
+        "scheduled_task_status": scheduled_status,
     }
     history_status = str(history.get("status") or "unknown")
     blockers: list[str] = list(diagnostics)
@@ -813,6 +835,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime-write-probe", type=Path)
     parser.add_argument("--update-history-path", type=Path)
     parser.add_argument("--update-status-path", type=Path)
+    parser.add_argument(
+        "--scheduled-task-status",
+        type=Path,
+        help="唯讀 schtasks 註冊摘要 JSON；缺少時不會掃描或修改 task",
+    )
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument("--output", type=Path, help="可選的報告輸出路徑；不指定則只輸出 stdout。")
     return parser
@@ -846,6 +873,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         runtime_write_probe_path=args.runtime_write_probe,
         update_history_path=args.update_history_path,
         update_status_path=args.update_status_path,
+        scheduled_task_status_path=args.scheduled_task_status,
     )
     rendered = (
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"

@@ -605,6 +605,33 @@ def test_program_readiness_marks_update_history_identity_mismatch(tmp_path: Path
     assert lane["details"]["unique_run_count"] == 1
 
 
+def test_program_readiness_projects_scheduler_registration_diagnostics(tmp_path: Path) -> None:
+    scheduler_path = tmp_path / "scheduler-status.json"
+    scheduler_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "scheduled-task-registration.v1",
+                "task_count": 13,
+                "available_count": 0,
+                "missing_or_unavailable_count": 13,
+                "all_available": False,
+                "tasks": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        scheduled_task_status_path=scheduler_path,
+    )
+    lane = report["workstreams"]["update_history"]
+
+    assert "scheduled_tasks_missing_or_unavailable:0/13" in lane["blockers"]
+    assert lane["details"]["scheduled_task_status"]["task_count"] == 13
+
+
 def test_program_readiness_forwards_explicit_weekly_collection_sidecar(tmp_path: Path) -> None:
     sidecar = tmp_path / "sidecar" / "evidence_scheduler.db"
     sidecar.parent.mkdir(parents=True, exist_ok=True)

@@ -992,6 +992,20 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 快速更新排程會在 `latest_status.json` 旁以 append-only 方式保存 `data-update-status-history.v1` JSONL；每次真實執行會記錄 `running` 與 terminal status 的 run／時間／步驟摘要。預設 history 路徑為 `OUTPUT_ROOT/scheduled/data_update_quick/history.jsonl`，也可用 runner 的 `--history-path` 或 UI 的 `DATA_UPDATE_HISTORY_ARTIFACT` 指定。這個功能不會回放既有 latest status、不會把檔案 mtime 當成完成時間；既有環境的 history 缺檔會顯示「缺漏」，等下一次真實排程自然產生，不得手動複製舊結果補足。
 
+若 history 缺檔，先用下列唯讀命令確認 Windows task 是否真的存在：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_scheduled_task_registration.py `
+  --output C:\Users\archi\AppData\Local\Temp\scheduled_task_status.json
+```
+
+輸出會列出 13 個預期 task 的 available／missing 計數與安全摘要；它不會註冊或修改
+task。也可把該 JSON 以 unified readiness 的 `--scheduled-task-status` 載入，讓
+Update History lane 顯示 `scheduled_tasks_missing_or_unavailable:<available>/<total>`。
+若 task 缺失，需由 owner 在正確帳號下執行受控的
+`scripts\scheduled\register_baldr_scheduled_tasks.cmd`，再觀察下一次真實 running／terminal
+history；不可用舊 latest status 回填。
+
 ### 4.1.1 整體程式 readiness 盤點（唯讀）
 
 若要一次確認目前各 Gate「在哪裡、卡在哪裡、下一步是什麼」，使用：
