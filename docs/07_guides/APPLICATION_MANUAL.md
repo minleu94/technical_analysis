@@ -760,7 +760,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 
 - `p0-candidate-audit.v1` 與 `p0-source-evidence-audit.v1` 都會驗證完整 13 項 source denominator 與安全旗標；缺列、重複、未知 source 或 boundary 不符會 fail-closed。
 - 每列分開顯示 `governance_status`、`machine_status`、`audit_status`、`decision_status`、row 數、blockers、owner actions 與 evidence requirements；`contract_only` 只表示尚未注入 audit，不是資料可用，`research_shadow` 也不是 formal accepted。
-- 2026-08-28 的實測例子：未載入 audit 時會看到 13 列 `contract_only`；載入完整 live audit 後同一組來源成為 `0 contract_only / 12 blocked_provenance / 1 research_shadow`，machine=`1 verified / 12 degraded / 0 missing`。這個變化只修正「是否已有機器證據」的顯示；13 筆具名 decision 仍為 `not_supplied`，`accepted=0`、`limited=0`、`downstream_eligibility=none`。
+- 2026-08-28 的實測例子：未載入 audit 時會看到 13 列 `contract_only`；載入完整 live audit 後同一組來源成為 `0 contract_only / 12 blocked_provenance / 1 research_shadow`，machine=`1 verified / 10 degraded / 2 missing`。這個變化只修正「是否已有機器證據」的顯示；13 筆具名 decision 仍為 `not_supplied`，`accepted=0`、`limited=0`、`downstream_eligibility=none`。
 - 總覽固定顯示 `accepted/limited`、`downstream_eligible` 與安全邊界。即使輸入 decision revision 是 `limited`／`accepted`，本控制中心仍強制 `downstream_eligibility=none`、`formal_oos_allowed=false`、`production_scheduler_allowed=false`、`auto_accept_allowed=false`；要變成 accepted feature 必須另有完整、具名 owner/reviewer 與授權／品質／PIT 證據流程。
 - 總覽統計不是可任意覆寫的摘要：DTO 建構時會從 13 筆明細重新計算並驗證 governance／machine／decision counts 與各狀態 totals，任何不一致或試圖打開 safety boundary 的輸入都會 fail-closed。
 - Workbench → Evidence → Research Console 會自動顯示同一份 P0 Control Center；頁面沒有 Accept／Apply／Promote／Retrain／Trade 控制。若沒有稽核投影，畫面仍保留 13 列並列出 `candidate_audit_not_supplied`、`source_acceptance_decision_missing` 與 `downstream_eligibility_none`。
@@ -771,6 +771,23 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 ### P0 Source Intake Validator（唯讀候選輸入）
 
 `scripts/inspect_p0_intake_readiness.py` 是把外部 P0 治理資料交給程式檢查的第一個接入口。它只接受明確的 `p0-source-intake.v1` JSON，要求完整 13 個 `source-acceptance-dossier.v1`，逐列驗證欄位型別、source denominator、license／PIT／quality checklist 與安全旗標；不會建立 decision registry、不會寫正式資料，也不會自動接受來源。
+
+若已經有 `p0-source-evidence-audit.v1`，不必人工抄寫每個 machine row。可用下列唯讀轉接器建立一份 candidate intake；它只帶入 audit 的 raw／accepted／quarantine／blocked 計數、payload hash 與 machine status，所有 source owner、license、publication、available-date、PIT、revision 與 reviewer 欄位仍標成 `unverified`／`requires_review`，所以結果一定維持 `deferred`：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_p0_intake_from_audit.py `
+  --audit $env:TEMP\technical_analysis_p0_audit\p0_evidence_20260828_live_tpex_fallback_v2.json `
+  --output $env:TEMP\technical_analysis_p0_audit\p0_candidate_intake_from_audit_20260828.json
+
+.\.venv\Scripts\python.exe scripts\inspect_p0_intake_readiness.py `
+  --input $env:TEMP\technical_analysis_p0_audit\p0_candidate_intake_from_audit_20260828.json `
+  --format markdown `
+  --output $env:TEMP\technical_analysis_p0_audit\p0_candidate_intake_readiness_20260828.md
+```
+
+此轉接器的輸出只允許位於 OS TEMP，且明確保留 `auto_accept_allowed=false`、
+`downstream_eligibility=none`；它可以縮短 owner review 的資料整理工作，但不能
+替代官方 publication／PIT／license 證據或具名決議。
 
 ```powershell
 # 先產生 13 列候選範本；路徑必須明確且位於 DATA_ROOT 之外

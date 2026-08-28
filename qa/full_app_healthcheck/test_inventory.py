@@ -53,6 +53,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_audit_test_inventory.py": "governance-doc-tooling",
     "tests/test_run_p0_candidate_audit.py": "governance-doc-tooling",
     "tests/test_run_p0_source_evidence_audit.py": "governance-doc-tooling",
+    "tests/test_build_p0_intake_from_audit.py": "governance-doc-tooling",
     "tests/test_qa_technical_indicator_latency.py": "governance-doc-tooling",
     "tests/test_qa_bounded_worker_acceptance.py": "governance-doc-tooling",
     "tests/test_qa_broker_bounded_fetch_acceptance.py": "governance-doc-tooling",
