@@ -171,6 +171,8 @@ Readiness UI 的 lane 表格已固定顯示七個預期 lane；若明確 artifac
 
 排程 read model 的狀態分類也已與現有 wrapper contract 對齊：`ml_raw_pit_refresh=completed` 投影為正常完成，`ml_allocation_copilot=skipped_non_trading_day` 投影為受控 no-op（diagnostic=`non_trading_day_noop`），不再讓合法的休市／完成結果污染「需處理」計數；真實 `failed` 會使用明確 `scheduled_job_failed`，storage preflight 或 evidence degradation 仍會保留 attention。
 
+排程分頁明細同步改為 bounded 人類可讀投影：每個 operation 顯示中文 state、原始 token、diagnostic 與觀測時間，最多 32 列；operation 缺漏會直接顯示未提供，不再要求使用者從 raw JSON 猜測「完成／受控／需處理」。原始 status artifact、Task Scheduler 與所有正式權限均未被修改。
+
 ### Data Update 排程註冊觀察
 
 沙盒帳號 `codexsandboxoffline` 以 `cmd /c scripts\\scheduled\\query_baldr_scheduled_tasks.cmd` 做唯讀查詢時曾得到 `13 of 13 task(s) missing or unavailable`；這只代表該 token 無法呼叫 `schtasks.exe`，沒有刪除或修改任何 task。另一方面，2026-08-28 quick runner 已由既有程序完成真實 `running`／terminal history（run=`20260828-29472`）。實際 Windows host-context 重新 query 已確認 13/13 task `Enabled`／`Ready`、action wiring 全部相符，因此目前缺的是下一個自然週期的 freshness／history 與 owner governance，不是 scheduler registration；不應在這個 host 重複註冊。

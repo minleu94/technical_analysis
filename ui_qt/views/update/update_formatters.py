@@ -402,6 +402,49 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_scheduler_operations_detail(detail: Mapping[str, Any]) -> str:
+    """Render scheduler operation artifacts as bounded human-readable lines.
+
+    The scheduler detail endpoint is intentionally read-only.  Showing a raw
+    JSON blob made a valid ``completed`` or ``skipped_non_trading_day`` result
+    look like an error and forced users to decode state tokens themselves.  A
+    compact projection keeps the raw token and diagnostic while making the
+    action boundary visible.
+    """
+
+    operation_count = _safe_nonnegative_int(
+        detail.get("operation_count", detail.get("total_records"))
+    )
+    lines = [
+        f"排程工作明細：{operation_count:,} 個（中文狀態／原始 token）",
+        f"operation_count={operation_count}",
+    ]
+    operations = detail.get("operations")
+    if not isinstance(operations, (list, tuple)) or not operations:
+        lines.append("尚未提供各工作明細；請重新檢查明確的 scheduled artifacts。")
+    else:
+        for operation in operations[:32]:
+            if not isinstance(operation, Mapping):
+                continue
+            label = str(operation.get("label") or operation.get("job_id") or "未知工作").strip()
+            raw_status = str(operation.get("raw_status") or "unknown").strip().lower() or "unknown"
+            state = str(operation.get("state") or "unknown").strip().lower() or "unknown"
+            line = f"{label}：{format_status_token(state)}（state={state}；raw={raw_status}）"
+            diagnostic = str(operation.get("diagnostic") or "").strip()
+            if diagnostic:
+                line += f"；診斷={diagnostic}"
+            updated_at = str(operation.get("updated_at") or "").strip()
+            if updated_at:
+                line += f"；觀測={updated_at}"
+            lines.append(line)
+    scheduled_root = str(detail.get("scheduled_root") or "").strip()
+    if scheduled_root:
+        lines.append(f"狀態根目錄：{scheduled_root}")
+    if detail.get("read_only") is True:
+        lines.append("邊界：唯讀，不註冊或修改 Windows Task Scheduler")
+    return "\n".join(lines)
+
+
 def tpex_warning_messages(result: Mapping[str, Any]) -> list[str]:
     warnings = [str(item) for item in result.get("warnings", []) if str(item).strip()]
     failed_dates = sorted({str(item) for item in result.get("failed_dates", []) if str(item).strip()})

@@ -1496,6 +1496,7 @@ def test_scheduler_detail_projection_updates_summary_and_raw_status_panel():
     assert "核心工作就緒：2/6" in summary
     assert "邊界：唯讀" in summary
     assert "operation_count" in view.scheduler_status_log_box.toPlainText()
+    assert "尚未提供各工作明細" in view.scheduler_status_log_box.toPlainText()
 
 
 def test_source_tabs_have_operational_content():

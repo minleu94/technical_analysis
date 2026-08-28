@@ -49,6 +49,7 @@ from ui_qt.views.update.update_formatters import (
     format_monthly_revenue_candidate_lines,
     format_p0_license_capture_status,
     format_program_readiness_summary,
+    format_scheduler_operations_detail,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -3420,9 +3421,7 @@ class UpdateView(QWidget):
             log_box = getattr(self, "scheduler_status_log_box", None)
             if log_box is not None:
                 try:
-                    log_box.setPlainText(
-                        json.dumps(detail, ensure_ascii=False, indent=2, default=str)
-                    )
+                    log_box.setPlainText(format_scheduler_operations_detail(detail))
                 except Exception as exc:
                     log_box.setPlainText(f"排程狀態格式化失敗：{exc}")
 

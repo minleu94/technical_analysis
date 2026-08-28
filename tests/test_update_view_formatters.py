@@ -2,6 +2,7 @@ from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
     format_manual_update_summary,
     format_p0_license_capture_status,
+    format_scheduler_operations_detail,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -121,6 +122,38 @@ def test_format_source_detail_summary_keeps_daily_display_text() -> None:
             "提醒：資料延遲；來源待確認",
         ]
     )
+
+
+def test_format_scheduler_operations_detail_explains_state_and_keeps_tokens() -> None:
+    summary = format_scheduler_operations_detail(
+        {
+            "operation_count": 2,
+            "scheduled_root": "C:/output/scheduled",
+            "read_only": True,
+            "operations": [
+                {
+                    "label": "Raw PIT",
+                    "job_id": "ml_raw_pit_refresh",
+                    "state": "operational",
+                    "raw_status": "completed",
+                    "updated_at": "2026-08-28T06:50:37+00:00",
+                },
+                {
+                    "label": "ML Shadow",
+                    "job_id": "ml_allocation_copilot",
+                    "state": "guarded",
+                    "raw_status": "skipped_non_trading_day",
+                    "diagnostic": "non_trading_day_noop",
+                },
+            ],
+        }
+    )
+
+    assert "Raw PIT：正常（state=operational；raw=completed）" in summary
+    assert "ML Shadow：受控（state=guarded；raw=skipped_non_trading_day）" in summary
+    assert "診斷=non_trading_day_noop" in summary
+    assert "operation_count=2" in summary
+    assert "邊界：唯讀" in summary
 
 
 def test_format_source_detail_summary_handles_missing_broker_fields() -> None:

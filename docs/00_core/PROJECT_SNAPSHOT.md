@@ -54,6 +54,7 @@
 - UpdateView 的候選與排程分頁會在重新檢查後刷新 inline 摘要；排程頁同步更新 raw status JSON，並分開顯示核心就緒、正常／受控／需處理／不可用工作數。這只修正可觀測性，不改變 `production_scheduler_allowed=false` 或任何正式 gate。
 - Runtime 排程 read model 現在將 `ml_direct_chain_maintenance` 列為已知安全工作；`blocked_insufficient_storage` 會顯示為「需要注意」並保留 `direct_chain_storage_preflight_blocked`，不再以未知 job id 淹沒容量診斷。這只改善狀態可見性，不啟動 chain、不改寫資料。
 - Scheduler／Data Update 狀態分類已補齊既有安全結果：`ml_raw_pit_refresh` 的 `completed` 會顯示為正常完成，`ml_allocation_copilot` 休市的 `skipped_non_trading_day` 會顯示為受控略過並保留 `non_trading_day_noop`，不再把合法 no-op 誤報成 failure；Direct/OOC 的真正 `failed` 會保留明確 `scheduled_job_failed`，容量 blocker 仍維持需處理。
+- Scheduler 分頁的明細由原始 JSON 改為 bounded 人類可讀投影：每個工作顯示中文 state、原始 status token、diagnostic、觀測時間與唯讀根目錄；最多顯示 32 個 operation，缺少明細會明示，仍不修改 Task Scheduler 或 status artifact。
 - `scripts/run_p0_candidate_audit.py` 的直接 CLI 入口補上 UTF-8 stdio guard；在 Windows CP1252 主控台執行 `--help` 不再因繁中說明拋出 `UnicodeEncodeError`。這是 CLI 可用性修正，不改變 P0 candidate-only 邊界。
 
 ## 2026-08-28 P0 machine evidence handoff projection（current engineering）
