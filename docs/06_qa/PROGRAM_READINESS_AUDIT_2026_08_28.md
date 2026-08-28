@@ -12,6 +12,13 @@ Data Update 的「本次手動更新」摘要已與排程時間軸分離：UI �
 
 Data Update 狀態卡的摘要燈號也已細分：`partial` 為「部分完成」、`degraded` 為「需注意」、`action_required` 為「需處理」、`running` 為「進行中」、`pending_human_review` 為「待人工覆核」，未設定／未觀測則顯示「未設定」。原始 machine token 仍留在內文，避免不同下一步被壓成同一個「待更新」。
 
+Data Update「全部資料」現在另有「整體程式 readiness（唯讀）」區塊；設定
+`PROGRAM_READINESS_ARTIFACT=<絕對路徑>` 後，按「檢查數據狀態」會把
+`program-readiness.v1` 的七個 lane、狀態、最多 8 個 blocker、最多 3 個 next action
+與「需外部輸入」提示投影到同一頁。它只載入呼叫端明確指定的 artifact，不掃描 TEMP／正式
+目錄、不發網路、不寫 SQLite，也不會因顯示 `ready` 而授予 Formal、scheduler、broker 或
+source acceptance；路徑未設定、遺失或 schema 不符時會保留可見的 fail-closed 診斷。
+
 這仍不是完整產品 closeout。真正尚未具備的不是同一種「補資料」問題，而是不同性質的外部 gate：P0 的具名 owner／license／PIT decision、Evidence 的真實週期與 review credit、Paper 的真實 fills／成本／execution gap、Formal/ML 的 3 個 owner-controlled inputs、正式 Runtime Registry transaction／rollback evidence、technical production backup／rollback＋canary，以及 scheduler 的自然 history 與 production governance。Broker 現在已完成一次受控真實 HTTP canary，但長期 rate-limit／Selenium fallback／production writer 仍未驗收。程式不能替這些事實自行推導或用 replay 填入。正確做法是繼續完成可工程化部分，同時把外部輸入與時間證據獨立追蹤，不再把兩者統稱為「功能沒做完」。
 
 technical production canary 的 guarded 入口與 readiness contract 已完成，預設只做唯讀預演；目前沒有執行任何正式 technical 寫入。要解除這一項 blocker，仍需 owner 在停用並行 writer 後明確核准一檔股票的 backup／rollback canary。
@@ -210,7 +217,7 @@ candidate 的 validator 與 merge preview：2026-07、1,851 rows、可用日 202
 資料模型同時回報數值候選 `2026-07`、availability 候選 `2026-07`／`ready_for_merge`，
 正式 SQLite 仍是 `2026-06`。本輪月營收服務／格式化測試 `19 passed`、UpdateView 相關
 測試 `71 passed`、Data Update QA `23 passed / 0 failed / 4 skipped`；測試 inventory
-重算為 `656` 個測試檔、`3,748` 個 collected tests，無遺漏、過時路徑或 collection error。
+重算為 `657` 個測試檔、`3,764` 個 collected tests，無遺漏、過時路徑或 collection error。
 
 Runtime 另於 2026-08-28 18:44 UTC 以實際 host context 重跑唯讀 readiness；`DATA_ROOT`、
 `OUTPUT_ROOT`、`logs/config.log` 與 `research_runs.db` 均回報 `ready`，既有檔案的
@@ -261,7 +268,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - quick runner 完成後重新產生的 unified readiness（run=`20260828-29472`、已載入 scheduler registration artifact）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_post_patch.json`（status=`action_required`；SHA-256=`210FF09EB321BC4DFAA6C12FACC29CC3E8D15D4A962CC08B8EE399C73AE63931`）；Update History blocker 已精確投影為 `scheduled_tasks_missing_or_unavailable:0/13`，下一步是 owner 重新註冊 task，不是回填 history。
 - 最新 unified readiness（同一組輸入另載入明確 TEMP freshness status）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final_with_freshness_projection.json`（status=`action_required`；SHA-256=`80AF60C103E12948E935791E16009622F5898566AD7F067092C8A10B874727E9`）；freshness projection=`passed`、daily／technical latest=`2026-08-28`，Update History 剩餘 blocker 僅 `scheduled_tasks_missing_or_unavailable:0/13`，不再把 freshness 觀測與 scheduler registration 混在一起。
 - post-QA unified readiness（完成 `3664 passed / 1 skipped` 全回歸、Data Update QA 與 targeted mypy／py_compile 後重算）：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_20260828_final_postqa.json`（status=`action_required`；SHA-256=`750CEEC7DD65ADE1A826B8A1427DA08332BFF4C65F4A07C38A47F1446C7C92A0`）；七個 lane 的 blocker 與前一份一致，freshness 仍為 `passed`，沒有把測試通過誤宣稱為 production gate 通過。
-- 最新全量回歸（Registry clone transaction、storage retention inventory、technical canary storage preflight、monthly-revenue candidate projection 與 weekly review CLI UTF-8 guard 修正後）：`3747 passed / 1 skipped / 26 warnings`（`532.28s`；未指定 JUnit 輸出）；這只更新工程回歸證據，不會把 production scheduler、正式 ACL、owner decision 或資料 gate 誤標成 ready。
+- 最新全量回歸（Registry clone transaction、storage retention inventory、technical canary storage preflight、monthly-revenue candidate projection、program-readiness projection UI 與 weekly review CLI UTF-8 guard 修正後）：`3763 passed / 1 skipped / 26 warnings`（`572.10s`；未指定 JUnit 輸出）；這只更新工程回歸證據，不會把 production scheduler、正式 ACL、owner decision 或資料 gate 誤標成 ready。
 - 新增 availability candidate merge workflow 後的月營收候選唯讀預演：既有 mapping=`1,832`、candidate=`1,851`、added=`1,851`、conflict=`0`、merged=`3,683`；正式 target／SQLite 均未寫入。新增真實 broker HTTP canary 後重算 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_broker_canary_20260828.json`（status=`action_required`；SHA-256=`F7B644EC597629E61D17431EF497C2E251F165DF4827DB1E5B0CF8178350FABB`），performance blocker 僅剩 `technical_production_single_writer_canary_not_completed`。
 - technical canary guarded entry 的唯讀 preview 後再次重算 unified readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_technical_canary_preview_20260828.json`（status=`action_required`；SHA-256=`BEEFAA4E47E2C02D60CDB30CC334093E78B318EED684B681B317081541CAD825`）；所有既有 performance artifacts 與 preview 均可讀，performance blocker 精確保留 `technical_production_single_writer_canary_not_completed`，沒有把 preview 當正式 write proof。
 - continuation artifact 重新載入 P0／weekly sidecar／freshness／performance／staging runtime probe／scheduler query：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_continuation_v2_20260828.json`（status=`action_required`；SHA-256=`8A6BF41B89E1E53D7E5B99D33899CE9E7E716F9C7DC131AFEC89AF987CD63DE5`）。這份 artifact 保留早期沙盒觀察：runtime 兩個正式 write-handle `PermissionError`、Update History `scheduled_tasks_missing_or_unavailable:0/13`；不作目前 host 狀態依據。
