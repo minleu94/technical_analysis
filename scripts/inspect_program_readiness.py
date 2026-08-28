@@ -191,6 +191,7 @@ def _inspect_p0_lane(
     accepted = _as_int(projection.get("accepted_count"), default=0)
     limited = _as_int(projection.get("limited_count"), default=0)
     blockers = _string_list(projection.get("global_blockers"))
+    actions: Sequence[str]
     if audit_path is None:
         status = "waiting_for_external_input"
         blockers.append("p0_live_audit_not_supplied")
