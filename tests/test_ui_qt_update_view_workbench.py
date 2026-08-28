@@ -1058,6 +1058,43 @@ def test_update_view_progress_never_moves_backwards():
     assert view._last_progress == 88
 
 
+def test_update_view_exposes_current_manual_attempt_without_reusing_scheduler_result():
+    view = make_view()
+
+    assert "本次手動更新：尚未執行" in view.data_update_action_summary_label.text()
+
+    view._active_update_operation = "安全更新"
+    view._active_update_start_date = "2026-08-27"
+    view._active_update_end_date = "2026-08-28"
+    view._render_manual_update_summary(
+        "failed",
+        result={
+            "success": False,
+            "message": "market failed",
+            "failed_step": "大盤指數更新",
+            "warnings": ["每日股價已完成，未覆蓋本輪失敗步驟"],
+        },
+    )
+
+    text = view.data_update_action_summary_label.text()
+    assert "本次手動更新：失敗（failed）" in text
+    assert "資料區間：2026-08-27 ~ 2026-08-28" in text
+    assert "失敗步驟：大盤指數更新" in text
+    assert "排程時間軸仍只讀取明確 status artifact" in text
+
+
+def test_update_view_refreshes_manual_summary_on_update_error(monkeypatch):
+    view = make_view()
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args, **kwargs: QMessageBox.Ok)
+
+    view._active_update_operation = "每日股票數據"
+    view._on_update_error("network timeout")
+
+    text = view.data_update_action_summary_label.text()
+    assert "本次手動更新：錯誤（error）" in text
+    assert "network timeout" in text
+
+
 def test_partial_status_payload_clears_stale_cards_instead_of_reusing_old_values():
     view = make_view()
 

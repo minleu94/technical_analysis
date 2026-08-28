@@ -40,6 +40,7 @@ from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
+    format_manual_update_summary,
     format_monthly_revenue_candidate_lines,
     format_p0_license_capture_status,
     format_source_detail_summary,
@@ -322,6 +323,9 @@ class UpdateView(QWidget):
         self._worker_coordinator = WorkerCoordinator[TaskWorker]()
         self._active_workers = self._worker_coordinator.active_workers
         self._last_progress = 0
+        self._active_update_operation = "資料更新"
+        self._active_update_start_date: str | None = None
+        self._active_update_end_date: str | None = None
         self.tpex_refresh_state_file = Path(meta_data_dir) / "tpex_full_refresh_status.json"
         self._tpex_background_process: Optional[subprocess.Popen] = None
 
@@ -419,6 +423,10 @@ class UpdateView(QWidget):
         """顯示合作式取消已收尾，並清理共用進度狀態。"""
         self._release_worker(worker)
         self._invalidate_detail_cache()
+        self._render_manual_update_summary(
+            "cancelled",
+            message="已送出合作式取消；已完成的檔案／資料庫寫入保留。",
+        )
         self._restore_write_controls_after_cancel()
         sync_label = getattr(self, "sqlite_sync_status_label", None)
         if sync_label is not None and "執行中" in sync_label.text():
@@ -457,6 +465,66 @@ class UpdateView(QWidget):
 
     def _reset_progress(self) -> None:
         self._last_progress = 0
+
+    def _render_manual_update_summary(
+        self,
+        status: str,
+        *,
+        message: Any = "",
+        result: Dict[str, Any] | None = None,
+        progress: Any = None,
+    ) -> None:
+        """Render the current manual update attempt independently of scheduler artifacts."""
+
+        payload = result if isinstance(result, dict) else {}
+        label = getattr(self, "data_update_action_summary_label", None)
+        if label is None:
+            return
+
+        def _count_items(value: Any) -> int | None:
+            return len(value) if isinstance(value, (list, tuple, set)) else None
+
+        text = format_manual_update_summary(
+            self._active_update_operation,
+            status,
+            message or payload.get("message"),
+            start_date=self._active_update_start_date,
+            end_date=self._active_update_end_date,
+            updated_count=_count_items(payload.get("updated_dates")),
+            failed_count=_count_items(payload.get("failed_dates")),
+            failed_step=payload.get("failed_step"),
+            warnings=payload.get("warnings") or (),
+            progress=progress,
+        )
+        label.setText(text)
+        normalized = str(status or "unknown").strip().lower()
+        color = {
+            "success": "#166534",
+            "passed": "#166534",
+            "completed": "#166534",
+            "running": "#1d4ed8",
+            "in_progress": "#1d4ed8",
+            "cancelled": "#92400e",
+            "failed": "#b91c1c",
+            "failure": "#b91c1c",
+            "error": "#b91c1c",
+        }.get(normalized, "#92400e" if normalized in {"warning", "partial"} else "#475569")
+        border = {
+            "#166534": "#86efac",
+            "#1d4ed8": "#93c5fd",
+            "#92400e": "#fbbf24",
+            "#b91c1c": "#fca5a5",
+        }.get(color, "#cbd5e1")
+        label.setStyleSheet(
+            "QLabel {"
+            " background-color: #f8fafc;"
+            f" color: {color};"
+            f" border: 1px solid {border};"
+            " border-radius: 6px;"
+            " padding: 6px 10px;"
+            " font-size: 11px;"
+            "}"
+        )
 
     def _set_progress(self, message: str, percentage: int) -> int:
         """更新共用進度列，保證單一工作生命週期內不倒退。"""
@@ -1028,6 +1096,26 @@ class UpdateView(QWidget):
         actions_layout.addWidget(self.safe_update_all_btn, stretch=2)
         actions_layout.addWidget(self.check_status_btn, stretch=1)
         all_layout.addLayout(actions_layout)
+
+        self.data_update_action_summary_label = QLabel(
+            "本次手動更新：尚未執行。\n"
+            "排程時間軸與手動操作分開顯示，不會用舊結果代替本輪狀態。"
+        )
+        self.data_update_action_summary_label.setWordWrap(True)
+        self.data_update_action_summary_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+        )
+        self.data_update_action_summary_label.setStyleSheet(
+            "QLabel {"
+            " background-color: #f8fafc;"
+            " color: #475569;"
+            " border: 1px solid #cbd5e1;"
+            " border-radius: 6px;"
+            " padding: 6px 10px;"
+            " font-size: 11px;"
+            "}"
+        )
+        all_layout.addWidget(self.data_update_action_summary_label)
         all_layout.addStretch()
 
         self.content_stack.addWidget(all_page)
@@ -3668,6 +3756,10 @@ class UpdateView(QWidget):
         if self._reject_busy_write("全部資料更新"):
             return
         self._current_update_mode = mode
+        self._active_update_operation = "快速更新" if mode == "quick" else "安全更新"
+        self._active_update_start_date, self._active_update_end_date = (
+            self._get_selected_date_range()
+        )
 
         self.quick_update_all_btn.setEnabled(False)
         self.safe_update_all_btn.setEnabled(False)
@@ -3686,6 +3778,11 @@ class UpdateView(QWidget):
         self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText(f"準備{mode_name}所有數據...")
+        self._render_manual_update_summary(
+            "running",
+            message=f"準備{mode_name}所有數據…",
+            progress=0,
+        )
         self.log_text.clear()
         self._log(f"開始{mode_name}所有數據")
 
@@ -3703,6 +3800,11 @@ class UpdateView(QWidget):
         """更新更新流程進度"""
         mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
         displayed = self._set_progress(message, progress)
+        self._render_manual_update_summary(
+            "running",
+            message=message,
+            progress=displayed,
+        )
         if "SQLite" in message:
             self._set_sqlite_sync_status(
                 {"status": "running", "source": message, "message": "正在同步"}
@@ -3721,6 +3823,11 @@ class UpdateView(QWidget):
         self.progress_label.setVisible(False)
 
         mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
+
+        self._render_manual_update_summary(
+            "success" if result.get("success", False) else "failed",
+            result=result,
+        )
 
         if result.get("success", False):
             message = result.get("message", f"{mode_name}完成")
@@ -3764,6 +3871,7 @@ class UpdateView(QWidget):
         self.progress_label.setVisible(False)
 
         mode_name = "快速更新" if getattr(self, "_current_update_mode", "quick") == "quick" else "安全更新"
+        self._render_manual_update_summary("error", message=error_msg)
         self._log(f"{mode_name}錯誤：{error_msg}")
 
         error_display = error_msg
@@ -3787,6 +3895,7 @@ class UpdateView(QWidget):
             update_type = 'broker_branch'
 
         self._active_update_type = update_type
+        self._active_update_operation = self._get_update_type_name(str(update_type))
 
         # 獲取查找範圍
         end_date = self.end_date.date().toString("yyyy-MM-dd")
@@ -3797,6 +3906,8 @@ class UpdateView(QWidget):
         end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
         start_date_obj = end_date_obj - timedelta(days=lookback_days)
         start_date = start_date_obj.strftime("%Y-%m-%d")
+        self._active_update_start_date = start_date
+        self._active_update_end_date = end_date
 
         # 禁用按鈕
         current_update_btn = getattr(self, f"{update_type}_update_btn", None)
@@ -3811,6 +3922,11 @@ class UpdateView(QWidget):
         self.progress_bar.setValue(0)
         self.progress_label.setVisible(True)
         self.progress_label.setText(f"正在更新{self._get_update_type_name(update_type)}...")
+        self._render_manual_update_summary(
+            "running",
+            message=f"正在更新{self._get_update_type_name(update_type)}…",
+            progress=0,
+        )
 
         # 清空日誌
         self.log_text.clear()
@@ -3854,6 +3970,11 @@ class UpdateView(QWidget):
     def _on_update_progress(self, message: str, percentage: int):
         """更新進度回調"""
         displayed = self._set_progress(message, percentage)
+        self._render_manual_update_summary(
+            "running",
+            message=message,
+            progress=displayed,
+        )
         if "SQLite" in message:
             self._set_sqlite_sync_status(
                 {"status": "running", "source": message, "message": "正在同步"}
@@ -3876,6 +3997,11 @@ class UpdateView(QWidget):
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+
+        self._render_manual_update_summary(
+            "success" if result.get("success", False) else "failed",
+            result=result,
+        )
 
         # 顯示結果
         if result.get('success', False):
@@ -3923,6 +4049,8 @@ class UpdateView(QWidget):
         # 隱藏進度條
         self.progress_bar.setVisible(False)
         self.progress_label.setVisible(False)
+
+        self._render_manual_update_summary("error", message=error_msg)
 
         # 顯示錯誤
         self._log(f"錯誤：{error_msg}")

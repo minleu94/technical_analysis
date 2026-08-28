@@ -112,6 +112,83 @@ def format_p0_license_capture_status(status: Any) -> str:
     return f"{label}（{raw_status}）"
 
 
+def format_manual_update_summary(
+    operation: Any,
+    status: Any,
+    message: Any = "",
+    *,
+    start_date: Any = None,
+    end_date: Any = None,
+    updated_count: Any = None,
+    failed_count: Any = None,
+    failed_step: Any = None,
+    warnings: Any = (),
+    progress: Any = None,
+) -> str:
+    """Render the current UI update attempt without conflating it with scheduler state.
+
+    Manual source updates and scheduled ``latest_status.json`` artifacts have
+    different provenance.  Keeping this summary local to the current action
+    prevents a failed/ cancelled manual run from leaving the previous
+    successful scheduler timeline as the only visible explanation.
+    """
+
+    raw_status = str(status or "unknown").strip().lower() or "unknown"
+    status_labels = {
+        "success": "完成",
+        "passed": "完成",
+        "completed": "完成",
+        "failed": "失敗",
+        "failure": "失敗",
+        "error": "錯誤",
+        "running": "執行中",
+        "in_progress": "執行中",
+        "cancelled": "已取消",
+    }
+    status_label = status_labels.get(raw_status, format_status_token(raw_status))
+    operation_text = str(operation or "資料更新").strip() or "資料更新"
+    lines = [f"本次手動更新：{status_label}（{raw_status}）", f"操作：{operation_text}"]
+
+    start_text = str(start_date or "").strip()
+    end_text = str(end_date or "").strip()
+    if start_text or end_text:
+        lines.append(f"資料區間：{start_text or '未提供'} ~ {end_text or '未提供'}")
+
+    try:
+        progress_value = int(progress) if progress is not None else None
+    except (TypeError, ValueError):
+        progress_value = None
+    if progress_value is not None:
+        lines.append(f"目前進度：{max(0, min(100, progress_value))}%")
+
+    message_text = str(message or "").strip()
+    if message_text:
+        lines.append(f"訊息：{message_text}")
+
+    if updated_count is not None:
+        lines.append(f"成功日期：{_safe_nonnegative_int(updated_count):,} 個")
+    if failed_count is not None:
+        lines.append(f"失敗日期：{_safe_nonnegative_int(failed_count):,} 個")
+    failed_step_text = str(failed_step or "").strip()
+    if failed_step_text:
+        lines.append(f"失敗步驟：{failed_step_text}")
+
+    if isinstance(warnings, (list, tuple, set)):
+        warning_items = warnings
+    elif warnings in (None, ""):
+        warning_items = ()
+    else:
+        warning_items = (warnings,)
+    warning_values = [
+        str(item).strip() for item in warning_items if str(item).strip()
+    ]
+    if warning_values:
+        lines.append("提醒：" + "；".join(warning_values[:3]))
+
+    lines.append("排程時間軸仍只讀取明確 status artifact；兩者不互相回填。")
+    return "\n".join(lines)
+
+
 def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[str]:
     """投影月營收數值 snapshot 與 availability mapping 候選的唯讀差異。"""
 

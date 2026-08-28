@@ -1,11 +1,45 @@
 from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
+    format_manual_update_summary,
     format_p0_license_capture_status,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
     tpex_warning_messages,
 )
+
+
+def test_format_manual_update_summary_keeps_attempt_state_separate_from_scheduler() -> None:
+    summary = format_manual_update_summary(
+        "安全更新",
+        "failed",
+        "大盤指數更新失敗",
+        start_date="2026-08-27",
+        end_date="2026-08-28",
+        failed_step="大盤指數更新",
+        warnings=["保留已完成的每日股價同步"],
+    )
+
+    assert "本次手動更新：失敗（failed）" in summary
+    assert "操作：安全更新" in summary
+    assert "資料區間：2026-08-27 ~ 2026-08-28" in summary
+    assert "失敗步驟：大盤指數更新" in summary
+    assert "排程時間軸仍只讀取明確 status artifact" in summary
+
+
+def test_format_manual_update_summary_clamps_progress_and_counts() -> None:
+    summary = format_manual_update_summary(
+        "每日股票數據",
+        "running",
+        progress=125,
+        updated_count="2",
+        failed_count="-1",
+    )
+
+    assert "本次手動更新：執行中（running）" in summary
+    assert "目前進度：100%" in summary
+    assert "成功日期：2 個" in summary
+    assert "失敗日期：0 個" in summary
 
 
 def test_format_p0_license_capture_status_keeps_machine_token_and_explains_partial() -> None:
