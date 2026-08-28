@@ -14,12 +14,12 @@ dashboard warm query 很快，就推論資料抓取、CSV 寫入或 SQLite sync 
 
 | Stage | cold | warm p95 | 結果 |
 |---|---:|---:|---|
-| Broker dashboard（含 semantics） | 2215.593 ms | 0.263 ms | pass；冷啟主要是首次 SQLite／semantic setup，不是可直接平行化證據 |
-| Broker dashboard（source-only diagnostic） | 436.731 ms | 0.185 ms | diagnostic-only |
-| 單股 branch detail | 15.677 ms | 14.205 ms | pass |
-| branch tracker | 11.955 ms | 12.006 ms | pass |
+| Broker dashboard（含 semantics） | 2452.209 ms | 0.153 ms | pass；冷啟主要是首次 SQLite／semantic setup，不是可直接平行化證據 |
+| Broker dashboard（source-only diagnostic） | 438.582 ms | 0.193 ms | diagnostic-only |
+| 單股 branch detail | 20.613 ms | 19.387 ms | pass |
+| branch tracker | 17.950 ms | 16.582 ms | pass |
 
-SQLite shape probe 觀察到 `broker_flows` 約 966,616 rows、212 個交易日、51 個
+SQLite shape probe（2026-08-28 06:38 UTC host rerun）觀察到 `broker_flows` 約 966,616 rows、212 個交易日、51 個
 分點、2,189 個標的；probe 前後 DB SHA-256 相同，未寫入資料庫。
 
 技術指標 probe 的重現方式（只讀指定單股 CSV，不呼叫 writer）：
@@ -31,7 +31,7 @@ SQLite shape probe 觀察到 `broker_flows` 約 966,616 rows、212 個交易日�
 ```
 
 以現有檔案尾端最多 500 rows、每檔 3 runs 觀察到 `calculate_all_indicators`
-的 cold 約 3.51–5.34 ms、warm p95 約 3.32–4.23 ms，CSV read 約 5.90–8.91 ms。
+的 cold 約 3.36–5.06 ms、warm p95 約 3.08–3.42 ms，CSV read 約 4.85–8.99 ms。
 這不是全市場更新承諾：完整批次還包含
 CSV 讀取、每股 merge／寫入、全市場 concat、backup 與可選 SQLite rebuild。
 
