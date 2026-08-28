@@ -982,6 +982,10 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 | 異常 | SQLite 或必要資料讀取失敗。 |
 | 未檢查 | 本次啟動尚未執行狀態檢查。 |
 
+當市場指數、產業指數、券商分點或技術指標標為「待更新」且服務回傳
+`freshness_status=lagging` 時，卡片與來源詳情會額外顯示「新鮮度基準日」及「資料最新日」。
+這兩個日期用來直接判讀落後幅度；它們不是新的資料來源，也不會自動觸發下載或寫入。
+
 狀態燈只依明確的 `status` token 判定：`ok`／`success`／`current`／`normal` 才是綠色「最新」；`error`、`missing`、`empty`、`unavailable` 或狀態查詢失敗會顯示紅色「異常」，不會因說明文字出現「最新」就視為正常。inline 摘要會把 `success`／`current`／`normal` 統一顯示為中文「正常」。若回傳 payload 缺少某一資料源，該卡片與對應 inline 摘要都會重設為「尚未檢查」，不沿用上一輪的日期、筆數或 0 筆判讀。
 
 尚未按下檢查按鈕時，卡片內的提示文字不會被當成 `status` 欄位；燈號會維持灰色「未檢查」，不會誤顯示黃色「待更新」。
@@ -2954,6 +2958,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：大型每日合併新增單一 CSV 內的讀取批次取消檢查；完整檔案讀完才會納入待提交集合，取消不會產生半份整合檔或替換既有目標。這仍是批次邊界取消，不提供逐列中斷。
 - 2026-08-27：修正資料更新個別來源詳情查詢失敗時的錯誤顯示；現在只會將該來源標為異常，不再把其他來源狀態卡誤刷成錯誤。
 - 2026-08-27：補強資料更新頁顯示一致性：全域／各來源日期控件的「今日」統一採台灣市場日期；localized `不可用` 會顯示為異常而非待更新；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要並保留共同錯誤原因，候選來源分頁也會顯示檢查結果，方便排錯且不誤讀舊數字。
+- 2026-08-28：資料更新狀態卡與來源詳情會將 `degraded`／`partial`／`action_required` 等狀態統一轉成中文；核心資料落後 daily reference 時，直接顯示新鮮度基準日與資料最新日，並保留來源錯誤訊息供排錯。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
 - 2026-08-27：Data Update 全部資料新增 P0 官方來源證據唯讀 projection；全域狀態檢查會把明確指定的 audit／owner decision 與核心資料狀態一起呈現，逐列保留 actual route、fallback lineage、PIT／公告、coverage、license、owner decision 與 `downstream_eligibility=none`。未設定時是 `contract_only`，artifact 遺失／格式錯誤時是 `audit_unavailable`，不會掃描正式目錄、發網路請求或把 candidate 升格為正式來源。

@@ -1,4 +1,5 @@
 from ui_qt.views.update.update_formatters import (
+    format_freshness_gap,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -14,6 +15,27 @@ def test_format_status_token_preserves_known_unknown_and_missing_values() -> Non
     assert format_status_token("warning") == "需注意"
     assert format_status_token(None) == "未知"
     assert format_status_token("custom") == "custom"
+    assert format_status_token("degraded") == "需注意"
+    assert format_status_token("partial") == "部分完成"
+    assert format_status_token("waiting_for_external_input") == "等待外部輸入"
+    assert format_status_token("action_required") == "需處理"
+
+
+def test_format_freshness_gap_explains_lagging_reference_and_latest_date() -> None:
+    assert format_freshness_gap(
+        {
+            "freshness_status": "lagging",
+            "freshness_reference_date": "2026-08-28",
+            "latest_date": "2026-08-27",
+        }
+    ) == "新鮮度基準日：2026-08-28（資料最新日：2026-08-27）"
+    assert format_freshness_gap(
+        {
+            "freshness_status": "current",
+            "freshness_reference_date": "2026-08-28",
+            "latest_date": "2026-08-28",
+        }
+    ) == ""
 
 
 def test_format_source_detail_summary_keeps_daily_display_text() -> None:
@@ -110,6 +132,22 @@ def test_format_source_detail_summary_discloses_read_mode_fallback() -> None:
     summary = format_source_detail_summary("daily", detail)
     assert "讀取模式：immutable_fallback" in summary
     assert "提醒：可能只反映最後已提交內容" in summary
+
+
+def test_format_source_detail_summary_explains_lagging_freshness_reference() -> None:
+    summary = format_source_detail_summary(
+        "technical",
+        {
+            "latest_date": "2026-08-27",
+            "freshness_status": "lagging",
+            "freshness_reference_date": "2026-08-28",
+            "total_records": 10,
+            "status": "lagging",
+        },
+    )
+
+    assert "狀態：待更新" in summary
+    assert "新鮮度基準日：2026-08-28（資料最新日：2026-08-27）" in summary
 
 
 def test_tpex_warning_messages_deduplicates_and_sorts_failed_dates() -> None:

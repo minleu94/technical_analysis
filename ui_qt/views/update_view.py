@@ -36,6 +36,7 @@ from data_module.source_acceptance_decision_registry import parse_source_accepta
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.text_sanitizer import strip_leading_symbol_icon
 from ui_qt.views.update.update_formatters import (
+    format_freshness_gap,
     format_source_detail_summary,
     format_status_token,
     get_update_type_name,
@@ -2879,6 +2880,7 @@ class UpdateView(QWidget):
             "latest_date": None,
             "total_records": 0,
             "status": f"error: {error_msg}",
+            "warnings": [f"error: {error_msg}"],
         }
         if source_key:
             self._set_status_card(source_key, detail)
@@ -2936,7 +2938,7 @@ class UpdateView(QWidget):
         earliest = value.get("earliest_date") or "無"
         latest = value.get("latest_date") or "無"
         coverage = value.get("coverage_pct") or "0.0%"
-        status = value.get("status") or "MISSING"
+        status = format_status_token(value.get("status") or "MISSING")
         disclaimer = value.get("disclaimer") or "候選研究資料，不參與評分"
         if record_count > 0:
             return (
@@ -2984,9 +2986,12 @@ class UpdateView(QWidget):
                 )
             lines.extend([
                 f"總記錄數：{total_records:,}",
-                f"狀態：{status}",
+                f"狀態：{format_status_token(status)}",
             ])
             UpdateView._append_status_diagnostics(lines, value)
+            freshness_gap = format_freshness_gap(value)
+            if freshness_gap:
+                lines.append(freshness_gap)
             return "\n".join(lines)
         if key == "broker_branch":
             lines = [
@@ -2996,18 +3001,24 @@ class UpdateView(QWidget):
                 f"張數榜專屬 (E-only)：{_safe_nonnegative_int(value.get('e_only_count')):,}\n"
                 f"金額榜專屬 (B-only)：{_safe_nonnegative_int(value.get('b_only_count')):,}\n"
                 f"總記錄數：{total_records:,}\n"
-                f"狀態：{status}"
+                f"狀態：{format_status_token(status)}"
             ]
             UpdateView._append_status_diagnostics(lines, value)
+            freshness_gap = format_freshness_gap(value)
+            if freshness_gap:
+                lines.append(freshness_gap)
             return "\n".join(lines)
         lines = [
             f"最新日期：{latest_date}",
             f"總記錄數：{total_records:,}",
-            f"狀態：{status}",
+            f"狀態：{format_status_token(status)}",
         ]
         if key == "technical_indicators" and value.get("file_count") is not None:
             lines.append(f"指標檔數：{_safe_nonnegative_int(value.get('file_count')):,}")
         UpdateView._append_status_diagnostics(lines, value)
+        freshness_gap = format_freshness_gap(value)
+        if freshness_gap:
+            lines.append(freshness_gap)
         return "\n".join(lines)
 
     @staticmethod

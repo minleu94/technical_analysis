@@ -23,6 +23,12 @@ def format_status_token(status: Any) -> str:
         "current": "正常",
         "normal": "正常",
         "warning": "需注意",
+        "degraded": "需注意",
+        "partial": "部分完成",
+        "passed": "正常",
+        "passed_with_warnings": "需注意",
+        "waiting_for_external_input": "等待外部輸入",
+        "action_required": "需處理",
         "error": "異常",
         "missing": "缺漏",
         "empty": "缺漏",
@@ -49,6 +55,19 @@ def format_status_token(status: Any) -> str:
         "未檢查": "未檢查",
     }
     return mapping.get(normalized, raw_status or "未知")
+
+
+def format_freshness_gap(detail: Mapping[str, Any]) -> str:
+    """把來源相對 daily reference 的落後日期轉成可讀提示。"""
+
+    freshness_status = str(detail.get("freshness_status") or "").strip().lower()
+    if freshness_status not in {"lagging", "stale"}:
+        return ""
+    reference_date = detail.get("freshness_reference_date") or detail.get("reference_date")
+    latest_date = detail.get("latest_date")
+    if not reference_date or not latest_date:
+        return ""
+    return f"新鮮度基準日：{reference_date}（資料最新日：{latest_date}）"
 
 
 def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
@@ -99,6 +118,9 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
     warnings = detail.get("warnings") or detail.get("quality_warnings") or []
     if warnings:
         lines.append("提醒：" + "；".join(str(item) for item in warnings[:3]))
+    freshness_gap = format_freshness_gap(detail)
+    if freshness_gap:
+        lines.append(freshness_gap)
     return "\n".join(lines)
 
 

@@ -812,6 +812,32 @@ def test_all_data_view_has_monthly_revenue_status_card():
     assert "最新" in view.monthly_revenue_status_text.indicator_label.text()
 
 
+def test_status_card_explains_lagging_source_freshness():
+    view = make_view()
+
+    view._on_status_checked({
+        "daily_data": {
+            "latest_date": "2026-08-28",
+            "total_records": 100,
+            "status": "ok",
+            "freshness_status": "reference",
+            "freshness_reference_date": "2026-08-28",
+        },
+        "technical_indicators": {
+            "latest_date": "2026-08-27",
+            "total_records": 90,
+            "status": "lagging",
+            "freshness_status": "lagging",
+            "freshness_reference_date": "2026-08-28",
+        },
+    })
+
+    text = view.technical_status_text.toPlainText()
+    assert "狀態：待更新" in text
+    assert "新鮮度基準日：2026-08-28（資料最新日：2026-08-27）" in text
+    assert "待更新" in view.technical_status_text.indicator_label.text()
+
+
 def test_status_card_does_not_turn_green_for_latest_text_when_status_is_error():
     app()
     card = StatusCard("測試")
