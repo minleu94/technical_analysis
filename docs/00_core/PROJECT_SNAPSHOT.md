@@ -46,6 +46,7 @@
 
 ## 2026-08-28 Data Update 效能基線與 single-writer 護欄（current engineering）
 
+- 新增受明確確認與路徑護欄保護的 `scripts/qa_technical_indicator_write_probe.py`，只在既有 isolated staging 的 ephemeral 子目錄測量逐股／合併 CSV serialization 與既有 `DBManager` SQLite writer；2026-08-28 09:19 UTC 以 0050／2330 各 120 rows 量得 CSV serialization=`20.934 ms`、aggregate CSV=`3.817 ms`、SQLite schema=`5.570 ms`、write/commit=`11.735 ms`，第二 writer 以 `database is locked` 被拒絕（contention=`5.151 ms`），holder 釋放後 retry=`0.347 ms` 成功，240 rows 寫入且 raw input 前後 hash 不變。ephemeral staging 已清除，`production_write_attempted=false`、`parallelism_enabled=false`；這是 writer 安全證據，不是 worker 啟用證據。
 - 新增唯讀 `scripts/qa_technical_indicator_latency.py`，量測明確指定的技術指標 CSV 之 read／calculate stage；它固定揭露 `parallelism_enabled=false`、`observed_worker_count=1`、`single_writer_required=true`，不建立檔案、不寫 SQLite。
 - 新增唯讀 `scripts/qa_technical_indicator_full_batch.py`，量測 raw stock CSV 的 `read → normalize/group → calculate → aggregate` 記憶體流程；不呼叫 writer、不寫 CSV／SQLite，並保留 `0050` 等前導零代號。2026-08-28 09:08 UTC 受控 4 檔 probe 完整掃過 `5,226,219` raw rows，read=`8,301.849 ms`、normalize=`2,237.654 ms`、group=`1,383.154 ms`、calculate=`27.001 ms`、aggregate=`0.372 ms`、total=`11,950.456 ms`；結果顯示目前主要成本在 raw CSV 讀取與分組，不代表全市場計算或可直接並行。
 - `BrokerBranchWriteCoordinator` 增加 process-local single-writer lock，daily／merged CSV 寫入與 backup 維持序列化；這是為未來 bounded HTTP fetch 留下安全邊界，不代表已啟用 broker concurrency 或 Selenium 多執行緒。

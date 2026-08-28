@@ -3,9 +3,11 @@
 ## 目的
 
 這份基線先回答「慢在哪裡、哪些可以平行、哪些不能平行」，不把尚未量測的
-thread 數或 worker 數直接寫進 production。所有結果都是唯讀觀測；不能因為
+thread 數或 worker 數直接寫進 production。除另行標示的 isolated staging write
+probe 外，其餘結果都是唯讀觀測；不能因為
 dashboard warm query 很快，就推論資料抓取、CSV 寫入或 SQLite sync 已經可無限制
 加速。
+staging probe 也不會把任何 writer 結果寫回 production。
 
 ## 目前實測
 
@@ -77,12 +79,50 @@ branch tracker warm p95=`11.284 ms`，各自 gate=`pass`。Probe 前後資料庫
 | aggregate | `0.372` | `480` rows、35 columns |
 | total | `11,950.456` | `write_attempted=false`、`sqlite_write_attempted=false` |
 
-artifact 暫存於 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_full_batch_20260828.json`，SHA-256=`5A95D9C97C92BBA22CFD9F7D7EC2510D55A15357BAD42AF719007E849469A76F`。這組結果證明全批次的主要成本目前在 raw CSV read／normalize／group，而不是 4 檔計算本身；它不是全市場計算承諾，也尚未量測 CSV serialization、backup 或 SQLite contention。
+artifact 暫存於 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_full_batch_20260828.json`，SHA-256=`5A95D9C97C92BBA22CFD9F7D7EC2510D55A15357BAD42AF719007E849469A76F`。這組結果證明全批次的主要成本目前在 raw CSV read／normalize／group，而不是 4 檔計算本身；它不是全市場計算承諾，也不涵蓋後續 CSV serialization、backup 或 SQLite contention 的 writer 證據。
 
-這組數字只支持「目前 query／單股計算的 warm path 很快、冷啟有固定成本」；仍不足以
-批准全市場 worker 數或 broker 併發。下一步仍必須量測完整 `read → calculate → write →
-aggregate → SQLite commit` 五段與取消／retry／contention，再於 isolated staging 做 bounded
-worker acceptance。
+這組數字只支持「目前 query／單股計算的 warm path 很快、冷啟有固定成本」；後續
+isolated staging 已補上 CSV／SQLite writer 與 lock retry 觀測，但仍不足以批准全市場
+worker 數或 broker 併發。下一步是把 backup、取消／retry／crash recovery 與 bounded
+worker acceptance 補成可重現的完整測試。
+
+### 2026-08-28 09:19 UTC isolated staging write probe（本輪新增）
+
+新增 `scripts\qa_technical_indicator_write_probe.py`。它要求明確的既有
+`--staging-root`、至少一個 `--protected-root` 與
+`--confirm-write-probe`；未確認時不建立檔案，staging root 若位於 protected
+root 內則直接拒絕。確認後只在 ephemeral staging 子目錄寫入逐股 CSV、合併 CSV
+與 SQLite，離開 probe 即清除；正式 raw CSV 只讀取並以前後 SHA-256 驗證未變更。
+SQLite writer 使用既有 `DBManager` schema／write path，另以兩個 staging
+connection 實測 `BEGIN IMMEDIATE` contention，holder 釋放後再驗證 serialized
+retry。重現命令：
+
+```powershell
+New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_analysis_write_probe_stage -Force
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_write_probe.py `
+  --stock-data-file D:\Min\Python\Project\FA_Data\meta_data\stock_data_whole.csv `
+  --staging-root C:\Users\archi\AppData\Local\Temp\technical_analysis_write_probe_stage `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --confirm-write-probe --stocks 0050 2330 --min-rows 30 --max-rows-per-stock 120 `
+  --output-json C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_write_20260828.json
+```
+
+本次 2 檔、每檔 120 rows 的受控結果為：
+
+| Stage | ms | rows／結果 |
+|---|---:|---|
+| CSV read | `8,165.166` | raw `5,226,219` rows、`486,228,553` bytes |
+| calculate | `12.002` | `2/2` stocks、`240` rows |
+| per-stock CSV serialization | `20.934` | 2 files、共 `99,297` bytes |
+| aggregate CSV write | `3.817` | `240` rows、35 columns |
+| SQLite schema | `5.570` | staging `technical_indicators` schema |
+| SQLite write／commit | `11.735` | `240` rows，`write_ok=true` |
+| single-writer contention | `5.151` | `database is locked`，contention observed |
+| serialized retry | `0.347` | retry succeeded，probe rows=`2` |
+| total | `11,963.428` | cleanup succeeded、input hash unchanged |
+
+artifact 暫存於 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\technical_write_20260828.json`，SHA-256=`90EA5379C8D59E248B05C0F80C34CCD9617F04636D368ECAC392E6840005B1EF`。這證明 CSV／SQLite 寫入可以在隔離環境由單一 writer 完成，且 SQLite 在第二個 writer 進入時確實會以 lock 拒絕；它不代表 production writer 已改造，也不授權提高 worker 數。ephemeral CSV／SQLite 在 probe 結束後已清除，artifact 內的 staging 檔案路徑僅供當次追溯。
 
 ## 現行寫入與平行化事實
 
@@ -107,7 +147,7 @@ worker acceptance。
 2. Broker 只考慮 bounded HTTP fetch pool；每個 task 必須含 global rate-limit、retry
    budget、source/date identity，Selenium fallback 維持 serialized，結果交給上述
    single writer。
-3. Technical indicators 只在 CPU／memory 基線與 worker overhead 有證據時，才以
+3. Technical indicators 只在 CPU／memory 基線、CSV／SQLite writer 與 worker overhead 有證據時，才以
    bounded process pool 計算；禁止把 pandas DataFrame 或 SQLite connection 共享到
    writer 以外的 process。
 4. 以 synthetic staging／isolated output 做 throughput、取消、重試、重複與 crash

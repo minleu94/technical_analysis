@@ -1137,6 +1137,28 @@ CSV／SQLite，也不啟用 worker。`--max-rows-per-stock` 只限制本次計�
 耗時、row count、失敗代號與 `write_attempted=false`；它仍不能證明 CSV serialization、
 backup 或 SQLite contention 已通過，後續需在 isolated staging 另做 write probe。
 
+若要在不碰正式資料的前提下量測 CSV serialization、既有 SQLite writer 與 single-writer contention，可使用：
+
+```powershell
+New-Item -ItemType Directory -Path C:\Users\archi\AppData\Local\Temp\technical_analysis_write_probe_stage -Force
+.\.venv\Scripts\python.exe scripts\qa_technical_indicator_write_probe.py `
+  --stock-data-file D:\Min\Python\Project\FA_Data\meta_data\stock_data_whole.csv `
+  --staging-root C:\Users\archi\AppData\Local\Temp\technical_analysis_write_probe_stage `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --protected-root D:\Min\Python\Project\FA_Data\output `
+  --confirm-write-probe --stocks 0050 2330 --min-rows 30 --max-rows-per-stock 120 `
+  --output-json <TEMP_OUTPUT>
+```
+
+這個 probe 必須明確傳入既有 staging root、至少一個 protected root 與 `--confirm-write-probe`；
+未確認時不建立任何檔案，staging root 位於 protected root 內也會 fail-closed。確認後只在
+staging 的 ephemeral 子目錄寫入逐股／合併 CSV 與 SQLite，結束後自動清除；正式 raw CSV
+以前後 SHA-256 驗證未變更。輸出會列出 CSV／SQLite 各 stage 的耗時、row count、hash、
+`database is locked` contention、serialized retry、cleanup 結果與
+`production_write_attempted=false`。這只能證明隔離 writer 邊界，不代表 production
+writer 已改造或授權提高 worker 數；在 broker rate-limit、取消／重試與 bounded worker
+acceptance 通過前，技術指標仍維持單一 worker。
+
 ### 4.4 技術指標
 
 - 「增量更新」：只處理新資料，日常首選；若單股指標已到最新股價日期會直接跳過，只有落後時才回看 120 個交易日重算重疊區間。
