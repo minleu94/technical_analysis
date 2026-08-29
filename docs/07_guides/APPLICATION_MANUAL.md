@@ -2011,6 +2011,18 @@ CLI 的 `--help` 與 JSON summary 會在可重設的 Windows stdout/stderr 上�
 
 `backfill_fundamental_statement_items.py --dry-run` 現在會將診斷輸出限制為前 20 筆，同時保留 `diagnostics`、`diagnostic_counts` 與 `missing_availability_count` 的完整數字；任何一筆缺 `available_date` 都會讓 `ready_for_apply=false`。這避免大量歷史 raw row 把 console 淹沒，也不會因截短顯示而誤放行 apply。只有 plan 的 `diagnostic_count=0`、`missing_availability_count=0` 且有 normalized records 時，才可進入既有明確 confirmation、備份與 apply 流程。dry-run 若已明確提供 `--raw-dir`／`--availability-file`，不會為了取得不使用的 DB／backup 預設值而初始化正式 `TWStockConfig`。
 
+不同月份或不同官方窗口可重複傳入 `--availability-file`，例如：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\backfill_fundamental_statement_items.py --dry-run `
+  --raw-dir D:\Min\Python\Project\FA_Data\financial_data `
+  --availability-file C:\Temp\mops_2024_03.csv `
+  --availability-file C:\Temp\mops_2024_04.csv `
+  --availability-file C:\Temp\mops_2024_05.csv
+```
+
+讀取器會忽略重複的完整列；若相同 `(stock_code, statement_type, period)` 出現不同公告／provenance，會保留 revision-chain 診斷並拒絕 apply，不猜測哪個窗口正確。這讓多路徑、分月補件能累積 coverage，同時維持正式 mapping／SQLite 的 fail-closed 邊界。
+
 季度財報 factor layer 已可用唯讀方式檢查：
 
 ```powershell
@@ -3248,6 +3260,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：MOPS 季報 availability CLI 新增 1–31 天分段 query 與最多 3 次 error-only retry；artifact manifest 保留每段 query window、attempt count 與前次錯誤碼，讓 MOPS 1,000 列上限及暫時網路錯誤可重試但仍可稽核，不把失敗誤標成官方無資料。
 - 2026-08-28：歷史 MOPS EZSearch row schema drift（例如缺 `CTIME`）改採逐列 quarantine；artifact 會保留 bounded invalid samples／完整錯誤計數並標成 `degraded`，不再因單一 malformed row 丟掉同一回應的有效列。
 - 2026-08-28：季度財報 backfill dry-run 新增完整 diagnostics／missing-availability 計數與 20 筆 bounded console 輸出；缺 `available_date` 仍 fail-closed，且明確提供 raw／availability 路徑時不初始化不必要的正式 config／log side effect。
+- 2026-08-28：季度財報 backfill CLI 支援重複 `--availability-file`；相同完整列去重、natural-key provenance 衝突由 revision validator fail-closed，允許多個官方窗口累積 coverage 而不覆蓋證據。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
