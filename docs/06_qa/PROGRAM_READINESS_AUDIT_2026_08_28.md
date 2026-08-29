@@ -647,6 +647,14 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 
 加入既有 2019-Q3～2024-Q1 candidate 與 retroactive baseline 後，hybrid planner dry-run 為 raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、`availability_file_count=21`，quality=`observed 670,943`／`degraded 974,612`。這仍未寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT 或 Formal gate；下一步先重跑 unified readiness，再決定是否繼續回溯 2019-Q2（2019-08）。
 
+## 歷史 MOPS coverage 延伸至 2019-Q1（2026-08-28）
+
+2019-08（主要對應 `2019-Q2`）以 7 天分段與最多 2 次 error-only retry 完成 80 個 bounded query：40 個有資料、40 個官方 `status=fail` 無資料、真正失敗=`0`，取得 `6,547` events／projections；4 筆缺 `CTIME` 的 row 逐列 quarantine，artifact 狀態=`degraded`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828_2019q2\mops_statement_availability_host_2019q2.json`（SHA-256=`1E75195DC2879A817C8BF0EAE6D3D65C7628F5023D23AEF875F727D5F7AA0F64`），mapping SHA-256=`A7993B5DEE511F1FFD5BECEFF5437F7923E6D2CD063F31BAD07739C5924FA13F`。`validate_statement_availability.py` 結果為 `valid=true`、accepted=`6,547`、diagnostics=`0`。
+
+2019-05（主要對應 `2019-Q1`）同樣完成 80 個 bounded query：40 個有資料、40 個官方無資料、真正失敗／invalid=`0`，取得 `6,136` events／projections，artifact 狀態=`ready`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828_2019q1\mops_statement_availability_host_2019q1.json`（SHA-256=`56F3B22AE5D3995F7B6B69C99E32B8C01E6EA5A0BB93A1B2785F061375C386EE`），mapping SHA-256=`D37DBF7262C23BAED91E108763142E78915CE3CFC817620FF07963DCD3C54750`。validator accepted=`6,136`、diagnostics=`0`。
+
+將兩份新 mapping 與既有 baseline／candidate 合併做 backfill dry-run 後，`availability_file_count=23`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、missing availability=`0`，quality=`observed 749,071`／`degraded 896,484`。候選 coverage 確實增加，但仍只作研究／稽核 evidence；沒有寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
