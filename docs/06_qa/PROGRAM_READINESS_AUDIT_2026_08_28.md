@@ -541,3 +541,24 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
 
 本次輸入校正後，P0 仍為 `action_required`（owner／license／publication／decision-time／downstream gate）；Evidence=`waiting_for_external_input`（`insufficient_weekly_history_records`、`formal_credit_not_authorized`）；Paper=`partial`（`paper_weekly_report_not_computable`）；Formal／ML=`action_required`（causal non-cash ledger、rule champion history、PIT sector membership、formal OOS）；Runtime／Update History=`ready`；performance=`partial`，只剩 `direct_chain_storage_preflight_blocked` 與 `technical_production_single_writer_canary_not_completed`。歷史 MOPS availability 仍是 TEMP candidate，不會被 readiness 自動採用或授予任何正式 credit。
+
+## Evidence pending sidecar approval input（2026-08-28）
+
+為了把「8 期 pending、等待具名 owner／reviewer」變成可直接交接的輸入，新增唯讀
+`scripts/build_evidence_weekly_approval_input.py`。它以 SQLite `mode=ro`／
+`PRAGMA query_only=ON` 讀取明確指定的 weekly collection sidecar，驗證每列的
+`collection_id`、期間、source path／SHA-256、payload 與錯誤欄位，再輸出獨立的
+`evidence-weekly-approval-input.v1` JSON（可選 Markdown）；不改 sidecar、不寫正式
+Evidence DB／Registry，也不產生 `approved-weekly-history-projection.v1`。
+
+本次 host read-only 輸出為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\evidence_weekly_approval_input_20260828.json`
+（檔案 SHA-256=`7B4EED12D7CD0C0CE43D8874092BF5F57604F5946306E668759121D07283D151`；
+封裝的 sidecar SHA-256=`sha256:68b9394cfdbbbf137c0d6fc04a8603b7460ddf1424b4f251f8693d0fe459603a`），
+共 `8` 筆 `pending_human_review`、`0` 筆 collection failure；packet status=
+`needs_named_owner_reviewer`，owner／reviewer／decision／reviewed_at／note 均刻意留白。
+即使帶入 `--owner-role`／`--reviewer-role` 也只會填入候選交接欄位，仍固定
+`formal_credit_authorized=false`、`production_scheduler_allowed=false`、
+`downstream_eligibility=none`、`candidate_only=true`、`write_performed=false`。
+只有外部人工完成逐期 review，並沿既有 governed path 另外產生相容的 approved projection，
+才可供 UI 揭露；本 packet 不得直接送入 Formal／scheduler。

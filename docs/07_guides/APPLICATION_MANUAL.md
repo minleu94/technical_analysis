@@ -2667,6 +2667,27 @@ Research Lab `Evidence Review` 分頁在 V1.4 新增「覆盤歷史」子頁，�
 Workbench 的證據門檻摘要會另外列出 sidecar 中仍為 `pending_human_review` 的期數與日期區間（最多預覽前三期），並同時顯示 `formal_credit_authorized=false`。因此 `3/3` 是已觀測／具名核准 projection 的數量，不代表 pending 週期已核准，也不代表 Formal 或 production scheduler 已開啟。
 若未設定該環境變數，Workbench 會在 warnings 與 weekly history 詳情明示 `approved_weekly_history_projection_not_configured`，並只計算正式 evidence DB 內可讀的 legacy review history；這不代表 projection 已自動核准，也不會把 pending sidecar 轉成 Gate credit。
 
+若 sidecar 已累積 `pending_human_review` 期段，可先用下列唯讀命令產生具名 owner／reviewer 的交接輸入包：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_evidence_weekly_approval_input.py `
+  --sidecar-path <WEEKLY_COLLECTION_SIDECAR_DB> `
+  --output-json <TEMP_APPROVAL_INPUT_JSON> `
+  --markdown-output <TEMP_APPROVAL_INPUT_MD> `
+  --owner-role <NAMED_OWNER_ROLE> `
+  --reviewer-role <NAMED_REVIEWER_ROLE>
+```
+
+這個命令只對明確指定的 sidecar 做 SQLite `mode=ro`／`PRAGMA query_only=ON` 讀取，驗證
+collection id、期間、來源路徑／SHA-256、payload 與錯誤欄位，並輸出
+`evidence-weekly-approval-input.v1`。輸出中的 owner／reviewer 只是交接欄位；即使填入角色，
+每列 `review_decision`、`reviewed_at` 與 `review_note` 仍需人工完成，packet 仍固定
+`candidate_only=true`、`formal_credit_authorized=false`、`production_scheduler_allowed=false`、
+`downstream_eligibility=none`、`write_performed=false`。不要把此檔案直接改名或送入
+`approved-weekly-history-projection.v1`／Formal loader；人工完成審核後，必須沿既有 governed
+path 另外產生相容的 approved projection。輸出路徑不可覆寫 sidecar、`twstock.db`，且 parent
+directory 必須先存在；此流程不寫 sidecar、正式 Evidence DB、Registry 或 scheduler。
+
 Report evidence boundary 固定為：This report is research evidence only. Close-to-close forward return is not executable live performance. No trading recommendation is produced.
 
 ### 9.9.2 V2.2 Weekly Review Runbook
@@ -3280,6 +3301,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2019-Q4；下一段仍以 2019-Q3 公告窗口為目標，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
 - 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2019-Q3；先重跑 unified readiness，再決定是否以 2019-Q2 公告窗口為下一段，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
 - 2026-08-28：歷史 MOPS candidate 回溯至 2019-Q3 後完成 unified readiness recheck；修正 baseline 輸入後只保留真實 blockers，availability candidate 仍不自動接入正式 mapping／SQLite、Formal 或 scheduler。
+- 2026-08-28：新增 `build_evidence_weekly_approval_input.py` 唯讀交接流程；可把 weekly sidecar 的 8 筆 `pending_human_review` 列整理成 `evidence-weekly-approval-input.v1`，供具名 owner／reviewer 逐期填寫，但不產生 approved projection、不授予 Formal credit、不寫 sidecar／正式 DB。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。

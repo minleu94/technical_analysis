@@ -231,6 +231,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_advice_policy.py": "service-oracle-research-backtest",
     "tests/test_collect_v2_2_weekly_evidence_cli.py": "service-oracle-research-backtest",
     "tests/test_evidence_weekly_collection_repository.py": "service-oracle-research-backtest",
+    "tests/test_evidence_weekly_approval_input.py": "governance-doc-tooling",
     "tests/test_paper_portfolio_baseline_cli.py": "service-oracle-research-backtest",
     "tests/test_paper_portfolio_baseline_service.py": "service-oracle-research-backtest",
     "tests/test_paper_portfolio_policy.py": "service-oracle-research-backtest",
