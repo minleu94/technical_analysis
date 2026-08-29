@@ -3275,6 +3275,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2021-Q1；下一段仍以 2020-Q4 公告窗口為目標，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
 - 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2020-Q4；下一段仍以 2020-Q3 公告窗口為目標，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
 - 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2020-Q3；下一段仍以 2020-Q2 公告窗口為目標，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
+- 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2020-Q2；下一段仍以 2020-Q1 公告窗口為目標，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
