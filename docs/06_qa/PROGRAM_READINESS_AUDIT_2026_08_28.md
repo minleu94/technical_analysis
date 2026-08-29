@@ -756,6 +756,46 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 
 將這份 candidate 加入既有季度 candidate、2024-Q1 相鄰窗口與 retroactive baseline 後，hybrid planner dry-run 為 `availability_file_count=28`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics／missing availability=`0`、quality=`observed 935,549`／`degraded 710,006`，`ready_for_apply=true`。相較 2018-Q1 盤點，observed coverage 再增加 `35,846` rows、degraded rows 減少 `35,846`；這只是候選 mapping 的 schema／整合可行性證明，沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
 
+## 歷史 MOPS coverage 擴充至 2017-Q3／Q2（2026-08-29）
+
+在同一個官方 MOPS EZSearch 路徑上再往前取得兩個公告窗口，仍採雙市場／四個
+statement item、7 天分段與最多 2 次 error-only retry：
+
+- 2017-11（主要對應 `2017-Q3`）：40 個 query 有資料、40 個官方無資料、真正失敗=`0`，
+  取得 `6,135` events／projections、invalid=`0`，artifact 狀態=`ready`；artifact=
+  `C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2017q3_host_retry\mops_statement_availability_host_2017q3.json`
+  （SHA-256=`550B62ABB9908B28322611C1B2A625417739ECCFBE3A8EAE21D501F01FA2B680`），mapping SHA-256=
+  `2EDCB871C54BD4F3ECE25F7A706537B054A55F9DBD5200961073770E57AC7F09`；validator `valid=true`、
+  accepted=`6,135`、diagnostics=`0`。
+- 2017-08（主要對應 `2017-Q2`）：40 個 query 有資料、40 個官方無資料、真正失敗=`0`，
+  取得 `6,379` events／projections、invalid=`0`，artifact 狀態=`ready`；artifact=
+  `C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2017q2_host\mops_statement_availability_host_2017q2.json`
+  （SHA-256=`2AF4AB55977985C478BDA61C1B942C697FA40F0C0922D0FBF2978ED135D5758D`），mapping SHA-256=
+  `1E893F0B50CA2FD8E9B12F44D1BA5B3647D1CA5981282BDF1A2382B96AEACD2F`；validator `valid=true`、
+  accepted=`6,379`、diagnostics=`0`。
+
+將這兩份 candidate 與既有 28 份 candidate 及 retroactive baseline 一起做唯讀 hybrid
+planner，結果為 `availability_file_count=30`、raw／normalized=`1,645,555 / 1,645,555`、
+diagnostics／missing availability=`0`、quality=`observed 1,012,777`／`degraded 632,778`，
+`ready_for_apply=true`。這是可追溯的官方公告 coverage 增量，不是 source acceptance 或歷史
+PIT；沒有套用正式 mapping／SQLite，也沒有解除 P0、Formal、owner 或 scheduler gate。
+
+## 歷史 MOPS coverage 擴充至 2017-Q1（2026-08-29）
+
+2017-05（主要對應 `2017-Q1`）完成 36 個有資料、44 個官方無資料的 bounded query，
+真正失敗=`0`，取得 `6,132` events／projections、invalid=`0`，artifact 狀態=`ready`；
+artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2017q1_host\mops_statement_availability_host_2017q1.json`
+（SHA-256=`08D6F7F0A94DABF456CE49D9D1CB1225A7048016BCA2F86EAF200F58F4CBB1F7`），mapping SHA-256=
+`EA3E537DE36BCEAB949CD46DAE978307A3B1F2C4F9961AC796058B7DF82EAE29`；validator `valid=true`、
+accepted=`6,132`、diagnostics=`0`。
+
+將這份 candidate 與前述 30 份 candidate 及 retroactive baseline 做唯讀 hybrid planner，
+結果為 `availability_file_count=31`、raw／normalized=`1,645,555 / 1,645,555`、
+diagnostics／missing availability=`0`、quality=`observed 1,051,070`／`degraded 594,485`，
+`ready_for_apply=true`。這仍只是 official announcement candidate coverage；沒有套用正式
+mapping／SQLite，也不解除 P0 acceptance、license／owner decision、歷史 PIT、Formal 或
+scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
