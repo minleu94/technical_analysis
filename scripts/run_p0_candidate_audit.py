@@ -493,7 +493,10 @@ def _validate_mops_ezsearch_availability_artifact(
     manifest = payload.get("query_manifest")
     if not isinstance(manifest, list) or not manifest:
         raise ValueError("MOPS EZSearch availability query manifest is required")
-    manifest_hashes: dict[tuple[str, str], str] = {}
+    manifest_hashes: dict[tuple[str, str], set[str]] = {}
+    windowed_routes: set[tuple[str, str]] = set()
+    legacy_routes: set[tuple[str, str]] = set()
+    seen_windows: set[tuple[str, str, date, date]] = set()
     for raw_manifest_item in manifest:
         if not isinstance(raw_manifest_item, Mapping):
             raise ValueError("MOPS EZSearch availability manifest item must be an object")
@@ -512,9 +515,46 @@ def _validate_mops_ezsearch_availability_artifact(
         ):
             raise ValueError("MOPS EZSearch availability manifest lineage is invalid")
         route_key = (market, announcement_item)
-        if route_key in manifest_hashes:
-            raise ValueError("MOPS EZSearch availability manifest route is duplicated")
-        manifest_hashes[route_key] = f"sha256:{response_sha256.lower()}"
+        has_window_start = "query_start_date" in raw_manifest_item
+        has_window_end = "query_end_date" in raw_manifest_item
+        if has_window_start != has_window_end:
+            raise ValueError(
+                "MOPS EZSearch availability manifest query window is incomplete"
+            )
+        if has_window_start:
+            try:
+                window_start = date.fromisoformat(
+                    str(raw_manifest_item["query_start_date"])
+                )
+                window_end = date.fromisoformat(
+                    str(raw_manifest_item["query_end_date"])
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "MOPS EZSearch availability manifest query window is invalid"
+                ) from exc
+            if window_end < window_start:
+                raise ValueError(
+                    "MOPS EZSearch availability manifest query window is reversed"
+                )
+            if route_key in legacy_routes:
+                raise ValueError(
+                    "MOPS EZSearch availability manifest mixes windowed and legacy routes"
+                )
+            windowed_routes.add(route_key)
+            window_key = (market, announcement_item, window_start, window_end)
+            if window_key in seen_windows:
+                raise ValueError(
+                    "MOPS EZSearch availability manifest query window is duplicated"
+                )
+            seen_windows.add(window_key)
+        else:
+            if route_key in legacy_routes or route_key in windowed_routes:
+                raise ValueError("MOPS EZSearch availability manifest route is duplicated")
+            legacy_routes.add(route_key)
+        manifest_hashes.setdefault(route_key, set()).add(
+            f"sha256:{response_sha256.lower()}"
+        )
     normalized_rows: list[Mapping[str, Any]] = []
     for raw_row in rows:
         if not isinstance(raw_row, Mapping):
@@ -553,14 +593,22 @@ def _validate_mops_ezsearch_availability_artifact(
             str(raw_row["market"]).strip(),
             str(raw_row["announcement_item"]).strip(),
         )
-        expected_source_hash = manifest_hashes.get(lineage_key)
-        if expected_source_hash is None:
+        expected_source_hashes = manifest_hashes.get(lineage_key)
+        if not expected_source_hashes:
             raise ValueError("MOPS EZSearch availability row has no manifest lineage")
         row_source_hash = raw_row.get("source_hash")
-        if row_source_hash is not None and row_source_hash != expected_source_hash:
+        if row_source_hash is not None and row_source_hash not in expected_source_hashes:
             raise ValueError("MOPS EZSearch availability source hash mismatch")
+        if row_source_hash is None:
+            if len(expected_source_hashes) != 1:
+                raise ValueError(
+                    "MOPS EZSearch availability row needs source hash for windowed lineage"
+                )
+            normalized_source_hash = next(iter(expected_source_hashes))
+        else:
+            normalized_source_hash = str(row_source_hash)
         normalized_rows.append(
-            {**dict(raw_row), "source_hash": expected_source_hash}
+            {**dict(raw_row), "source_hash": normalized_source_hash}
         )
     expected_projections = build_availability_projection(normalized_rows)
     if projections != expected_projections and not _matches_legacy_mops_projection(

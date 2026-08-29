@@ -246,6 +246,107 @@ def test_mops_ezsearch_availability_artifact_closes_missing_artifact_only() -> N
     assert payload["formal_oos_allowed"] is False
 
 
+def test_mops_ezsearch_windowed_manifest_is_accepted_with_per_window_lineage() -> None:
+    first_row = {
+        "CDATE": "115/07/27",
+        "CTIME": "14:43:02",
+        "TYPEK": "上市",
+        "COMPANY_ID": "2330",
+        "COMPANY_NAME": "台積電",
+        "CODE_NAME": "半導體業",
+        "AN_CODE": "F26",
+        "AN_NAME": "資產負債表",
+        "SUBJECT": "115年第2季資產負債表",
+        "HYPERLINK": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb03?co_id=2330",
+    }
+    second_row = {**first_row, "CDATE": "115/07/28", "CTIME": "09:10:11"}
+    artifact = build_statement_availability_artifact(
+        (
+            MOPSQueryResult(
+                market="sii",
+                announcement_item="F26",
+                rows=(first_row,),
+                response_sha256="a" * 64,
+                source_status="success",
+                query_start_date=date(2026, 7, 27),
+                query_end_date=date(2026, 7, 27),
+            ),
+            MOPSQueryResult(
+                market="sii",
+                announcement_item="F26",
+                rows=(second_row,),
+                response_sha256="b" * 64,
+                source_status="success",
+                query_start_date=date(2026, 7, 28),
+                query_end_date=date(2026, 7, 28),
+            ),
+        ),
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-29T00:00:00+08:00",
+    )
+
+    payload = build_p0_candidate_audit(
+        date(2026, 7, 28),
+        probe_report={**_probe_report(), "probe_date": "2026-07-28"},
+        mops_quarterly_artifact=artifact,
+    )
+
+    pit = next(
+        item
+        for item in payload["items"]
+        if item["source_id"] == "pit.quarterly_financials"
+    )
+    assert pit["audit_status"] == "observed_candidate"
+    assert pit["row_count"] == 1
+    assert pit["blockers"] == ["research_only_not_source_accepted"]
+
+
+def test_mops_ezsearch_duplicate_window_is_rejected() -> None:
+    row = {
+        "CDATE": "115/07/27",
+        "CTIME": "14:43:02",
+        "TYPEK": "上市",
+        "COMPANY_ID": "2330",
+        "COMPANY_NAME": "台積電",
+        "CODE_NAME": "半導體業",
+        "AN_CODE": "F26",
+        "AN_NAME": "資產負債表",
+        "SUBJECT": "115年第2季資產負債表",
+        "HYPERLINK": "https://mopsov.twse.com.tw/mops/web/ajax_t164sb03?co_id=2330",
+    }
+    artifact = build_statement_availability_artifact(
+        (
+            MOPSQueryResult(
+                market="sii",
+                announcement_item="F26",
+                rows=(row,),
+                response_sha256="a" * 64,
+                source_status="success",
+                query_start_date=date(2026, 7, 27),
+                query_end_date=date(2026, 7, 27),
+            ),
+            MOPSQueryResult(
+                market="sii",
+                announcement_item="F26",
+                rows=(),
+                response_sha256="b" * 64,
+                source_status="success",
+                query_start_date=date(2026, 7, 27),
+                query_end_date=date(2026, 7, 27),
+            ),
+        ),
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 27),
+        captured_at="2026-07-28T00:00:00+08:00",
+    )
+
+    from scripts.run_p0_candidate_audit import _validate_mops_quarterly_artifact
+
+    with pytest.raises(ValueError, match="query window is duplicated"):
+        _validate_mops_quarterly_artifact(artifact)
+
+
 def test_mops_ezsearch_legacy_v1_artifact_is_revalidated_in_memory() -> None:
     artifact = build_statement_availability_artifact(
         (
