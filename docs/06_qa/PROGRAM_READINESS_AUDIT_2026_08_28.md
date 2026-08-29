@@ -683,6 +683,12 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 
 將這份 candidate 加入既有季度 candidate、2024-Q1 相鄰窗口與 retroactive baseline 後，hybrid planner dry-run 為 `availability_file_count=26`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics／missing availability=`0`、quality=`observed 861,928`／`degraded 783,627`，`ready_for_apply=true`。相較 2018-Q3 盤點，observed coverage 再增加 `39,431` rows、degraded rows 減少 `39,431`；這只是候選 mapping 的 schema／整合可行性證明，沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
 
+## 歷史 MOPS coverage 擴充至 2018-Q1（2026-08-29）
+
+2018-05（主要對應 `2018-Q1`）完成 40 個 7 天 bounded query：40 個有資料、官方無資料／真正失敗=`0`，取得 `6,051` events／projections；8 筆缺 `CTIME` 的 row 逐列 quarantine，artifact 狀態=`degraded`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2018q1\mops_statement_availability_host_2018q1.json`（SHA-256=`6AAC50F6FBC5FAD0B23B2691F7A7388AED4E453B3249A4523679E7D092AC361F`），mapping SHA-256=`E77C83AE9D1489968F7428E86DF46AB2398C4B1AA40DF833503F37BC3FC550BD`。`validate_statement_availability.py` 結果為 `valid=true`、accepted=`6,051`、diagnostics=`0`。
+
+將這份 candidate 加入既有季度 candidate、2024-Q1 相鄰窗口與 retroactive baseline 後，hybrid planner dry-run 為 `availability_file_count=27`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics／missing availability=`0`、quality=`observed 899,703`／`degraded 745,852`，`ready_for_apply=true`。相較 2018-Q2 盤點，observed coverage 再增加 `37,775` rows、degraded rows 減少 `37,775`；這只是候選 mapping 的 schema／整合可行性證明，沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
