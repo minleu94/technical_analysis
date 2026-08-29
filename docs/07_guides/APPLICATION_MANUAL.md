@@ -272,6 +272,26 @@ alpha=`0` 與 broker disabled 仍不變，後續仍需 owner 的 future activati
 `scripts\inspect_formal_input_candidates.py --candidate-root <CANDIDATE_ROOT> --output <INVENTORY_JSON>`。
 這個盤點器只讀 bounded 的 `manifest.json`（預設最多 512 份），以固定 allowlist 投影 schema／日期／安全旗標並計算 manifest hash；會將檔案分為 `research_only`、`prospective_only`、`formal_schema_candidate` 或 `other`，也會明示 invalid／超過上限的項目。它不讀資料列、不執行 formal loader、不改環境變數，且報告必須寫在候選根目錄之外；`formal_ready_input_count` 永遠不由此工具升格，仍須由 owner-controlled publisher 產出三份正式 manifest，再重跑本節的 readiness check。
 
+若需要把上述 bounded inventory 交給具名 owner／reviewer 逐項處理，可再執行下列唯讀 packet
+builder（輸出 JSON／Markdown 的 parent directory 必須先存在，且不可位於 candidate root）：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_formal_input_owner_packet.py `
+  --inventory-path <FORMAL_CANDIDATE_INVENTORY_JSON> `
+  --output-json <TEMP_OWNER_PACKET_JSON> `
+  --markdown-output <TEMP_OWNER_PACKET_MD> `
+  --owner-role <NAMED_OWNER_ROLE> `
+  --reviewer-role <NAMED_REVIEWER_ROLE>
+```
+
+它只讀取 `ml-formal-input-candidate-inventory.v1`，為 causal portfolio ledger、formal
+Rule Champion history、PIT sector membership 三項 expected schema 建立 review record，
+並保留 bounded candidate path／manifest hash／lane／原因。即使填入 owner／reviewer 角色，
+`owner_decision`、selected／published path 與 custody 仍須人工處理；packet 固定
+`formal_ready_input_count=0`、`formal_oos_allowed=false`、`candidate_only=true`、
+`write_performed=false`，不會寫正式 path、改名／複製 research／prospective artifact 或
+授予 Formal／promotion／broker credit。完成外部出版後，才可用本節 readiness CLI 重新驗證。
+
 Readiness inspector 也會在每項結果標示 `expected_schema_version`。若明確 path 指向
 `prospective-formal-*`、`*-prospective-*`、`consumer_mode=prospective_formal_simulation` 或
 `scope=prospective_only` 的 wrapper，結果會是
@@ -3326,6 +3346,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：MOPS 歷史 candidate 回溯再延伸至 2019-Q3；先重跑 unified readiness，再決定是否以 2019-Q2 公告窗口為下一段，所有查詢保持 31 天上限、7 天分段、bounded retry 與 candidate-only 輸出。
 - 2026-08-28：歷史 MOPS candidate 回溯至 2019-Q3 後完成 unified readiness recheck；修正 baseline 輸入後只保留真實 blockers，availability candidate 仍不自動接入正式 mapping／SQLite、Formal 或 scheduler。
 - 2026-08-28：新增 `build_evidence_weekly_approval_input.py` 唯讀交接流程；可把 weekly sidecar 的 8 筆 `pending_human_review` 列整理成 `evidence-weekly-approval-input.v1`，供具名 owner／reviewer 逐期填寫，但不產生 approved projection、不授予 Formal credit、不寫 sidecar／正式 DB。
+- 2026-08-28：新增 `build_formal_input_owner_packet.py` 唯讀 owner handoff；將 bounded Formal candidate inventory 整理成 `formal-input-owner-review.v1`，讓三項 expected input 有具名 owner／reviewer review slot 與 bounded candidate metadata；不選 candidate、不發布正式 manifest、不授予 Formal／promotion／broker credit。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。

@@ -56,6 +56,34 @@ period 自動推導、snapshot 缺邊界或數量不一致會回 `needs_review`�
 則回 `rejected`。`ready` 也不會自動 append，仍需沿既有 `append_paper_trade_csv.py`
 的明確 confirm 與 source hash recheck；工具不從 snapshot、market price 或 virtual trace 反推 fills。
 
+## Formal／ML input owner packet（2026-08-28）
+
+Formal candidate inventory 已在明確的 output root 做 bounded、只讀 manifest 盤點：實際
+`511` 份 manifest 解析成功、`1` 份略過、掃描達上限而 `truncated=true`；candidate input
+counts 為 causal portfolio ledger=`3`、PIT sector membership=`1`、formal Rule Champion=`0`。
+這些檔案主要是 research／prospective／other lane，沒有任何一項可直接當作正式 Formal
+input。
+
+新增 `scripts/build_formal_input_owner_packet.py`，從該 inventory 產生
+`formal-input-owner-review.v1`。packet 為三項 expected input 各建立具名 owner／reviewer
+審核欄位，僅保留 bounded path、manifest hash、lane、原因與安全投影；它不讀資料列、不選
+candidate、不改名或複製 artifact、不寫 `BALDR_ML_FORMAL_*` path，也不把 prospective／
+research bytes 發布成正式 input。輸出必須放在 candidate root 外，且只允許明確既有 parent
+directory。
+
+本次實際 packet 為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\formal_input_owner_packet_20260828.json`
+（SHA-256=`FE53E4045F9E634B25DB340EE3F3710A8B0E11A316EB85F0D4CDD874B1F6EB36`），所依 inventory
+SHA=`sha256:700b5e61a1c537e23166e51a0c6f98f493f6d44b7145dc524c800267cd3bc7d8`。packet status=
+`needs_named_owner_reviewer`、formal ready=`0/3`、`formal_oos_allowed=false`、
+`candidate_only=true`、`write_performed=false`；三筆 review record 的 owner decision、
+published formal path 與 custody id 都仍是 pending／空白。這只是把「候選目錄裡有什麼」
+轉成可交接的外部輸入清單，不增加任何 Evidence、Formal、promotion 或 broker credit。
+
+下一步必須由具名 owner／reviewer 依各 contract 產出三份 owner-controlled expected schema
+manifest，再重跑 `inspect_ml_formal_input_readiness.py` 驗證 hash、PIT、cutoff、chain 與
+custody；不能直接把本 packet 或其中 candidate 改名成正式 input。
+
 本輪 UI／資料更新回歸也已重跑：`tests/test_ui_qt_update_view_workbench.py` 為 `79 passed`，`scripts/qa_validate_update_tab.py` 為 `23 passed / 0 failed / 4 skipped`，全域 `mypy` 檢查 `522 source files` 無 error。這證明資料更新顯示與唯讀 readiness 投影沒有因本輪資料 candidate 擴充而退化，但不會替 pending weekly review 產生核准事實。
 
 P0 license／terms 的候選證據入口也已完成：`scripts/capture_p0_license_evidence.py` 會從 27 條 route 收斂 3 個唯一 allowlisted 官方 URL，僅保留 bounded response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不改 source acceptance。2026-08-28 已產生 no-network preview；同日嘗試受控 bounded GET 時，當前 Windows host 以 `WinError 10013` 拒絕 socket，因此三個 target 都被保留為 `transport_error`。這是本機 egress／權限證據，不是官方來源不存在；需在允許 HTTPS 的執行環境重跑，或由 Owner／Reviewer 提供可驗證的外部保存頁面 hash，才能進入 license review。

@@ -428,6 +428,12 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 - Rule Champion identity 已接受，但三份 clock-bound formal inputs 仍為 `0/3`，controlled path 缺件與 T-1 `2026-08-24` market rows 使 strict readiness fail-closed；不得 partial start、回填或把 staging／fixture 當成 Formal evidence。
 - 本週狀態、source hashes、測試與未通過 gates 見 [Prospective Formal Restart Weekly Update](../06_qa/PROSPECTIVE_FORMAL_RESTART_WEEKLY_UPDATE_2026_08_25.md)；本段不代表 Formal OOS、promotion、broker 或 weekly gate credit。
 
+### 2026-08-28 owner handoff preparation
+
+- Formal candidate inventory 實際解析 `511` 份 manifest、略過 `1` 份並因 bounded 上限保留 `truncated=true`；candidate input counts 為 causal=`3`、PIT sector=`1`、formal Rule=`0`，沒有任何一項可直接消費為正式 input。
+- 新增 `scripts/build_formal_input_owner_packet.py` 與 `formal-input-owner-review.v1` 只讀 packet，為三項 expected input 建立具名 owner／reviewer review slot，保留 bounded manifest identity／原因；packet 不選 candidate、不寫 controlled path、不把 research／prospective artifact 改名成 Formal。
+- 實際 packet status=`needs_named_owner_reviewer`、formal ready=`0/3`、`formal_oos_allowed=false`、`candidate_only=true`；下一步是 owner-controlled publisher 產出三份 expected schema manifest，再重跑正式 readiness。這是可持續的 handoff 工程化，不折抵 Formal OOS、promotion 或 broker gate。
+
 ### Entry Conditions
 
 - Gate 5 對 rule score、bucket、component、label 與 metric 已可判讀。
@@ -485,6 +491,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 ## 更新記錄
 
 - 2026-08-28：新增唯讀 `scripts/qa_technical_indicator_latency.py`、full-batch／isolated writer、real calculator staging process-pool、worker crash recovery／queued cancellation、parent single-writer integration staging 與 broker 離線 bounded-fetch acceptance probes；Broker CSV writer 加上 process-local single-writer lock。technical／broker pool 目前只在 protected-root 外 staging 以 bounded in-flight、retry、parent single writer 與 fail-closed checks 證明形狀；technical batch 的 production feature flag／scheduler lifecycle 已接上且預設關閉，真實 broker／Selenium 平行抓取仍未啟用；後續須補 owner-approved backup／rollback、technical canary 與真實 broker canary／rate-limit evidence。
+- 2026-08-28：新增 `build_formal_input_owner_packet.py` 唯讀 owner handoff；從 bounded Formal candidate inventory 產生 `formal-input-owner-review.v1`，固定三項 expected input 的 owner／reviewer review slot 與 candidate metadata，輸出只能位於候選根目錄外，且固定 `formal_ready_input_count=0`、`formal_oos_allowed=false`、`candidate_only=true`、`write_performed=false`。這把候選盤點轉成可交接清單，但不選 candidate、不發布正式 manifest、不授予 Formal／promotion／broker credit。
 - 2026-08-28：Data Update quick runner 新增 `data-update-status-history.v1` append-only JSONL（`--history-path`，預設與 latest status 同目錄），UpdateView 時間軸新增最近執行歷史表；只保存真實 runner 的 running／terminal status 摘要，既有 latest 不回填，未改資料、Evidence、Formal、scheduler 或 broker 邊界。
 - 2026-08-27：新增 `scripts/append_source_acceptance_decision.py` 的 preview／明確確認 append foundation；applying decision 必須綁定 `ready_for_owner_review` intake 與 evidence ids，registry 只能位於 `DATA_ROOT` 之外，且 append 不改變 downstream／formal／scheduler／broker fail-closed 邊界。
 - 2026-08-27：Update 大型每日合併與 SQLite CSV 匯出改用 `ProgressTaskWorker` 與批次進度回報；合併回報檔案／讀取批次／整合檔 chunk，匯出先以 query-only count 建立預估筆數並回報已處理筆數。取消仍維持檔案／資料批次安全邊界，不改變原子提交與既有資料保留規則；合併新增單檔內讀取批次取消檢查，仍不做逐列中斷。
