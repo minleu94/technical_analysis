@@ -153,6 +153,10 @@ performance lane=`partial`，owner packet=`needs_named_owner_reviewer`、review 
 因此 Data Update／Research Console 不會把 evidence payload 的前後空白誤顯示成縮排或重複提示；
 這是唯讀 presentation 修正，未改變 artifact 內容的 machine token、任何 gate 或寫入邊界。
 
+修正後以同一組 host 輸入重新產生唯讀完整 readiness：
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_with_performance_owner_packet_full_normalized_20260828.json`
+（status=`action_required`；SHA-256=`4228BEE700F95DF76B3576099A9786AE40A58168AE040FDB03AFA6A27E5B2440`）。七個 lane 狀態與前版一致，逐 lane blocker／next action 前後空白檢查為 `0`；owner packet 仍為 `needs_named_owner_reviewer`、待處理 `3/4`，沒有因顯示修正而開啟任何正式寫入或授權。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
