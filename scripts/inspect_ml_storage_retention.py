@@ -17,6 +17,12 @@ import sys
 import tempfile
 from typing import Any, Iterable
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from runtime.console_encoding import configure_utf8_console
+
 
 SCHEMA_VERSION = "ml-storage-retention-inventory.v1"
 DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
@@ -413,6 +419,7 @@ def _render_markdown(report: dict[str, Any]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_utf8_console()
     args = _parser().parse_args(argv)
     report = inspect_storage_retention(
         args.root,

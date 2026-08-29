@@ -210,6 +210,20 @@ performance lane=`partial`，owner packet=`needs_named_owner_reviewer`、review 
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_with_performance_owner_packet_full_normalized_20260828.json`
 （status=`action_required`；SHA-256=`4228BEE700F95DF76B3576099A9786AE40A58168AE040FDB03AFA6A27E5B2440`）。七個 lane 狀態與前版一致，逐 lane blocker／next action 前後空白檢查為 `0`；owner packet 仍為 `needs_named_owner_reviewer`、待處理 `3/4`，沒有因顯示修正而開啟任何正式寫入或授權。
 
+## Capacity／production canary continuation（2026-08-29）
+
+第三個順序先做唯讀容量與 canary 邊界確認。Direct/OOC 目前仍配置在 `D:`，host
+`free_bytes=6,564,560,896`（約 `6.11 GiB`），低於既定 `21,474,836,480` bytes（20 GiB）
+headroom；`E:` 雖有約 `456.50 GiB` 可用，但尚未有 owner 核准的 archive／relocation、custody、
+ACL 或 pointer 變更計畫，因此不能自行把輸出改接到另一顆磁碟，也不能刪除／搬移 immutable run。
+
+本輪也修正 `scripts/inspect_ml_storage_retention.py` 在 Windows CP1252 執行 `--help` 時的
+UnicodeEncodeError：現在 parser 前會以 shared console guard 設定 UTF-8；定向測試為
+`5 passed`，直接 `--help` 可正常顯示繁中。這只改善容量診斷可見性，不改 preflight 門檻或清理權限。
+正式 technical production canary 仍沒有執行：因 D 槽容量不足，guarded entry 不建立 backup、
+不啟動 writer；production single-writer、backup／rollback、broker pool 及 scheduler governance
+均維持關閉，待 owner 提供容量處置與 canary 核准後才可繼續。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的

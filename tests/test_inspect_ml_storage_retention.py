@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import io
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -108,3 +110,20 @@ def test_inventory_rejects_output_outside_temp(tmp_path: Path) -> None:
                 str(output),
             ]
         )
+
+
+def test_cli_help_reconfigures_windows_console_before_argparse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chinese storage help must remain printable on a cp1252 Windows host."""
+
+    payload = io.BytesIO()
+    stream = io.TextIOWrapper(payload, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    stream.flush()
+    assert exc_info.value.code == 0
+    assert "唯讀" in payload.getvalue().decode("utf-8")
