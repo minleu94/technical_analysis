@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+import io
 import json
 from pathlib import Path
 import sqlite3
+import sys
+
+import pytest
 
 from scripts.run_paper_portfolio_daily import (
     _latest_reached_decision_at,
@@ -130,6 +134,25 @@ def test_scheduled_default_decision_rejects_naive_clock() -> None:
         assert "timezone" in str(exc)
     else:
         raise AssertionError("naive scheduler clock must fail closed")
+
+
+def test_cli_help_reconfigures_windows_console_before_argparse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chinese CLI help must remain printable on a cp1252 Windows host."""
+
+    from scripts.run_paper_portfolio_daily import main
+
+    payload = io.BytesIO()
+    stream = io.TextIOWrapper(payload, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    stream.flush()
+    assert exc_info.value.code == 0
+    assert "嚴格" in payload.getvalue().decode("utf-8")
 
 
 def test_future_decision_does_not_initialize_or_append_paper_ledger(

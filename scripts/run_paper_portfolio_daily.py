@@ -36,6 +36,7 @@ from data_module.config import TWStockConfig  # noqa: E402
 from data_module.official_trading_calendar import (  # noqa: E402
     OfficialTradingCalendar,
 )
+from runtime.console_encoding import configure_utf8_console  # noqa: E402
 
 
 TAIPEI = ZoneInfo("Asia/Taipei")
@@ -378,6 +379,10 @@ def _atomic_write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # argparse renders the Chinese module docstring for ``--help`` before any
+    # work starts; configure the Windows console first so cp1252 hosts do not
+    # fail before the paper runner can report its guarded status.
+    configure_utf8_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--state-db", type=Path)

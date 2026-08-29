@@ -3387,6 +3387,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：P0 條款候選證據若同一來源的多個官方 URL 出現「部分成功、部分失敗」，Data Update／Research Console 改顯示 `capture_partial` 與「部分取得，仍需複核」，保留已取得 hash 與失敗原因；這只修正可觀測性，不改變 `license_accepted=false` 或下游資格。
 - 2026-08-28：P0 bounded probe／owner packet 新增受限的 HTTP `Date`、`Last-Modified`、`ETag` 與 `Content-Type` transport evidence（含 fallback lineage）；這些欄位只供診斷與 owner review，永遠不會升格為 publication／PIT timestamp，也不會複製敏感 header。
 - 2026-08-28：MOPS 季報 availability CLI 啟動時先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `--help` 或輸出繁中 summary 不再因 `UnicodeEncodeError` 中止，且不改變查詢、候選輸出或正式 gate。
+- 2026-08-29：Paper Portfolio daily CLI 啟動時也先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `scripts/run_paper_portfolio_daily.py --help` 或顯示繁中受控狀態時不再因 `UnicodeEncodeError` 中止，且不改變 snapshot、ledger、正式行情 DB 或 broker 邊界。
 - 2026-08-28：MOPS 季報 availability CLI 新增 1–31 天分段 query 與最多 3 次 error-only retry；artifact manifest 保留每段 query window、attempt count 與前次錯誤碼，讓 MOPS 1,000 列上限及暫時網路錯誤可重試但仍可稽核，不把失敗誤標成官方無資料。
 - 2026-08-28：歷史 MOPS EZSearch row schema drift（例如缺 `CTIME`）改採逐列 quarantine；artifact 會保留 bounded invalid samples／完整錯誤計數並標成 `degraded`，不再因單一 malformed row 丟掉同一回應的有效列。
 - 2026-08-28：季度財報 backfill dry-run 新增完整 diagnostics／missing-availability 計數與 20 筆 bounded console 輸出；缺 `available_date` 仍 fail-closed，且明確提供 raw／availability 路徑時不初始化不必要的正式 config／log side effect。
