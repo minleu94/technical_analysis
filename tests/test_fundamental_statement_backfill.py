@@ -61,6 +61,7 @@ def test_plan_statement_items_backfill_builds_records(tmp_path):
     assert len(plan.records) == 1
     assert plan.records[0].item_code == "EPS"
     assert plan.records[0].quality.value == "degraded"
+    assert plan.quality_summary == {"degraded": 1}
 
 
 def test_apply_statement_items_backfill_inserts_records_and_backs_up_db(tmp_path):

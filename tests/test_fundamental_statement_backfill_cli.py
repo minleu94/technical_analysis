@@ -38,6 +38,7 @@ def test_statement_backfill_cli_dry_run_reports_plan(tmp_path, capsys):
     assert "ready_for_apply: true" in output
     assert "normalized_record_count: 1" in output
     assert "diagnostics: 0" in output
+    assert "quality_counts: degraded=1" in output
 
 
 def test_statement_backfill_cli_combines_repeated_availability_files(tmp_path, capsys):
@@ -90,6 +91,7 @@ def test_statement_backfill_cli_combines_repeated_availability_files(tmp_path, c
     assert "availability_file_count: 2" in output
     assert "normalized_record_count: 2" in output
     assert "diagnostics: 0" in output
+    assert "quality_counts: degraded=2" in output
 
 
 def test_statement_backfill_cli_apply_requires_confirm(tmp_path, capsys):

@@ -38,11 +38,13 @@ class StatementItemsBackfillPlan:
     diagnostic_count: int = 0
     diagnostic_counts: tuple[tuple[str, int], ...] = ()
     missing_availability_count: int = 0
+    quality_counts: tuple[tuple[str, int], ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "records", tuple(self.records))
         object.__setattr__(self, "diagnostics", tuple(self.diagnostics))
         object.__setattr__(self, "diagnostic_counts", tuple(self.diagnostic_counts))
+        object.__setattr__(self, "quality_counts", tuple(self.quality_counts))
         if self.diagnostic_count < len(self.diagnostics):
             object.__setattr__(self, "diagnostic_count", len(self.diagnostics))
         if self.diagnostic_count < 0 or self.missing_availability_count < 0:
@@ -60,6 +62,10 @@ class StatementItemsBackfillPlan:
     def diagnostic_summary(self) -> Mapping[str, int]:
         return dict(self.diagnostic_counts)
 
+    @property
+    def quality_summary(self) -> Mapping[str, int]:
+        return dict(self.quality_counts)
+
     def to_markdown(self) -> str:
         lines = [
             "# Statement Items Backfill Plan",
@@ -74,6 +80,11 @@ class StatementItemsBackfillPlan:
             lines.append(
                 "- diagnostic_counts: "
                 + ", ".join(f"{code}={count}" for code, count in self.diagnostic_counts)
+            )
+        if self.quality_counts:
+            lines.append(
+                "- quality_counts: "
+                + ", ".join(f"{quality}={count}" for quality, count in self.quality_counts)
             )
         if len(self.diagnostics) < self.diagnostic_count:
             lines.append(f"- diagnostics_shown: {len(self.diagnostics)} (bounded)")
@@ -146,6 +157,9 @@ def plan_statement_items_backfill(
         diagnostic_count=diagnostic_count,
         diagnostic_counts=tuple(sorted(diagnostic_counts.items())),
         missing_availability_count=missing_availability_count,
+        quality_counts=tuple(
+            sorted(Counter(record.quality.value for record in records).items())
+        ),
     )
 
 
