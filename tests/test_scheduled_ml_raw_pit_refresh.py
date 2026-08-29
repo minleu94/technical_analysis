@@ -326,6 +326,57 @@ def test_main_records_upstream_block_without_running_builder(
     assert payload["status"] == "blocked_upstream_not_ready"
 
 
+def test_main_blocks_before_builder_when_storage_is_below_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root = tmp_path / "FA_Data"
+    output_root = data_root / "output"
+    _write_freshness_status(output_root)
+    monkeypatch.setattr(
+        runner,
+        "_taipei_now",
+        lambda: datetime(2026, 8, 12, 12, 0, tzinfo=_TAIPEI),
+    )
+    monkeypatch.setattr(
+        runner.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(total=100, used=95, free=5),
+    )
+    builder_called = False
+
+    def fail_builder(*_args: object, **_kwargs: object) -> None:
+        nonlocal builder_called
+        builder_called = True
+        raise AssertionError("builder must not run without filesystem headroom")
+
+    monkeypatch.setattr(runner.subprocess, "run", fail_builder)
+
+    exit_code = runner.main(
+        [
+            "--data-root",
+            str(data_root),
+            "--output-root",
+            str(output_root),
+            "--minimum-free-space-bytes",
+            "20",
+        ]
+    )
+
+    refresh_payload = json.loads(
+        (
+            output_root
+            / "scheduled"
+            / "ml_raw_pit_refresh"
+            / "latest_status.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert exit_code == 0
+    assert builder_called is False
+    assert refresh_payload["status"] == "blocked_insufficient_storage"
+    assert refresh_payload["storage_preflight"]["free_bytes"] == 5
+    assert refresh_payload["storage_preflight"]["minimum_free_space_bytes"] == 20
+
+
 def test_main_records_locked_without_starting_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

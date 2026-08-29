@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,7 @@ _SCHEMA_VERSION = "ml-raw-pit-refresh-status.v1"
 _POINTER_SCHEMA_VERSION = "ml-pit-year-shards-pointer.v1"
 _DATASET_SCHEMA_VERSION = "ml-pit-year-shard-dataset.v1"
 _RAW_ROOT_NAME = "ml_pit_year_shards"
+_DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
 _ALLOWED_DATA_UPDATE_STATUSES = frozenset(
     {"passed", "passed_with_warnings"}
 )
@@ -72,6 +74,15 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--history-start-date", default="2014-01-01")
     parser.add_argument("--batch-size", type=int, default=2_048)
     parser.add_argument("--compression-level", type=int, default=6, choices=range(10))
+    parser.add_argument(
+        "--minimum-free-space-bytes",
+        type=int,
+        default=_DEFAULT_MINIMUM_FREE_SPACE_BYTES,
+        help=(
+            "fail closed before launching the raw PIT builder when the "
+            "output filesystem has less free space than this threshold"
+        ),
+    )
     parser.add_argument("--status-path", type=Path)
     parser.add_argument("--log-path", type=Path)
     return parser
@@ -353,6 +364,29 @@ def _append_log(log_path: Path, message: str) -> None:
         stream.write(message.rstrip() + "\n")
 
 
+def _storage_preflight(
+    path: Path,
+    *,
+    minimum_free_space_bytes: int,
+) -> dict[str, Any]:
+    """Read filesystem headroom without creating, deleting, or mutating data."""
+
+    if minimum_free_space_bytes <= 0:
+        raise ValueError("minimum-free-space-bytes must be positive")
+    probe_path = path if path.exists() else path.parent
+    usage = shutil.disk_usage(probe_path)
+    free_bytes = int(usage.free)
+    minimum = int(minimum_free_space_bytes)
+    return {
+        "probe_path": str(probe_path),
+        "total_bytes": int(usage.total),
+        "used_bytes": int(usage.used),
+        "free_bytes": free_bytes,
+        "minimum_free_space_bytes": minimum,
+        "within_minimum_free_space": free_bytes >= minimum,
+    }
+
+
 def _builder_command(
     *,
     database: Path,
@@ -415,6 +449,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.batch_size <= 0 or args.batch_size > 100_000:
         raise ValueError("batch-size must be within 1..100000")
+    if args.minimum_free_space_bytes <= 0:
+        raise ValueError("minimum-free-space-bytes must be positive")
     output_root = args.output_root.resolve()
     release_root = (
         args.release_root.resolve()
@@ -487,6 +523,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                         None if current is None else current.dataset_manifest_hash
                     ),
                     reason="raw_pit_publication_current",
+                )
+                _write_json(status_path, payload)
+                return 0
+            storage_preflight = _storage_preflight(
+                raw_root,
+                minimum_free_space_bytes=args.minimum_free_space_bytes,
+            )
+            if not storage_preflight["within_minimum_free_space"]:
+                payload = _base_status(
+                    status="blocked_insufficient_storage",
+                    output_root=output_root,
+                    raw_root=raw_root,
+                    database=database,
+                    status_path=status_path,
+                    log_path=log_path,
+                    started_at=started_at.isoformat(timespec="seconds"),
+                    completed_at=scheduled_now().isoformat(timespec="seconds"),
+                    latest_core_date=proof.latest_core_date.isoformat(),
+                    decision_at=proof.decision_at,
+                    data_update_status=proof.data_update_status,
+                    current_publication_id=(
+                        None if current is None else current.publication_id
+                    ),
+                    storage_preflight=storage_preflight,
+                    error_type="InsufficientFreeSpace",
+                    error=(
+                        "raw PIT output filesystem free space is below the "
+                        "configured preflight threshold"
+                    ),
                 )
                 _write_json(status_path, payload)
                 return 0

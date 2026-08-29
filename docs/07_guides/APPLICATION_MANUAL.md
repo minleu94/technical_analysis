@@ -371,6 +371,12 @@ Direct/OOC maintenance watcher 依 raw pointer、canonical hash、dataset safety
 training identity 自動接續，缺少正式 custody 時仍保持 `formal_oos_allowed=false`、
 `alpha=0` 與 `broker_order_allowed=false`。
 
+runner 在建立 immutable publication 前會對 raw PIT 輸出磁碟做唯讀 headroom preflight，
+預設要求至少保留 20 GiB。若低於門檻，會寫入
+`status=blocked_insufficient_storage` 與 `storage_preflight`，不啟動 builder、不留下
+新的部分 publication；可用 `--minimum-free-space-bytes` 在受控環境調整門檻。這個
+容量檢查不會刪除或搬移既有 run，舊 publication 的 retention 必須另由 owner 審核。
+
 2026-08-12 首次自動 refresh 已發布 publication
 `pit-29505ceb0005d068610dde01`：decision cutoff=`2026-08-12T08:30:00+08:00`、
 `all_field_enriched`=`15,932,713 rows / 52 features / 13 shards`，dataset hash=
@@ -3384,6 +3390,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：新增 `scripts\inspect_research_registry_transaction.py` 與 `--runtime-registry-snapshot-probe`；以正式 Research Registry 的 read-only snapshot 在 TEMP clone 驗證 schema／quick_check／insert／rollback／source hash 不變，明確區分 clone proof 與正式 production writer／ACL 證據。
 - 2026-08-28：修正 Evidence Operations weekly review CLI 在 Windows CP1252 主控台輸出繁中 JSON 時的編碼錯誤，統一先設定 UTF-8 console；同輪補登錄新測試檔並同步 inventory，最新全量回歸為 `3747 passed / 1 skipped / 26 warnings`（`532.28s`）。
 - 2026-08-28：新增 `inspect_ml_storage_retention.py` 唯讀容量／retention inventory；可對明確 Direct/OOC 根目錄做 bounded metadata scan，列出完整／截斷狀態、manifest status 與 owner review 候選，固定不刪除、不搬移、不修改 lock／pointer。
+- 2026-08-28：`run_ml_raw_pit_refresh.py` 新增唯讀 20 GiB filesystem headroom preflight；容量不足時只寫 `blocked_insufficient_storage` 與 `storage_preflight`，不啟動 raw PIT builder、不留下部分 publication，也不改變既有 run retention／owner 確認邊界。
 - 2026-08-28：P0 條款候選證據若同一來源的多個官方 URL 出現「部分成功、部分失敗」，Data Update／Research Console 改顯示 `capture_partial` 與「部分取得，仍需複核」，保留已取得 hash 與失敗原因；這只修正可觀測性，不改變 `license_accepted=false` 或下游資格。
 - 2026-08-28：P0 bounded probe／owner packet 新增受限的 HTTP `Date`、`Last-Modified`、`ETag` 與 `Content-Type` transport evidence（含 fallback lineage）；這些欄位只供診斷與 owner review，永遠不會升格為 publication／PIT timestamp，也不會複製敏感 header。
 - 2026-08-28：MOPS 季報 availability CLI 啟動時先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `--help` 或輸出繁中 summary 不再因 `UnicodeEncodeError` 中止，且不改變查詢、候選輸出或正式 gate。
