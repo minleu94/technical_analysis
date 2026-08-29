@@ -1146,6 +1146,14 @@ $env:PROGRAM_READINESS_ARTIFACT = "C:\path\to\program_readiness.json"
 永遠是 query-only，不會寫入 SQLite、發網路、啟用 scheduler／broker、解除 source acceptance
 或取得 Formal credit。
 
+要讓效能 lane 同時顯示「證據已整理」與「仍待 owner 決策」，產生 readiness 報告時可加上
+`--performance-owner-packet <PERFORMANCE_OWNER_PACKET_JSON>`。該檔必須是由
+`scripts\build_performance_canary_owner_packet.py` 產生、位於 OS TEMP 的
+`performance-canary-owner-review.v1`；inspector 只投影 packet status、review lane 數與待處理
+數，不讀取任意 nested payload。UI 的效能摘要會顯示 owner packet 狀態與 `待處理／總 lane`，
+但 `needs_named_owner_reviewer`／`ready_for_owner_review` 都不是 production canary 授權，
+仍須另外完成 technical backup／rollback、容量與 broker review。
+
 同一頁的「P0 官方來源證據（候選／唯讀）」表格固定顯示 13 個來源及其治理／machine 狀態、實際 route、PIT／公告、coverage、license 與 owner／下游邊界。Fallback 欄位會區分：`是` 代表替代路徑真的被採用；`否（已嘗試但未採用）` 代表曾 probe 但因 `date_mismatch`、`official_no_data`、`network_error` 或其他 fail-closed 結果沒有採用；`否`／`未提供` 則表示沒有可觀測的 fallback 嘗試。日期不符會同時列出要求日與觀測日，傳輸／解析錯誤會在滑鼠提示中保留 error type、endpoint、HTTP／payload evidence；summary 另顯示 fallback 已嘗試、已採用與未採用計數。這些欄位只改善診斷，不授予 source acceptance，`downstream_eligibility` 永遠為 `none`。
 
 表格最右側的「Probe 路徑狀態」會逐條顯示候選 route 的實際 probe 結果，例如 `已觀測（observed）`、`失敗（failed）`、`官方無資料（official_no_data）`、`日期不符（date_mismatch）` 或 `未嘗試（not_attempted）`，並以「已選」與 `fallback` 標記 lineage。摘要會列出已嘗試／總路徑及各狀態計數；若舊 artifact 沒有這個欄位，畫面保留「未提供」，不會把 route registry 當成網路成功證據。這仍是候選、唯讀診斷，不會解除 license／owner／PIT gate。
@@ -1196,6 +1204,10 @@ history；不可用舊 latest status 回填。
 performance lane，另加 `--ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON>`；
 當 status 是 `blocked_insufficient_storage` 時，報告會保留
 `direct_chain_storage_preflight_blocked`，只提示容量／保留策略，不啟動 worker。
+若已建立效能 owner handoff，另加
+`--performance-owner-packet <PERFORMANCE_OWNER_PACKET_JSON>`；報告與 UI 會顯示
+`needs_named_owner_reviewer`／`ready_for_owner_review`、review lane 總數與待處理數，
+但只作交接投影，不授予 production worker／fetch pool、Formal OOS 或清理權限。
 若已有允許實際 host context 產生的 `runtime-environment-readiness.v1` 唯讀 artifact，
 可再加 `--runtime-readiness-json <RUNTIME_READINESS_JSON>`；它只載入已核實的 Runtime
 read model，不重新探測或修改正式 logger／Registry 路徑。schema 不符會 fail-closed，且

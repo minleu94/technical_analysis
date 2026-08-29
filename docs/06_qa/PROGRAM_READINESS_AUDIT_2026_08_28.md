@@ -137,6 +137,11 @@ status=`needs_named_owner_reviewer`、`candidate_only=true`、`write_performed=f
 前，packet 仍維持 `needs_named_owner_reviewer`；容量不足、technical production canary 未實跑、
 broker production pool 未開啟等 blocker 仍必須按原流程處理。
 
+`scripts/inspect_program_readiness.py --performance-owner-packet <PACKET_JSON>` 現在可把這份
+交接包載入 performance lane；`program_readiness_projection` 與 Data Update 只顯示 packet
+status、review lane 總數／待處理數及 candidate-only 安全旗標。packet 遺失、schema 不符或安全
+旗標被改動會回報 `performance_owner_packet_invalid`，不會默認通過，也不會掃描其他 TEMP 檔案。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
@@ -164,6 +169,7 @@ P0 Source Control Center、Pre-V2、Paper Portfolio、Formal ML 與 Runtime read
   --technical-write-performance-baseline <TECHNICAL_WRITE_BASELINE_JSON> `
   --technical-worker-acceptance-baseline <TECHNICAL_WORKER_ACCEPTANCE_JSON> `
   --broker-performance-baseline <BROKER_BASELINE_JSON> `
+  --performance-owner-packet <PERFORMANCE_OWNER_PACKET_JSON> `
   --ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON> `
   --runtime-readiness-json <RUNTIME_READINESS_JSON> `
   --runtime-write-probe <RUNTIME_WRITE_PROBE_JSON> `
