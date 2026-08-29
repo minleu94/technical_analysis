@@ -63,6 +63,8 @@ class MOPSQueryResult:
     error_code: str = ""
     query_start_date: date | None = None
     query_end_date: date | None = None
+    attempt_count: int = 1
+    retry_error_codes: tuple[str, ...] = ()
 
 
 def build_query_payload(
@@ -187,6 +189,10 @@ def build_statement_availability_artifact(
             manifest_item["query_start_date"] = result.query_start_date.isoformat()
         if result.query_end_date is not None:
             manifest_item["query_end_date"] = result.query_end_date.isoformat()
+        if result.attempt_count != 1:
+            manifest_item["attempt_count"] = result.attempt_count
+        if result.retry_error_codes:
+            manifest_item["retry_error_codes"] = list(result.retry_error_codes)
         query_manifest.append(manifest_item)
         for raw_row in result.rows:
             row = _parse_statement_row(

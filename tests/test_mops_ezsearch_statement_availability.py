@@ -331,6 +331,48 @@ def test_fetch_cli_date_windows_are_bounded_and_cover_range() -> None:
     )
 
 
+def test_fetch_cli_retries_failed_query_and_preserves_error_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import fetch_mops_statement_availability as fetch_cli
+
+    failed = MOPSQueryResult(
+        market="otc",
+        announcement_item="F29",
+        rows=(),
+        response_sha256="b" * 64,
+        source_status="error",
+        error_code="network_error",
+        query_start_date=date(2026, 5, 1),
+        query_end_date=date(2026, 5, 7),
+    )
+    succeeded = MOPSQueryResult(
+        market="otc",
+        announcement_item="F29",
+        rows=(_row(item="F29"),),
+        response_sha256="c" * 64,
+        source_status="success",
+        query_start_date=date(2026, 5, 1),
+        query_end_date=date(2026, 5, 7),
+    )
+    results = iter((failed, succeeded))
+    monkeypatch.setattr(fetch_cli, "_safe_query", lambda *args, **kwargs: next(results))
+
+    result = fetch_cli._query_with_retries(
+        object(),  # type: ignore[arg-type]
+        market="otc",
+        announcement_item="F29",
+        start_date=date(2026, 5, 1),
+        end_date=date(2026, 5, 7),
+        timeout_seconds=1,
+        max_retries=2,
+    )
+
+    assert result.source_status == "success"
+    assert result.attempt_count == 2
+    assert result.retry_error_codes == ("network_error",)
+
+
 def test_fetch_cli_configures_utf8_stdio_when_streams_support_reconfigure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

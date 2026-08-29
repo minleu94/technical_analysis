@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
@@ -50,6 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mapping-name", default="fundamental-statement-availability.csv")
     parser.add_argument("--timeout-seconds", type=int, default=30)
     parser.add_argument(
+        "--query-retries",
+        type=int,
+        default=0,
+        help="每個失敗 query 的額外重試次數（0–3）；每次仍保留 bounded error lineage",
+    )
+    parser.add_argument(
         "--query-window-days",
         type=int,
         default=31,
@@ -65,6 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     items = _parse_choices(args.items, set(MOPS_STATEMENT_ITEMS), "items")
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds 必須大於 0")
+    if not 0 <= args.query_retries <= 3:
+        parser.error("--query-retries 必須介於 0 與 3 之間")
     if not 1 <= args.query_window_days <= 31:
         parser.error("--query-window-days 必須介於 1 與 31 之間")
 
@@ -84,13 +93,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     with requests.Session() as session:
         results = tuple(
-            _safe_query(
+            _query_with_retries(
                 session,
                 market=market,
                 announcement_item=item,
                 start_date=query_start,
                 end_date=query_end,
                 timeout_seconds=args.timeout_seconds,
+                max_retries=args.query_retries,
             )
             for market in markets
             for item in items
@@ -172,6 +182,7 @@ def _safe_query(
             end_date=end_date,
             timeout_seconds=timeout_seconds,
         )
+
     except (requests.RequestException, ValueError) as exc:
         error_code = (
             "network_timeout"
@@ -203,6 +214,46 @@ def _safe_query(
             query_start_date=start_date,
             query_end_date=end_date,
         )
+
+
+def _query_with_retries(
+    session: requests.Session,
+    *,
+    market: str,
+    announcement_item: str,
+    start_date: date,
+    end_date: date,
+    timeout_seconds: int,
+    max_retries: int,
+) -> MOPSQueryResult:
+    if not 0 <= max_retries <= 3:
+        raise ValueError("max_retries must be between 0 and 3")
+    retry_errors: list[str] = []
+    last_result: MOPSQueryResult | None = None
+    for attempt in range(max_retries + 1):
+        result = _safe_query(
+            session,
+            market=market,
+            announcement_item=announcement_item,
+            start_date=start_date,
+            end_date=end_date,
+            timeout_seconds=timeout_seconds,
+        )
+        last_result = result
+        if result.source_status != "error":
+            return replace(
+                result,
+                attempt_count=attempt + 1,
+                retry_error_codes=tuple(retry_errors),
+            )
+        if result.error_code:
+            retry_errors.append(result.error_code)
+    assert last_result is not None
+    return replace(
+        last_result,
+        attempt_count=max_retries + 1,
+        retry_error_codes=tuple(retry_errors[:-1]),
+    )
 
 
 def _iter_date_windows(
