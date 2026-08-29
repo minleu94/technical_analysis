@@ -234,6 +234,23 @@ UnicodeEncodeError：現在 parser 前會以 shared console guard 設定 UTF-8�
 但不替 Paper 真實 fills、owner／license decision、Formal input、容量處置或 production
 canary 產生事實。
 
+## Unified readiness recheck after real broker canary（2026-08-29）
+
+前一份重算若載入離線 `broker_bounded_fetch_20260828.json`，會保留
+`broker_real_http_canary_not_completed`；本輪改載入已存在的單次真實 HTTP artifact
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`
+（SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`），其
+`1030_1030`／`2026-08-28`／`lots` GET 解析 100 rows、`request_count=1`、Selenium=`0`、
+正式 writer／SQLite 均未寫入。以此 artifact、最新 full regression、2016-Q4/Q3 MOPS
+candidate 與既有 host runtime／scheduler 輸入重新產生唯讀 unified readiness：
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_full_regression_mops_2016_with_broker_20260829.json`
+（SHA-256=`6E41A4E322EDBDDD6DB4C7ADB38B467D00D0E3E403EF9724CB6C8F15FCA45328`）。整體仍為
+`action_required`；`runtime=ready`、`update_history=ready`，performance blocker 精確
+收斂為 `direct_chain_storage_preflight_blocked` 與
+`technical_production_single_writer_canary_not_completed`，broker real HTTP blocker 已
+不再出現。P0／Evidence／Paper／Formal 的 owner、真實 fills、Formal input 與時間／治理
+條件仍未改變；這只是校正 read model 輸入，不是開啟 production fetch pool 或交易權限。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
