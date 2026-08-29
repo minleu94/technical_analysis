@@ -671,6 +671,12 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 
 與既有 baseline／candidate（含 2019-Q2、2019-Q1）合併做 backfill dry-run 後，`availability_file_count=24`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、missing availability=`0`，quality=`observed 782,656`／`degraded 862,899`。這進一步降低 degraded coverage，但只屬 candidate-only；沒有寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。下一段可重跑 2018-Q3（2018-11）。
 
+## 歷史 MOPS coverage 擴充至 2018-Q3（2026-08-29）
+
+2018-11（主要對應 `2018-Q3`）完成 40 個 7 天 bounded query：40 個有資料、官方無資料／真正失敗=`0`，取得 `6,351` events／projections；4 筆缺 `CTIME` 的 row 逐列 quarantine，artifact 狀態=`degraded`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2018q3\mops_statement_availability_host_2018q3.json`（SHA-256=`89B25B7E2F3644E17DF0673E274FBD98DF0E00FFB84F413BDEC82F10C75F6867`），mapping SHA-256=`BDC533872C559FE1C0793D23B347487D07B328327B9092F4C98DB4C783E403C5`。`validate_statement_availability.py` 結果為 `valid=true`、accepted=`6,351`、diagnostics=`0`。
+
+與既有季度 candidate、2024-Q1 相鄰窗口及 retroactive baseline 一起做 backfill dry-run 後，`availability_file_count=24`、raw／normalized=`1,645,555 / 822,497`、diagnostics／missing availability=`823,058`、quality=`observed 822,497`；`ready_for_apply=false`。相較 2018-Q4 盤點，新增 2018-Q3 讓 observed coverage 增加 `39,841` rows、missing availability 減少 `39,841` rows，但剩餘 rows 仍缺逐列公告／可得日，沒有寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
