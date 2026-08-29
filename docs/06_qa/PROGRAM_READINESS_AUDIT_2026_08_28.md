@@ -523,3 +523,9 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 2020-05（主要對應 `2020-Q1`）40/40 個 7 天 query 有資料，取得 `6,094` events／projections、invalid=`0`，validator accepted=`6,094`；單獨 backfill normalized=`35,560`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2020q1\mops_statement_availability_host_2020q1.json`（SHA-256=`7AAFD7CB0C9A130AA5771C9FC4DF963366D64B00B27AAE738E6D904C1EF37855`），mapping SHA-256=`C5C2EAB94E02E145446B5CCE10937436498993A3B8B2535FA896C410685A432A`。
 
 加入既有 2020-Q2～2024-Q1 candidate 與 retroactive baseline 後，hybrid planner dry-run 為 raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、`availability_file_count=19`，quality=`observed 594,642`／`degraded 1,050,913`。這仍未寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT 或 Formal gate；下一段可重跑窗口為 2019-Q4（2020-03）。
+
+## 歷史 MOPS coverage 擴充至 2019-Q4（2026-08-28）
+
+2020-03（主要對應 `2019-Q4`）40/40 個 7 天 query 有資料，取得 `5,864` events／projections、invalid=`0`，validator accepted=`5,864`；單獨 backfill normalized=`36,343`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2019q4\mops_statement_availability_host_2019q4.json`（SHA-256=`8E77D19D22AC985837F67C37D5043D19F0ECC39DC9EF2986CA636C320CF41304`），mapping SHA-256=`A6F5AB9DA1AD7D9D66BC4AEBFC648521001BE9249014200E0C2DAF22C897306A`。
+
+加入既有 2019-Q4～2024-Q1 candidate 與 retroactive baseline 後，hybrid planner dry-run 為 raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、`availability_file_count=20`，quality=`observed 630,985`／`degraded 1,014,570`。這仍未寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT 或 Formal gate；下一段可重跑窗口為 2019-Q3（2019-11）。
