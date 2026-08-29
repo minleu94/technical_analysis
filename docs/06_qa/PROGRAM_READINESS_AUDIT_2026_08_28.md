@@ -241,8 +241,9 @@ canary 產生事實。
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`
 （SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`），其
 `1030_1030`／`2026-08-28`／`lots` GET 解析 100 rows、`request_count=1`、Selenium=`0`、
-正式 writer／SQLite 均未寫入。以此 artifact、最新 full regression、2016-Q4/Q3 MOPS
-candidate 與既有 host runtime／scheduler 輸入重新產生唯讀 unified readiness：
+正式 writer／SQLite 均未寫入。以此 artifact、既有 host P0／runtime／scheduler／performance
+輸入重新產生唯讀 unified readiness；2016-Q4/Q3（以及 Q2/Q1）MOPS availability 仍維持
+獨立的 candidate-only planner，不被這份 readiness 自動採用：
 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_full_regression_mops_2016_with_broker_20260829.json`
 （SHA-256=`6E41A4E322EDBDDD6DB4C7ADB38B467D00D0E3E403EF9724CB6C8F15FCA45328`）。整體仍為
 `action_required`；`runtime=ready`、`update_history=ready`，performance blocker 精確
