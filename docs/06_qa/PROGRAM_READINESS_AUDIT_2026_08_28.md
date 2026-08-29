@@ -149,6 +149,10 @@ performance lane=`partial`，owner packet=`needs_named_owner_reviewer`、review 
 其他 P0／Evidence／Paper／Formal／Direct storage／technical canary blockers 沒有被這份 projection
 掩蓋或解除。
 
+另修正 readiness 聚合入口的顯示正規化：blockers／next actions 會先 trim 並依原順序去重，
+因此 Data Update／Research Console 不會把 evidence payload 的前後空白誤顯示成縮排或重複提示；
+這是唯讀 presentation 修正，未改變 artifact 內容的 machine token、任何 gate 或寫入邊界。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的

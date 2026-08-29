@@ -23,6 +23,7 @@ from app_module.pre_v2_readiness_service import (
 )
 from data_module.config import TWStockConfig
 from scripts.inspect_program_readiness import (
+    _lane,
     inspect_program_readiness,
     render_markdown,
 )
@@ -33,6 +34,17 @@ def _config(tmp_path: Path) -> TWStockConfig:
     config.db_file = tmp_path / "evidence.db"
     config.use_sqlite = True
     return config
+
+
+def test_program_readiness_lane_normalizes_display_text():
+    lane = _lane(
+        "partial",
+        blockers=("  blocker-a  ", "blocker-a", "   "),
+        next_actions=("  action-a  ", "action-a", "\t"),
+    )
+
+    assert lane["blockers"] == ["blocker-a"]
+    assert lane["next_actions"] == ["action-a"]
 
 
 def _seed_evidence_event(config: TWStockConfig) -> None:

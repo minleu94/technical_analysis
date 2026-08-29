@@ -1130,10 +1130,18 @@ def _lane(
     details: Mapping[str, Any] | None = None,
     external_input_required: bool = False,
 ) -> dict[str, Any]:
+    def _normalized_unique(items: Sequence[str]) -> list[str]:
+        normalized: list[str] = []
+        for item in items:
+            value = str(item).strip()
+            if value and value not in normalized:
+                normalized.append(value)
+        return normalized
+
     return {
         "status": status,
-        "blockers": list(dict.fromkeys(str(item) for item in blockers if str(item))),
-        "next_actions": list(dict.fromkeys(str(item) for item in next_actions if str(item))),
+        "blockers": _normalized_unique(blockers),
+        "next_actions": _normalized_unique(next_actions),
         "external_input_required": external_input_required,
         "details": dict(details or {}),
     }
