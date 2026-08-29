@@ -1997,6 +1997,8 @@ CLI 的 `--help` 與 JSON summary 會在可重設的 Windows stdout/stderr 上�
 
 查詢品質摘要會把三種結果分開保存：`successful_query_count` 是有正常回應的查詢、`official_no_data_query_count` 是官方以 `status=fail` 回覆且沒有資料列、`failed_query_count` 才是 timeout／網路／解析錯誤。官方無資料不會被誤報成 outage，但仍會留在 `query_manifest`，供 owner 判斷市場範圍是否完整；若有真正錯誤，整體狀態為 `degraded`，不得以部分列數宣稱完整 coverage。輸入若把 `status=fail` 與資料列混用，builder 會 fail-closed。
 
+歷史 EZSearch 回應可能出現欄位漂移（例如舊列缺 `CTIME`）。builder 會逐列將無法解析的 row 放入 bounded `invalid_event_samples`，以 `invalid_event_error_counts` 保存完整錯誤計數，並保留同一 query 回應內的有效列；只要 `invalid_event_count>0`，artifact 與 CLI 狀態就會是 `degraded`、return code=`3`，不可把部分成功當成完整 coverage。這種 quarantine 只保留可稽核摘要，不會把 malformed row 轉成 availability evidence。
+
 若目前只要建立「導入日後可用」的歷史 baseline candidate，可先產生候選檔：
 
 ```powershell
@@ -2006,6 +2008,8 @@ CLI 的 `--help` 與 JSON summary 會在可重設的 Windows stdout/stderr 上�
 ```
 
 2026-06-16 dry-run 結果：statement availability candidate 170,425 筆、validator accepted 170,425 筆、diagnostics 0；statement item backfill normalized 1,645,555 筆、diagnostics 0。依人工確認正式 apply 後，`fundamental_statement_items` 期間為 `2014-Q2..2024-Q1`、股票數 1,567、period 數 40、0 duplicate，quality 全為 `degraded`，DB 備份為 `D:/Min/Python/Project/FA_Data/meta_data/backup/twstock_statement_items_backfill_20260617_004912.db`。此資料已可作導入日後 EPS、毛利率、營益率、ROE、業外損益 factor 的 baseline foundation；factor layer 只輸出 records / diagnostics，不接 `ScoringEngine`。
+
+`backfill_fundamental_statement_items.py --dry-run` 現在會將診斷輸出限制為前 20 筆，同時保留 `diagnostics`、`diagnostic_counts` 與 `missing_availability_count` 的完整數字；任何一筆缺 `available_date` 都會讓 `ready_for_apply=false`。這避免大量歷史 raw row 把 console 淹沒，也不會因截短顯示而誤放行 apply。只有 plan 的 `diagnostic_count=0`、`missing_availability_count=0` 且有 normalized records 時，才可進入既有明確 confirmation、備份與 apply 流程。dry-run 若已明確提供 `--raw-dir`／`--availability-file`，不會為了取得不使用的 DB／backup 預設值而初始化正式 `TWStockConfig`。
 
 季度財報 factor layer 已可用唯讀方式檢查：
 
@@ -3242,6 +3246,8 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：P0 bounded probe／owner packet 新增受限的 HTTP `Date`、`Last-Modified`、`ETag` 與 `Content-Type` transport evidence（含 fallback lineage）；這些欄位只供診斷與 owner review，永遠不會升格為 publication／PIT timestamp，也不會複製敏感 header。
 - 2026-08-28：MOPS 季報 availability CLI 啟動時先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `--help` 或輸出繁中 summary 不再因 `UnicodeEncodeError` 中止，且不改變查詢、候選輸出或正式 gate。
 - 2026-08-28：MOPS 季報 availability CLI 新增 1–31 天分段 query 與最多 3 次 error-only retry；artifact manifest 保留每段 query window、attempt count 與前次錯誤碼，讓 MOPS 1,000 列上限及暫時網路錯誤可重試但仍可稽核，不把失敗誤標成官方無資料。
+- 2026-08-28：歷史 MOPS EZSearch row schema drift（例如缺 `CTIME`）改採逐列 quarantine；artifact 會保留 bounded invalid samples／完整錯誤計數並標成 `degraded`，不再因單一 malformed row 丟掉同一回應的有效列。
+- 2026-08-28：季度財報 backfill dry-run 新增完整 diagnostics／missing-availability 計數與 20 筆 bounded console 輸出；缺 `available_date` 仍 fail-closed，且明確提供 raw／availability 路徑時不初始化不必要的正式 config／log side effect。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
