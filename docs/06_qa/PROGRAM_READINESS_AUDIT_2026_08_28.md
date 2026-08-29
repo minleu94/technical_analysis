@@ -117,6 +117,26 @@ published formal path 與 custody id 都仍是 pending／空白。這只是把�
 manifest，再重跑 `inspect_ml_formal_input_readiness.py` 驗證 hash、PIT、cutoff、chain 與
 custody；不能直接把本 packet 或其中 candidate 改名成正式 input。
 
+2026-08-29 另以整個 `D:\Min\Python\Project\FA_Data\output` 的 `manifest.json` 做獨立
+exact-schema cross-check：共列出 `19,942` 個 manifest；`causal-portfolio-ledger.v1` 命中 `0`、
+`rule-champion-snapshot-history.v1` 命中 `0`、`pit-sector-membership-sidecar-v1` 命中 `1`，另有
+`3` 個 nested `research-causal-baseline-ledger.v1`。唯一 PIT 命中位於
+`formal_prospective/clock-20260825/pit_sector_membership/manifest.json`，仍因 prospective
+path／authority 被分類為 diagnostic-only；這個交叉檢查不取代 JSON loader，但確認不是原 bounded
+`512` 筆 inventory 漏掉正式 schema。重跑正式 validator（training cutoff=`2026-08-28T00:00:00+08:00`）
+仍為 `waiting_for_formal_inputs`、`ready_input_ratio=0/3`；三個 owner-controlled path 均為
+`prospective_output_not_published`，沒有修改環境變數或正式資料。
+
+更新後的唯讀 owner packet 為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\formal_input_owner_packet_20260829.json`
+（SHA-256=`8A617DBD310F5B55D1B86AF5D2A68D964BC044E8B4287C59DCBB717D436A2C75`；markdown=
+`formal_input_owner_packet_20260829.md`，SHA-256=`2B378F027220C1DE284824A8599662FDAD1FA7D017BCB5F0E0A8022A6D94A15D`）。
+packet=`ready_for_owner_review`、`formal_ready_input_count=0`、`publication_emitted=false`，三筆
+review record 的 owner decision／published path／custody id 仍為空；這是可交接的決策包，不是
+自動發布或升格。對應 validator artifact=
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_formal_input_readiness_20260829.json`
+（SHA-256=`47BD4430CDEC5E0A6EBECD34B687AB0F9FD90C557BFEB45F2F706DFEC8868D1E`）。
+
 本輪 UI／資料更新回歸也已重跑：`tests/test_ui_qt_update_view_workbench.py` 為 `79 passed`，`scripts/qa_validate_update_tab.py` 為 `23 passed / 0 failed / 4 skipped`，全域 `mypy` 檢查 `522 source files` 無 error。這證明資料更新顯示與唯讀 readiness 投影沒有因本輪資料 candidate 擴充而退化，但不會替 pending weekly review 產生核准事實。
 
 P0 license／terms 的候選證據入口也已完成：`scripts/capture_p0_license_evidence.py` 會從 27 條 route 收斂 3 個唯一 allowlisted 官方 URL，僅保留 bounded response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不改 source acceptance。2026-08-28 已產生 no-network preview；同日嘗試受控 bounded GET 時，當前 Windows host 以 `WinError 10013` 拒絕 socket，因此三個 target 都被保留為 `transport_error`。這是本機 egress／權限證據，不是官方來源不存在；需在允許 HTTPS 的執行環境重跑，或由 Owner／Reviewer 提供可驗證的外部保存頁面 hash，才能進入 license review。
