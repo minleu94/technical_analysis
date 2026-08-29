@@ -113,6 +113,30 @@ Formal、Evidence、scheduler 或 broker 權限；驗證失敗會保留 TEMP bac
 production transaction／rollback blocker 仍維持，下一步需由 owner 在停用並行 writer 後
 另行明確核准，不能把 preview 或 clone proof 當成正式寫入已通過。
 
+## Performance canary owner packet（2026-08-28）
+
+效能證據原本分散在 technical production preview、worker recovery／single-writer
+staging、broker real HTTP baseline、Direct/OOC storage preflight 與兩份 retention
+inventory。新增 `scripts/build_performance_canary_owner_packet.py`，要求呼叫端逐一提供
+這六份明確 TEMP artifact，驗證 schema、SHA-256 與不可寫入／不可刪除的安全旗標，再輸出
+`performance-canary-owner-review.v1`。工具只建立 bounded handoff，不啟動 worker、production
+fetch pool、Formal OOS、broker order，也不刪除或搬移任何 run。
+
+2026-08-28 實際 packet 為
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\performance_canary_owner_packet_20260828.json`
+（SHA-256=`C94F7B684B389B70052827C595AB812FF9E21F8AC8D504A253ADC6284D7C2A7C`），packet
+status=`needs_named_owner_reviewer`、`candidate_only=true`、`write_performed=false`、
+`destructive_action_performed=false`。四個 review lane 的觀察如下：
+
+- `technical_production_canary`：`confirmation_required`，production write 未嘗試；仍需具名 owner 核准一檔 backup／rollback canary，先停用並行 writer。
+- `technical_single_writer_staging`：`measured`，2 workers 的 bounded process-pool、crash recovery、取消、retry 與 parent single-writer checks 通過，但只算 staging evidence。
+- `direct_ooc_storage`：`blocked_insufficient_storage`，free `6,564,593,664` bytes，低於 `21,474,836,480` bytes（20 GiB）門檻；只能由 owner 決定外部 archive 或擴容，packet 不會自動清理。
+- `broker_bounded_fetch`：real HTTP／offline bounded checks=`measured`，但 production fetch pool=`false`；長期 rate-limit、Selenium serialized fallback 與 production writer 仍待 owner review。
+
+這個 packet 讓效能工作有單一可交接入口，但不改變 unified readiness 的 gate。未具名 owner／reviewer
+前，packet 仍維持 `needs_named_owner_reviewer`；容量不足、technical production canary 未實跑、
+broker production pool 未開啟等 blocker 仍必須按原流程處理。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的

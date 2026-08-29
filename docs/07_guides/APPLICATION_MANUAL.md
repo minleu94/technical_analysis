@@ -1491,6 +1491,30 @@ production writer 已通過；後續仍需 owner review，broker pool 維持關�
 不啟動 broker／Selenium，也不會註冊 scheduler。`status=measured` 只代表這一次 owner-approved
 canary 的 backup／single-writer／post-state 驗收通過，不能直接把 scheduler worker 數提高。
 
+若要把目前分散的效能證據交給 owner／reviewer，可使用唯讀 owner packet builder：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_performance_canary_owner_packet.py `
+  --technical-preview <TECHNICAL_PREVIEW_JSON> `
+  --worker-recovery <WORKER_RECOVERY_JSON> `
+  --broker-canary <BROKER_CANARY_JSON> `
+  --direct-storage-preflight <DIRECT_STORAGE_PREFLIGHT_JSON> `
+  --retention-direct <RETENTION_DIRECT_JSON> `
+  --retention-ooc <RETENTION_OOC_JSON> `
+  --output-json <TEMP_PERFORMANCE_OWNER_PACKET_JSON> `
+  --markdown-output <TEMP_PERFORMANCE_OWNER_PACKET_MD> `
+  --owner-role <NAMED_OWNER_ROLE> `
+  --reviewer-role <NAMED_REVIEWER_ROLE>
+```
+
+六個輸入必須是呼叫端明確指定、位於 OS TEMP 的既有 artifact，且 schema／安全旗標不符時會
+fail-closed；輸出也只能位於 OS TEMP，不能覆寫輸入。packet 只保留 bounded metadata、來源
+path 與 SHA-256，固定 `candidate_only=true`、`write_performed=false`、
+`destructive_action_performed=false`，不啟動 technical worker／broker production fetch pool、
+不做 Formal OOS／broker order，也不刪除或搬移 Direct/OOC run。`needs_named_owner_reviewer` 或
+`ready_for_owner_review` 只表示交接欄位狀態，不是 production canary 授權；容量低於 20 GiB
+時必須先停止並交由 owner 決定 archive／擴容，不能用 packet 取代 capacity preflight。
+
 若要驗證未來 technical compute-only worker 的 bounded queue 契約，可使用 synthetic probe：
 
 ```powershell
@@ -3372,6 +3396,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：歷史 MOPS candidate 回溯至 2019-Q3 後完成 unified readiness recheck；修正 baseline 輸入後只保留真實 blockers，availability candidate 仍不自動接入正式 mapping／SQLite、Formal 或 scheduler。
 - 2026-08-28：新增 `build_evidence_weekly_approval_input.py` 唯讀交接流程；可把 weekly sidecar 的 8 筆 `pending_human_review` 列整理成 `evidence-weekly-approval-input.v1`，供具名 owner／reviewer 逐期填寫，但不產生 approved projection、不授予 Formal credit、不寫 sidecar／正式 DB。
 - 2026-08-28：新增 `build_formal_input_owner_packet.py` 唯讀 owner handoff；將 bounded Formal candidate inventory 整理成 `formal-input-owner-review.v1`，讓三項 expected input 有具名 owner／reviewer review slot 與 bounded candidate metadata；不選 candidate、不發布正式 manifest、不授予 Formal／promotion／broker credit。
+- 2026-08-28：新增 `build_performance_canary_owner_packet.py` 唯讀效能 owner handoff；將 technical／worker／broker／Direct-OOC storage／retention TEMP evidence 組成 `performance-canary-owner-review.v1`，固定 candidate-only、不寫入、不刪除／搬移、不啟動 production worker／fetch pool。容量不足、technical canary 與 broker long-term review 仍維持原 gate。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
