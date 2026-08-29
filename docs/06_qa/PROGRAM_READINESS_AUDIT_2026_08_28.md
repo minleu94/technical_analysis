@@ -849,6 +849,32 @@ diagnostics／missing availability=`0`、quality=`observed 1,123,851`／`degrade
 candidate-only；沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner
 decision、歷史 PIT、Formal 或 scheduler gate。
 
+## 歷史 MOPS coverage 擴充至 2016-Q2／Q1（2026-08-29）
+
+沿同一個官方 MOPS EZSearch 路徑再往前取得兩個公告窗口，仍採雙市場／四個
+statement item、7 天分段與最多 2 次 error-only retry：
+
+- 2016-08（主要對應 `2016-Q2`）：40 個 query 有資料、40 個官方無資料、真正失敗=`0`，
+  取得 `6,285` events／projections、invalid=`0`，artifact 狀態=`ready`；artifact=
+  `C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2016q2_host\mops_statement_availability_host_2016q2.json`
+  （SHA-256=`915EBCA51A247547F559BE560AA723B960C689C8982668D29616886E08D4BE47`），mapping SHA-256=
+  `6B037E26882F38DF5BB6E0E5B0185802487203487E4D486A6E76F5BBAABA1008`；validator `valid=true`、
+  accepted=`6,285`、diagnostics=`0`。
+- 2016-05（主要對應 `2016-Q1`）：32 個 query 有資料、48 個官方無資料、真正失敗=`0`，
+  取得 `5,688` events／projections、invalid=`0`，artifact 狀態=`ready`；artifact=
+  `C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2016q1_host\mops_statement_availability_host_2016q1.json`
+  （SHA-256=`AD64EB7AFE611B7F4E049AB7F54AB2704475F10B81F3FFE8C927137144D4D98D`），mapping SHA-256=
+  `D24DBE9CA5F1EE30A2399B5B39E60C9B0FD684D087B61BBDEDDC42141BD8A6C6`；validator `valid=true`、
+  accepted=`5,688`、diagnostics=`0`。
+
+將這兩份 candidate 與前述 33 份 availability file 及 retroactive baseline 一起做唯讀
+hybrid planner（共 `34` 份 candidate 加 1 份 baseline），結果為
+`availability_file_count=35`、raw／normalized=`1,645,555 / 1,645,555`、
+diagnostics／missing availability=`0`、quality=`observed 1,197,945`／`degraded 447,610`、
+`ready_for_apply=true`。這是可追溯的官方公告 coverage 增量，仍為 candidate-only；沒有
+套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、歷史 PIT、
+Formal 或 scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
