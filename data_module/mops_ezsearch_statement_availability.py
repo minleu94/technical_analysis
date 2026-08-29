@@ -61,6 +61,8 @@ class MOPSQueryResult:
     response_sha256: str
     source_status: str
     error_code: str = ""
+    query_start_date: date | None = None
+    query_end_date: date | None = None
 
 
 def build_query_payload(
@@ -139,6 +141,8 @@ def query_mops_ezsearch(
         rows=normalized_rows,
         response_sha256=sha256(canonical.encode("utf-8")).hexdigest(),
         source_status=status,
+        query_start_date=start_date,
+        query_end_date=end_date,
     )
 
 
@@ -171,16 +175,19 @@ def build_statement_availability_artifact(
             raise ValueError(f"unsupported MOPS query source status: {result.source_status}")
         if query_status == _QUERY_OFFICIAL_NO_DATA_STATUS and result.rows:
             raise ValueError("MOPS official no-data query must not contain rows")
-        query_manifest.append(
-            {
-                "market": result.market,
-                "announcement_item": result.announcement_item,
-                "response_sha256": result.response_sha256,
-                "source_status": query_status,
-                "row_count": len(result.rows),
-                "error_code": result.error_code,
-            }
-        )
+        manifest_item: dict[str, Any] = {
+            "market": result.market,
+            "announcement_item": result.announcement_item,
+            "response_sha256": result.response_sha256,
+            "source_status": query_status,
+            "row_count": len(result.rows),
+            "error_code": result.error_code,
+        }
+        if result.query_start_date is not None:
+            manifest_item["query_start_date"] = result.query_start_date.isoformat()
+        if result.query_end_date is not None:
+            manifest_item["query_end_date"] = result.query_end_date.isoformat()
+        query_manifest.append(manifest_item)
         for raw_row in result.rows:
             row = _parse_statement_row(
                 raw_row,

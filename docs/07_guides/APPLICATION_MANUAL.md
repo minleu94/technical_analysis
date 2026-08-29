@@ -1984,10 +1984,11 @@ MOPS 公告時間 artifact 只證明 availability，不能自行衍生 ROE、毛
 .\.venv\Scripts\python.exe scripts\fetch_mops_statement_availability.py `
   --start-date 2026-07-27 `
   --end-date 2026-07-28 `
+  --query-window-days 7 `
   --output-root C:\Temp\technical_analysis_development_output\mops-statement-availability
 ```
 
-`--output-root` 必須位於正式 `DATA_ROOT` 與 repo 之外；單次最多 31 天，任一 market/item 回傳達 1000 筆時會拒絕輸出，必須縮小日期區間。輸出包含完整 JSON artifact 與 `fundamental-statement-availability.csv` 候選 mapping；JSON 保留官方 `announcement_at`，CSV 因既有 consumer 只有 date grain，固定以公告次一曆日作 `available_date`，避免同日盤中 look-ahead。具官方 timestamp 的延後申報採實際公告日，不再套用 120 天推定窗口。此 CLI 不寫正式 availability mapping／SQLite、不執行每日更新或排程、不提供 Formal credit；要接到正式資料仍須另一個明確 apply 決議與備份流程。
+`--output-root` 必須位於正式 `DATA_ROOT` 與 repo 之外；整體日期範圍最多 31 天，`--query-window-days` 可將每個 market/item 拆成 1–31 天的連續窗口。MOPS 單一 query 回傳達 1000 筆時會拒絕該窗口；應縮小此參數後重跑，artifact manifest 會保留每個實際 query window 與 response hash，避免把分段查詢誤看成同一個未分窗請求。輸出包含完整 JSON artifact 與 `fundamental-statement-availability.csv` 候選 mapping；JSON 保留官方 `announcement_at`，CSV 因既有 consumer 只有 date grain，固定以公告次一曆日作 `available_date`，避免同日盤中 look-ahead。具官方 timestamp 的延後申報採實際公告日，不再套用 120 天推定窗口。此 CLI 不寫正式 availability mapping／SQLite、不執行每日更新或排程、不提供 Formal credit；要接到正式資料仍須另一個明確 apply 決議與備份流程。
 
 CLI 的 `--help` 與 JSON summary 會在可重設的 Windows stdout/stderr 上先採 UTF-8；若由 pytest 或其他 host 管理的 stream 不允許重設，會保留原 stream 繼續執行，不因繁體中文說明而中止。舊主控台若仍顯示亂碼，可在執行前設定 `$env:PYTHONIOENCODING='utf-8'`。
 

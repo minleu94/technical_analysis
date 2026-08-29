@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
@@ -49,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--artifact-name", default="mops-statement-availability.json")
     parser.add_argument("--mapping-name", default="fundamental-statement-availability.csv")
     parser.add_argument("--timeout-seconds", type=int, default=30)
+    parser.add_argument(
+        "--query-window-days",
+        type=int,
+        default=31,
+        help="每個 market/item query 的日期窗口（1–31 天）；遇到 MOPS 1000 列上限時請縮小",
+    )
     args = parser.parse_args(argv)
 
     if args.end_date < args.start_date:
@@ -59,6 +65,8 @@ def main(argv: list[str] | None = None) -> int:
     items = _parse_choices(args.items, set(MOPS_STATEMENT_ITEMS), "items")
     if args.timeout_seconds <= 0:
         parser.error("--timeout-seconds 必須大於 0")
+    if not 1 <= args.query_window_days <= 31:
+        parser.error("--query-window-days 必須介於 1 與 31 之間")
 
     config = TWStockConfig()
     safe_root = validate_development_output_root(
@@ -69,18 +77,24 @@ def main(argv: list[str] | None = None) -> int:
     artifact_path = _safe_output_path(safe_root, args.artifact_name)
     mapping_path = _safe_output_path(safe_root, args.mapping_name)
 
+    query_windows = _iter_date_windows(
+        args.start_date,
+        args.end_date,
+        window_days=args.query_window_days,
+    )
     with requests.Session() as session:
         results = tuple(
             _safe_query(
                 session,
                 market=market,
                 announcement_item=item,
-                start_date=args.start_date,
-                end_date=args.end_date,
+                start_date=query_start,
+                end_date=query_end,
                 timeout_seconds=args.timeout_seconds,
             )
             for market in markets
             for item in items
+            for query_start, query_end in query_windows
         )
 
     captured_at = datetime.now(timezone.utc).isoformat()
@@ -186,7 +200,28 @@ def _safe_query(
             response_sha256=sha256(material.encode("utf-8")).hexdigest(),
             source_status="error",
             error_code=error_code,
+            query_start_date=start_date,
+            query_end_date=end_date,
         )
+
+
+def _iter_date_windows(
+    start_date: date,
+    end_date: date,
+    *,
+    window_days: int,
+) -> tuple[tuple[date, date], ...]:
+    if end_date < start_date:
+        raise ValueError("end_date must not be earlier than start_date")
+    if not 1 <= window_days <= 31:
+        raise ValueError("window_days must be between 1 and 31")
+    windows: list[tuple[date, date]] = []
+    cursor = start_date
+    while cursor <= end_date:
+        window_end = min(end_date, cursor + timedelta(days=window_days - 1))
+        windows.append((cursor, window_end))
+        cursor = window_end + timedelta(days=1)
+    return tuple(windows)
 
 
 def _parse_choices(raw: str, allowed: set[str], label: str) -> tuple[str, ...]:

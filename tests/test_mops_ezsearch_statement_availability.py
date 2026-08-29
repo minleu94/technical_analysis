@@ -95,6 +95,8 @@ def test_query_mops_ezsearch_preserves_manifest_hash_and_readonly_headers() -> N
 
     assert result.rows == (_row(),)
     assert len(result.response_sha256) == 64
+    assert result.query_start_date == date(2026, 7, 27)
+    assert result.query_end_date == date(2026, 7, 28)
     assert session.calls[0][1]["CO_MARKET"] == ""
     assert session.calls[0][2]["Referer"].endswith("/ezsearch")
 
@@ -217,6 +219,28 @@ def test_artifact_counts_failed_queries_without_treating_them_as_empty_success()
     assert artifact["query_manifest"][1]["error_code"] == "network_timeout"
 
 
+def test_artifact_manifest_preserves_query_window_when_present() -> None:
+    artifact = build_statement_availability_artifact(
+        [
+            MOPSQueryResult(
+                market="sii",
+                announcement_item="F26",
+                rows=(_row(),),
+                response_sha256="a" * 64,
+                source_status="success",
+                query_start_date=date(2026, 7, 27),
+                query_end_date=date(2026, 7, 28),
+            )
+        ],
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-28T12:00:00+08:00",
+    )
+
+    assert artifact["query_manifest"][0]["query_start_date"] == "2026-07-27"
+    assert artifact["query_manifest"][0]["query_end_date"] == "2026-07-28"
+
+
 def test_artifact_separates_official_no_data_queries_from_transport_failures() -> None:
     artifact = build_statement_availability_artifact(
         [
@@ -287,6 +311,24 @@ def test_fetch_cli_safe_query_converts_timeout_to_structured_failure() -> None:
     assert result.source_status == "error"
     assert result.error_code == "network_timeout"
     assert result.rows == ()
+
+
+def test_fetch_cli_date_windows_are_bounded_and_cover_range() -> None:
+    from scripts.fetch_mops_statement_availability import _iter_date_windows
+
+    windows = _iter_date_windows(
+        date(2026, 5, 1),
+        date(2026, 5, 31),
+        window_days=7,
+    )
+
+    assert windows == (
+        (date(2026, 5, 1), date(2026, 5, 7)),
+        (date(2026, 5, 8), date(2026, 5, 14)),
+        (date(2026, 5, 15), date(2026, 5, 21)),
+        (date(2026, 5, 22), date(2026, 5, 28)),
+        (date(2026, 5, 29), date(2026, 5, 31)),
+    )
 
 
 def test_fetch_cli_configures_utf8_stdio_when_streams_support_reconfigure(
