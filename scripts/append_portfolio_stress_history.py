@@ -22,6 +22,7 @@ from app_module.portfolio_stress_history import (  # noqa: E402
     PortfolioStressHistoryRecord,
     PortfolioStressHistoryRepository,
 )
+from runtime.console_encoding import configure_utf8_console  # noqa: E402
 
 
 def _load_payload(path: Path) -> Mapping[str, Any]:
@@ -32,6 +33,8 @@ def _load_payload(path: Path) -> Mapping[str, Any]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Render the Chinese argparse description safely on Windows cp1252 hosts.
+    configure_utf8_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-json", type=Path, required=True)
     parser.add_argument("--history-db", type=Path, required=True)

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import io
 import json
 from pathlib import Path
+import sys
 from types import SimpleNamespace
+
+import pytest
 
 from app_module.portfolio_stress_history import PortfolioStressHistoryReadService
 from app_module.portfolio_stress_lab_service import PortfolioStressLabService
@@ -87,3 +91,20 @@ def test_cli_rejects_unsafe_input_without_writing(tmp_path: Path, capsys) -> Non
     assert payload["status"] == "rejected"
     assert "research_only" in payload["error"]
     assert not history_db.exists()
+
+
+def test_cli_help_reconfigures_windows_console_before_argparse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chinese stress-history help must remain printable on cp1252 hosts."""
+
+    payload = io.BytesIO()
+    stream = io.TextIOWrapper(payload, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    stream.flush()
+    assert exc_info.value.code == 0
+    assert "受控保存" in payload.getvalue().decode("utf-8")
