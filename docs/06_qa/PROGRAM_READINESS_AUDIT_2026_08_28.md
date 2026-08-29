@@ -677,6 +677,12 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 
 與既有季度 candidate、2024-Q1 相鄰窗口及 retroactive baseline 一起做 backfill dry-run 後，`availability_file_count=24`、raw／normalized=`1,645,555 / 822,497`、diagnostics／missing availability=`823,058`、quality=`observed 822,497`；`ready_for_apply=false`。相較 2018-Q4 盤點，新增 2018-Q3 讓 observed coverage 增加 `39,841` rows、missing availability 減少 `39,841` rows，但剩餘 rows 仍缺逐列公告／可得日，沒有寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
 
+## 歷史 MOPS coverage 擴充至 2018-Q2（2026-08-29）
+
+2018-08（主要對應 `2018-Q2`）完成 40 個 7 天 bounded query：40 個有資料、官方無資料／真正失敗=`0`，取得 `6,492` events／projections，invalid=`0`；artifact 狀態=`ready`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2018q2\mops_statement_availability_host_2018q2.json`（SHA-256=`3E49991C88B75AF0391ED783C87B7DA81E33D5620D5666AFD901C1E1708BD29A`），mapping SHA-256=`FB9F177C66186D172203F8FCC8B1B92C8BFF87DE0E9AECA43784B85C24D5859B`。`validate_statement_availability.py` 結果為 `valid=true`、accepted=`6,492`、diagnostics=`0`。
+
+將這份 candidate 加入既有季度 candidate、2024-Q1 相鄰窗口與 retroactive baseline 後，hybrid planner dry-run 為 `availability_file_count=26`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics／missing availability=`0`、quality=`observed 861,928`／`degraded 783,627`，`ready_for_apply=true`。相較 2018-Q3 盤點，observed coverage 再增加 `39,431` rows、degraded rows 減少 `39,431`；這只是候選 mapping 的 schema／整合可行性證明，沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
