@@ -3264,6 +3264,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：季度財報 backfill dry-run 新增完整 diagnostics／missing-availability 計數與 20 筆 bounded console 輸出；缺 `available_date` 仍 fail-closed，且明確提供 raw／availability 路徑時不初始化不必要的正式 config／log side effect。
 - 2026-08-28：季度財報 backfill CLI 支援重複 `--availability-file`；相同完整列去重、natural-key provenance 衝突由 revision validator fail-closed，允許多個官方窗口累積 coverage 而不覆蓋證據。
 - 2026-08-28：完成 retroactive baseline + MOPS candidate 的 hybrid dry-run，證明現有 `financial_data` 可全量 normalized；文件明確要求以 quality 分布區分 `observed` 與 `degraded`，不把 schema coverage 誤當 Formal／PIT 完成。
+- 2026-08-28：backfill plan／CLI 新增 `quality_counts`，在 `ready_for_apply` 旁直接顯示 records 的 `observed`／`degraded` 分布，降低把可套用 schema 誤讀成正式 gate 通過的風險。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。

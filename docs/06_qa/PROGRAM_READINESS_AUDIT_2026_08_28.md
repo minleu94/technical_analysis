@@ -446,3 +446,5 @@ artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_av
 backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列去重、對相同 natural key 的不一致 provenance 保持診斷並 fail-closed。將 2024-03、04、05 三份 candidate 一起唯讀檢查，累積 normalized=`35,735`、diagnostics／missing availability=`1,609,820`、`availability_file_count=3`；沒有寫入正式 mapping／SQLite。這證明可持續用多個官方窗口補 coverage，但仍須把剩餘歷史月份與股票逐段補齊，且不能因部分對應就 apply。
 
 再把既有 `statement_retroactive_baseline_availability_2026-06-17.csv` 與上述三份 MOPS candidate 一起交給 planner，唯讀結果為 `ready_for_apply=true`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`。normalized records 的 quality 分布為 MOPS official announcement `observed=35,735`、retroactive baseline `degraded=1,609,820`。這是可運作的混合補件 fallback，表示 raw universe 可以先完整落在受治理 schema；但 degraded rows 不能被當成正式歷史 PIT、不能解除 `license_accepted`／owner acceptance／Formal gate，也沒有執行 apply 或寫入正式 SQLite。
+
+目前 CLI 會直接在同一份 plan 輸出 `quality_counts: degraded=1,609,820, observed=35,735`，避免只看 `ready_for_apply=true` 而誤判治理狀態；這個欄位是 records 的品質分布，不是 source acceptance 或 Formal credit。
