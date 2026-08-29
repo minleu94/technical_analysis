@@ -408,6 +408,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_prospective_shadow_maturity.py": "governance-doc-tooling",
     "tests/test_prospective_simulated_ledger_manifest.py": "governance-doc-tooling",
     "tests/test_publish_prospective_formal_clock.py": "governance-doc-tooling",
+    "tests/test_formal_input_owner_packet.py": "governance-doc-tooling",
     "tests/test_ui_qt_evidence_review_dashboards.py": "ui-healthcheck-candidate-bridge",
     "tests/test_ui_qt_forward_performance_view.py": "ui-healthcheck-candidate-bridge",
 
