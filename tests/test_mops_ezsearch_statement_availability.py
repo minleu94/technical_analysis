@@ -287,3 +287,26 @@ def test_fetch_cli_safe_query_converts_timeout_to_structured_failure() -> None:
     assert result.source_status == "error"
     assert result.error_code == "network_timeout"
     assert result.rows == ()
+
+
+def test_fetch_cli_configures_utf8_stdio_when_streams_support_reconfigure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts import fetch_mops_statement_availability as fetch_cli
+
+    class ReconfigurableStream:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, str]] = []
+
+        def reconfigure(self, **kwargs: str) -> None:
+            self.calls.append(kwargs)
+
+    stdout = ReconfigurableStream()
+    stderr = ReconfigurableStream()
+    monkeypatch.setattr(fetch_cli.sys, "stdout", stdout)
+    monkeypatch.setattr(fetch_cli.sys, "stderr", stderr)
+
+    fetch_cli._configure_utf8_stdio()
+
+    assert stdout.calls == [{"encoding": "utf-8", "errors": "backslashreplace"}]
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "backslashreplace"}]

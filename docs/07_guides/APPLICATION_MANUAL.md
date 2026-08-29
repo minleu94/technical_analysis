@@ -1989,6 +1989,8 @@ MOPS 公告時間 artifact 只證明 availability，不能自行衍生 ROE、毛
 
 `--output-root` 必須位於正式 `DATA_ROOT` 與 repo 之外；單次最多 31 天，任一 market/item 回傳達 1000 筆時會拒絕輸出，必須縮小日期區間。輸出包含完整 JSON artifact 與 `fundamental-statement-availability.csv` 候選 mapping；JSON 保留官方 `announcement_at`，CSV 因既有 consumer 只有 date grain，固定以公告次一曆日作 `available_date`，避免同日盤中 look-ahead。具官方 timestamp 的延後申報採實際公告日，不再套用 120 天推定窗口。此 CLI 不寫正式 availability mapping／SQLite、不執行每日更新或排程、不提供 Formal credit；要接到正式資料仍須另一個明確 apply 決議與備份流程。
 
+CLI 的 `--help` 與 JSON summary 會在可重設的 Windows stdout/stderr 上先採 UTF-8；若由 pytest 或其他 host 管理的 stream 不允許重設，會保留原 stream 繼續執行，不因繁體中文說明而中止。舊主控台若仍顯示亂碼，可在執行前設定 `$env:PYTHONIOENCODING='utf-8'`。
+
 查詢品質摘要會把三種結果分開保存：`successful_query_count` 是有正常回應的查詢、`official_no_data_query_count` 是官方以 `status=fail` 回覆且沒有資料列、`failed_query_count` 才是 timeout／網路／解析錯誤。官方無資料不會被誤報成 outage，但仍會留在 `query_manifest`，供 owner 判斷市場範圍是否完整；若有真正錯誤，整體狀態為 `degraded`，不得以部分列數宣稱完整 coverage。輸入若把 `status=fail` 與資料列混用，builder 會 fail-closed。
 
 若目前只要建立「導入日後可用」的歷史 baseline candidate，可先產生候選檔：
@@ -3234,6 +3236,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：新增 `inspect_ml_storage_retention.py` 唯讀容量／retention inventory；可對明確 Direct/OOC 根目錄做 bounded metadata scan，列出完整／截斷狀態、manifest status 與 owner review 候選，固定不刪除、不搬移、不修改 lock／pointer。
 - 2026-08-28：P0 條款候選證據若同一來源的多個官方 URL 出現「部分成功、部分失敗」，Data Update／Research Console 改顯示 `capture_partial` 與「部分取得，仍需複核」，保留已取得 hash 與失敗原因；這只修正可觀測性，不改變 `license_accepted=false` 或下游資格。
 - 2026-08-28：P0 bounded probe／owner packet 新增受限的 HTTP `Date`、`Last-Modified`、`ETag` 與 `Content-Type` transport evidence（含 fallback lineage）；這些欄位只供診斷與 owner review，永遠不會升格為 publication／PIT timestamp，也不會複製敏感 header。
+- 2026-08-28：MOPS 季報 availability CLI 啟動時先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `--help` 或輸出繁中 summary 不再因 `UnicodeEncodeError` 中止，且不改變查詢、候選輸出或正式 gate。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。

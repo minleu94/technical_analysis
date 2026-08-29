@@ -31,6 +31,7 @@ from development_module.output_guard import validate_development_output_root
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start-date", type=date.fromisoformat, required=True)
     parser.add_argument("--end-date", type=date.fromisoformat, required=True)
@@ -123,6 +124,20 @@ def main(argv: list[str] | None = None) -> int:
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if artifact["quality_summary"]["successful_query_count"] > 0 else 3
+
+
+def _configure_utf8_stdio() -> None:
+    """讓 Windows 主控台能輸出繁體中文說明與結構化結果。"""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):
+            # pytest capture streams 或 host-managed stream 可能不可重設編碼。
+            continue
 
 
 def _safe_query(
