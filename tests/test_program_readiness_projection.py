@@ -236,3 +236,36 @@ def test_projection_surfaces_performance_owner_packet_review_state(tmp_path: Pat
     progress = format_program_readiness_lane_progress("performance", performance)
     assert "owner packet 待具名 owner／reviewer（needs_named_owner_reviewer）" in progress
     assert "owner review 待處理 3/4" in progress
+
+
+def test_paper_progress_explains_missing_cost_ledger(tmp_path: Path):
+    payload = _payload()
+    payload["workstreams"]["paper"] = {
+        "status": "partial",
+        "blockers": ["paper_weekly_report_not_computable"],
+        "next_actions": ["提供真實 fills"],
+        "external_input_required": True,
+        "details": {
+            "readiness": {
+                "snapshot_count": 21,
+                "benchmark_observation_count": 21,
+                "cost_record_count": 0,
+                "filled_event_count": 0,
+                "partial_fill_event_count": 0,
+                "rejected_event_count": 0,
+                "override_event_count": 0,
+                "cost_ledger_status": "missing",
+                "weekly_report_status": "not_computable_cost_ledger_missing",
+            }
+        },
+    }
+    path = tmp_path / "program-readiness.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    projected = load_program_readiness(path)
+    progress = format_program_readiness_lane_progress(
+        "paper", projected["workstreams"]["paper"]
+    )
+
+    assert "成本帳 缺漏（missing）" in progress
+    assert "週報 尚不可計算（成本帳缺漏）（not_computable_cost_ledger_missing）" in progress

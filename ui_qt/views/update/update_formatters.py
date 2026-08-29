@@ -397,6 +397,11 @@ def format_program_readiness_lane_progress(lane: str, value: Mapping[str, Any]) 
         ):
             if key in metrics:
                 parts.append(f"{label} {_safe_nonnegative_int(metrics.get(key))}")
+        cost_ledger_status = str(metrics.get("cost_ledger_status") or "").strip()
+        if cost_ledger_status:
+            parts.append(
+                f"成本帳 {format_status_token(cost_ledger_status)}（{cost_ledger_status}）"
+            )
         weekly_status = str(metrics.get("weekly_report_status") or "").strip()
         if weekly_status:
             parts.append(f"週報 {format_status_token(weekly_status)}（{weekly_status}）")
