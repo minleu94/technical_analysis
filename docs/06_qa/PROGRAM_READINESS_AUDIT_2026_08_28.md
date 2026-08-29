@@ -390,3 +390,11 @@ P0 的 owner／license／publication／PIT 與 downstream gate 仍未自動解�
 ## 安全邊界
 
 本次沒有把任何 candidate source 升格為 accepted／limited，沒有把 QA benchmark 當正式績效，沒有從既有 snapshot 補造 Paper fills，沒有回填 prospective Formal evidence，也沒有開啟 ML training、promotion、production scheduler 或 broker。正式 source、Paper execution 與 Formal clock 仍各走自己的 append-only／PIT 契約。
+
+## 最新 host P0 continuation（2026-08-28）
+
+在不寫正式 SQLite、Registry、scheduler 或 broker 的前提下，再以 host context 執行一次 bounded official HTTPS read-only probe，並沿用已由 MOPS validator 驗證的 `2330/2025Q1` normalized candidate row。13/13 source rows 均有 machine evidence，`1 verified / 12 degraded / 0 missing`；27 條 route 中 `14 observed / 13 not_attempted`，raw=`91,348`、accepted=`89,971`、blocked=`1,377`、quarantine=`0`。這次只增加 route-level 的實際觀測，不把 HTTP `Date` 或 first-observed 時間誤當 publication/PIT timestamp；12 個來源仍需 owner／法務決定，P0 的 `accepted=0`、`limited=0`、`downstream_eligibility=none` 維持不變。
+
+本輪 audit=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_evidence_20260828_continuation_after_readiness_host.json`（SHA-256=`3E74C9825DFFC6F4209FBCF9896B74DA02B604C823E7DB1B58C849A2D3086867`）。由同一份 audit 轉出的 candidate intake=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_candidate_intake_continuation_after_readiness_host.json`（SHA-256=`7E5B258D8491485FAA734C1F050459F26C3187349F70DC5DD9A0B1D95FA35466`），validator=`deferred`、valid dossier=`13`、owner-review-ready=`0`；Owner packet=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_audit\p0_owner_packet_continuation_after_readiness_host.md`（SHA-256=`F42418A1896662D1CAF80AAF8B9F81A85B51FCCCB0692E9376BB5EDD8C8F4C56`）。
+
+以此最新 P0 audit 加上既有 host runtime／scheduler／Direct-storage、license、Evidence sidecar、Paper、Formal 與 performance artifacts 重算的 unified readiness 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_latest_host_p0_20260828.json`（status=`action_required`；SHA-256=`19049F03B64D3165281FC7506879CBAE24FAC05BB382CB42B575EC15E15C8A2D`）。P0 route 進度更新為 `14/27`，但 Evidence=`weekly 0/3`／`pending_human_review=8`、Paper 成本帳／fills=`0`、Formal input=`0/3`、Direct storage 與 technical production single-writer canary blockers 仍如實保留；本輪沒有因此開啟任何正式寫入或下游授權。
