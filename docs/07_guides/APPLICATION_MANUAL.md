@@ -874,6 +874,8 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
   --output $env:TEMP\technical_analysis_p0_audit\p0_candidate_intake_readiness_20260828.md
 ```
 
+`build_p0_intake_from_audit.py --help` 與阻擋診斷會先將 stdout／stderr 設為 UTF-8；在 Windows CP1252 主控台也應維持可讀並以 exit code 表示成功或阻擋。這只改善 CLI 可觀測性，不改候選資料或任何 acceptance gate。
+
 此轉接器的輸出只允許位於 OS TEMP，且明確保留 `auto_accept_allowed=false`、
 `downstream_eligibility=none`；它可以縮短 owner review 的資料整理工作，但不能
 替代官方 publication／PIT／license 證據或具名決議。`machine_evidence_by_source`

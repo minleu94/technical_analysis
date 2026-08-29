@@ -319,7 +319,21 @@ def _require_candidate_output(path: Path) -> None:
     raise ValueError("output must remain outside DATA_ROOT")
 
 
+def _configure_utf8_stdio() -> None:
+    """讓 Windows 主控台能輸出繁體中文說明與阻擋診斷。"""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):
+            continue
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audit", required=True, type=Path, help="既有 p0-source-evidence-audit.v1 JSON")
     parser.add_argument("--output", required=True, type=Path, help="OS TEMP 下的 candidate intake JSON")

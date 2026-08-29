@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -171,3 +174,19 @@ def test_cli_writes_temp_candidate_and_rejects_production_path(tmp_path: Path) -
     production_path = Path("D:/Min/Python/Project/FA_Data") / "candidate-intake.json"
     assert main(["--audit", str(audit_path), "--output", str(production_path)]) == 2
     assert not production_path.exists()
+
+
+def test_help_is_utf8_safe_on_cp1252_console() -> None:
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "cp1252"
+    script = Path(__file__).resolve().parents[1] / "scripts" / "build_p0_intake_from_audit.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        capture_output=True,
+        env=environment,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "將既有 P0 machine audit" in completed.stdout.decode("utf-8")
