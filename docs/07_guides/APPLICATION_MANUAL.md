@@ -3160,6 +3160,30 @@ bytes、mtime 與 SHA-256 會前後比對。報告的
 `formal_write_attempted=false` 代表目前正式 schema 可由 clone 驗證，並不代表正式
 Registry ACL、鎖定或 production writer 已經實寫成功。
 
+若要在 owner 明確核准後驗證**正式 Research Registry 的實際 transaction／rollback**，使用
+guarded production canary；它不是 UI 動作，也不應由 scheduler 呼叫：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\qa_research_registry_production_canary.py `
+  --registry D:\Min\Python\Project\FA_Data\output\research_runs\research_runs.db `
+  --output-root D:\Min\Python\Project\FA_Data\output `
+  --protected-root D:\Min\Python\Project\FA_Data `
+  --owner-approval research-registry-transaction-canary `
+  --no-concurrent-writer-ack no-concurrent-writer `
+  --confirm-production-registry-canary `
+  --output-json C:\Temp\research_registry_production_canary.json
+```
+
+執行前必須先停用／確認沒有其他 Registry writer；命令會先做 schema v2、required
+tables／columns、`quick_check` 與 row count 預檢，再把正式 DB snapshot 到 OS TEMP。
+canary 只插入一筆唯一 marker、讀回後立即 rollback，最後用唯讀連線確認 marker 不存在、
+row count／content hash 沒有變化。未同時提供 owner approval、無並行 writer acknowledgement
+與 confirm 時，結果是 `confirmation_required` 或 `blocked`，不會開啟正式寫入 handle。
+成功輸出 `status=measured` 只表示該次可回滾 transaction 的實際證據，固定
+`durable_change_allowed=false`；不代表長期 Registry writer、Formal、Evidence、scheduler
+或 broker gate 已開啟。若驗證失敗，OS TEMP backup 會保留供人工比對；不要直接重跑或覆寫
+既有 DB。`--output-json` 必須位於 OS TEMP 且不可落在 protected root。
+
 ### 11.2 營運排程判讀
 
 - **正常**：核心工作已保存可接受的最新狀態。
@@ -3302,6 +3326,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：新增 `inspect_paper_trade_reconciliation.py` 唯讀 fills preflight；外部 CSV 先通過 execution contract，再與明確期初／期末 Paper snapshot 對帳 filled quantity delta，並檢查既有 ledger 的 fill-id collision。只有 `status=ready` 才可交給既有明確 confirm append，工具本身不建立或修改 ledger。
 - 2026-08-27：修正「資料更新 > 全部資料」月營收狀態卡的可見欄位；卡片現在會同步顯示已匯入期別、目前完整 PIT 可用期別，以及待生效期別與完整可用起始日，避免只看到日期／筆數而誤判月營收狀態。
 - 2026-08-27：Runtime Observatory 新增「正式路徑環境（唯讀診斷）」卡片與 `inspect_runtime_environment_readiness.py`。它會立即／每 30 秒揭露 `DATA_ROOT`、`OUTPUT_ROOT`、logs 與 Research Run Registry 的存在、可讀性、`os.access` 可寫提示、既有 logger／Registry 的不寫入 handle probe 與 diagnostic；不建立目錄、probe 檔或 SQLite。`os.access_plus_existing_handle` 仍不是正式 schema／原子提交保證，正式 Registry 權限仍以實際錯誤與受控 smoke 為準；CLI 的 Markdown 輸出固定以 UTF-8 顯示繁中。
+- 2026-08-28：新增 `qa_research_registry_production_canary.py` guarded production transaction／rollback 入口；預設只讀，需 owner approval、無並行 writer acknowledgement 與 explicit confirm，先在 OS TEMP 保存 snapshot，再對正式 Registry 插入唯一 marker、讀回、rollback 與 hash／row count／quick-check 驗證。成功也固定 `durable_change_allowed=false`，失敗保留 backup，不由 UI／scheduler 自動呼叫。
 - 2026-08-27：Pre-V2／Workbench／Evidence source coverage 的 current Decision Desk 查詢新增台灣市場日期上限；future snapshot 只保留 raw 診斷並從 current latest 排除。`EvidenceSourceCoverageService` 與 `inspect_decision_desk_snapshots.py` 改為 query-only 檢查，正式唯讀 DB 不會再因 writer repository 建 schema 而報錯。
 - 2026-08-27：資料更新進度改為可觀測的日期／檔案／資料批次回報；TWSE 批次子程序與 TPEX 區間流程會把已輸出的日期／序號映射到 UI，日價合併會顯示檔案與整合檔 chunk，SQLite CSV 匯出會顯示預估總筆數與已處理筆數，並保留舊 service double 相容性。這只改善等待期間的可見性，不改下載、合併、SQLite 寫入或日期完整性判定。
 - 2026-08-27：大型每日合併新增單一 CSV 內的讀取批次取消檢查；完整檔案讀完才會納入待提交集合，取消不會產生半份整合檔或替換既有目標。這仍是批次邊界取消，不提供逐列中斷。

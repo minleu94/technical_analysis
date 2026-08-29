@@ -88,6 +88,31 @@ custody；不能直接把本 packet 或其中 candidate 改名成正式 input。
 
 P0 license／terms 的候選證據入口也已完成：`scripts/capture_p0_license_evidence.py` 會從 27 條 route 收斂 3 個唯一 allowlisted 官方 URL，僅保留 bounded response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不改 source acceptance。2026-08-28 已產生 no-network preview；同日嘗試受控 bounded GET 時，當前 Windows host 以 `WinError 10013` 拒絕 socket，因此三個 target 都被保留為 `transport_error`。這是本機 egress／權限證據，不是官方來源不存在；需在允許 HTTPS 的執行環境重跑，或由 Owner／Reviewer 提供可驗證的外部保存頁面 hash，才能進入 license review。
 
+## Runtime Registry production transaction canary（2026-08-28）
+
+既有 `inspect_runtime_environment_readiness.py` 的 staging write probe 與
+`inspect_research_registry_transaction.py` 的正式 DB → TEMP clone probe 都已驗證
+schema／insert／rollback 的工程形狀，但兩者都不會對正式 Registry 開啟寫入 handle。
+因此新增 guarded `scripts/qa_research_registry_production_canary.py`，把最後一段
+production writer 證據做成可審核入口：預設只讀正式
+`output/research_runs/research_runs.db`，先檢查 schema v2、required tables／columns、
+`quick_check` 與 row count；只有 owner approval、無並行 writer acknowledgement 與
+explicit confirm 同時成立，才會先把 DB snapshot 到 OS TEMP，再在正式 DB 插入唯一
+canary row、讀回、rollback，最後以唯讀連線核對 row 不存在、row count／content hash
+未變且 `quick_check=ok`。
+
+這個入口不接 scheduler、不由 UI 自動呼叫、不修改其他資料表；輸出固定揭露
+`durable_change_allowed=false`。成功的 `measured` 只代表該次 transaction／rollback
+在 production Registry 實際完成且沒有 durable change，並不授予 Registry 長期 writer、
+Formal、Evidence、scheduler 或 broker 權限；驗證失敗會保留 TEMP backup 供人工比對。
+
+2026-08-28 real host 的唯讀 preview 已觀察正式 Registry schema v2、`98` rows、
+`quick_check=ok`、journal mode=`delete`，沒有 write attempt；artifact=
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\research_registry_production_canary_preview_20260828.json`
+（SHA-256=`38F8141151464A0798410E7A75C9B054D2D491D684F1C06D11410390430DB5C1`）。目前
+production transaction／rollback blocker 仍維持，下一步需由 owner 在停用並行 writer 後
+另行明確核准，不能把 preview 或 clone proof 當成正式寫入已通過。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
