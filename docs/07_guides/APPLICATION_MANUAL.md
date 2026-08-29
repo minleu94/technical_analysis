@@ -2025,6 +2025,8 @@ CLI 的 `--help` 與 JSON summary 會在可重設的 Windows stdout/stderr 上�
 
 若要先確認整個 raw universe 能否落到既有 schema，可把導入日後的 `statement_retroactive_baseline_availability_2026-06-17.csv` 與 MOPS candidates 一起 dry-run。這可能得到 `ready_for_apply=true`，但必須檢查 quality 分布：baseline 仍是 `degraded`、不能作正式歷史 PIT；只有具官方公告時間且經 owner／reviewer 核准的 rows 才能進入正式 availability mapping。此 hybrid dry-run 不會自動寫入 SQLite，也不會授予 source acceptance 或 Formal credit。
 
+歷史窗口若收到官方 `status=fail` 且零資料列，會計入 `official_no_data_query_count`；這和 timeout、network error、schema drift 的 `failed_query_count`／`invalid_event_count` 不同。官方無資料不可直接補成 baseline，也不可把其他月份的成功列宣稱為全期間 coverage。
+
 季度財報 factor layer 已可用唯讀方式檢查：
 
 ```powershell
@@ -3265,6 +3267,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：季度財報 backfill CLI 支援重複 `--availability-file`；相同完整列去重、natural-key provenance 衝突由 revision validator fail-closed，允許多個官方窗口累積 coverage 而不覆蓋證據。
 - 2026-08-28：完成 retroactive baseline + MOPS candidate 的 hybrid dry-run，證明現有 `financial_data` 可全量 normalized；文件明確要求以 quality 分布區分 `observed` 與 `degraded`，不把 schema coverage 誤當 Formal／PIT 完成。
 - 2026-08-28：backfill plan／CLI 新增 `quality_counts`，在 `ready_for_apply` 旁直接顯示 records 的 `observed`／`degraded` 分布，降低把可套用 schema 誤讀成正式 gate 通過的風險。
+- 2026-08-28：歷史 MOPS 查詢說明補上 `official_no_data_query_count` 與真正 `failed_query_count` 的分流，避免官方空回應被當成 network outage 或被其他月份資料補成完整 coverage。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
 - 2026-08-28：候選資料卡統一顯示 `最新日期`、`總記錄數`、資料區間與覆蓋率；候選資料有列時不再因舊版 `總筆數` 欄位文字而顯示 `--`／未知。服務回傳 malformed 日期或計數時，畫面採 `未知`／`0` fail-closed，並保留原始狀態與 warning 供排錯。
 - 2026-08-27：修正資料更新狀態卡 placeholder 被誤解析成 `待更新`；未執行檢查時現在固定顯示灰色 `未檢查`。
