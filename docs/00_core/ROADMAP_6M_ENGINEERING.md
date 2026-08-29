@@ -8,7 +8,7 @@
 
 > **2026-07-13 系統整合校正**：跨流 contracts、唯讀正式資料 smoke、Dashboard／Broker latency 與 pure closeout verifier 已完成工程驗證。Gate 2 真實 forward evidence、Gate 3 source／license acceptance、Gate 7 formal OOS、shadow-day 累積與 promotion review 均仍是 external pending，不能由本次工程測試折抵。
 >
-> **最後更新**：2026-08-25
+> **最後更新**：2026-08-28
 > **定位**：本文件是未來六個月工程執行的 scoped authority，將 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 轉成可交付、可測試、可回滾的 Gate。
 > **現況**：目前完成狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。既有 V3.0 engineering candidate、read-only Workbench、candidate source readiness 或 simulated phase progress 不自動折抵本 Roadmap 的產品 Gate。
 > **版本 companion**：產品成熟度版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
@@ -503,6 +503,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 - 2026-08-28：新增 `scripts/build_p0_intake_from_audit.py`，將既有 `p0-source-evidence-audit.v1` 的 machine row counts／payload hash／status 安全轉成 13 列 candidate intake，所有 owner／license／publication／PIT 欄位仍 fail-closed 為 `unverified`／`requires_review`；輸出限定 OS TEMP，不建立 registry、不改正式資料，也不授予 downstream eligibility。
 - 2026-08-28：P0 source-evidence audit 的 MOPS verified-artifact 分支補上 validated artifact 的 raw／accepted／quarantine／blocked counts，讓 candidate intake 保留真實 coverage／row-conservation denominator（不再把已驗證 artifact 誤顯示為 `0/0`）；此修正不改 source acceptance、license、PIT authority 或 downstream eligibility。
 - 2026-08-28：以允許 HTTPS 的 host context 重跑 P0 bounded live probe；12/13 官方路徑實際 observed、13/13 payload hash 存在，raw=`91,127`、accepted=`89,750`、blocked=`1,377`，再轉成 candidate intake／owner packet。這證明替代 acquisition route 可取得 machine evidence；publication timestamp、decision-time、license 與 owner acceptance 仍維持 fail-closed。
+- 2026-08-28：MOPS EZSearch 季報 availability candidate 改支援 1–31 天 query window 與最多 3 次 error-only retry，manifest 保留每段 query window／attempt lineage；host context 以 40 個 7 天窗口重抓 2026-05 雙市場 F26–F29，取得 `7,473/7,473` events／projections，validator `accepted=7,473`、diagnostics=`0`。既有 raw 財報仍缺全量 explicit available-date，backfill dry-run `normalized=0`，所以此 evidence 仍只供 research candidate，未寫正式 mapping／SQLite 或解除 P0 source acceptance／Formal gate。
 - 2026-08-27：Pre-V2 readiness 的 Workbench、`inspect_pre_v2_readiness.py` 與 `inspect_simulated_phase_progress.py` 統一讀取 `WEEKLY_EVIDENCE_HISTORY_PROJECTION_PATH`（亦支援明確 projection path）；projection 只供 UI／readiness 揭露，不授予 formal credit，避免不同入口顯示不同 weekly Gate 數字。
 - 2026-08-27：Decision Desk／Pre-V2／Workbench／Evidence source coverage 的 current snapshot 查詢加入台灣市場今日上限；future row 只留 raw 診斷並阻擋 current evidence。Evidence source coverage 與 snapshot inspector 改用 query-only 讀取，避免正式唯讀 DB 被 writer repository 初始化 schema。
 - 2026-08-27：UpdateView 日期控件統一以台灣市場日期服務初始化；localized `不可用` 狀態改判異常；全域狀態檢查失敗時，六個核心與三個候選來源 inline 摘要同步清除舊內容並保留共同錯誤原因，候選來源分頁也會投影自己的檢查結果。補上 UI regression 與全量 pytest 證據，未改資料更新／SQLite 寫入契約。
