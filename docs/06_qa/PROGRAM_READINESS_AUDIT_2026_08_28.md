@@ -460,3 +460,12 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 - 2022-11（主要對應 `2022-Q3`）：32 個 query 有資料、8 個 query 為官方 `status=fail` 無資料、`6,661` events／projections、invalid=`0`，validator accepted=`6,661`，單獨 backfill normalized=`38,380`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828_2022q3\mops_statement_availability_host_2022q3.json`（SHA-256=`45984BC8352CE890BF90AB2F89ACA4A84E7F3E74F5949420AD0DAB4D8CC15503`），mapping SHA-256=`CE0FBD34F0EC4C5375A342D852C034E7A31CB46971D976091382F914685A90A9`。官方無資料與真正失敗分開保存，沒有把 8 個空回應誤判成 outage。
 
 將這 5 份新 candidate 加入先前 2023-Q4／2024-Q1 candidates 與 retroactive baseline，hybrid planner dry-run 為 raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、`availability_file_count=9`，quality=`observed 225,643`／`degraded 1,419,912`。這持續縮小 degraded 範圍，但仍只代表 candidate coverage；尚未寫正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision 或 Formal credit。
+
+## 歷史 MOPS coverage 擴充至 2022-Q1（2026-08-28）
+
+再完成兩個官方公告窗口：
+
+- 2022-05（主要對應 `2022-Q1`）：40/40 query 有資料、`6,429` events／projections、invalid=`0`，validator accepted=`6,429`，單獨 backfill normalized=`37,036`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828_2022q1\mops_statement_availability_host_2022q1.json`（SHA-256=`367256AD5C89FAB1194DCA1805FD557285C0FFDE66EB5B398651993BBEEDAE8E`），mapping SHA-256=`78A34B828C50F34715FF55E7B34329914329DC1C1B5C855D6E0FC44462FAC7A5`。
+- 2022-08（主要對應 `2022-Q2`）：40/40 query 有資料、`6,986` events／projections、invalid=`4`（缺 `CTIME`），validator accepted=`6,986`，單獨 backfill normalized=`38,810`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828_2022q2\mops_statement_availability_host_2022q2.json`（SHA-256=`C1993AB3DC142F801106E96C74F0D2C3D71EA1CF80C06EC12851324A37453DFF`），mapping SHA-256=`93524598829E555CEDFD2B60FAC55D6B9060D5BD1483EE574B39B08179721BEE`。
+
+將這兩份 candidate 加入既有 2022-Q3～2024-Q1 candidate 與 retroactive baseline，hybrid planner dry-run 為 raw／normalized=`1,645,555 / 1,645,555`、diagnostics=`0`、`availability_file_count=11`，quality=`observed 301,489`／`degraded 1,344,066`。這把 official coverage 再往前推進，但仍未寫正式 mapping／SQLite，亦不解除 P0 acceptance、license／owner decision、PIT 或 Formal gate；下一個可重跑窗口是 2021-Q4（2022-03）。
