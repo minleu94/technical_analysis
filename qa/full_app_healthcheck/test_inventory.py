@@ -66,6 +66,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_inspect_research_registry_transaction.py": "governance-doc-tooling",
     "tests/test_qa_technical_indicator_process_pool.py": "governance-doc-tooling",
     "tests/test_qa_technical_indicator_worker_recovery.py": "governance-doc-tooling",
+    "tests/test_performance_canary_owner_packet.py": "governance-doc-tooling",
     "tests/test_inspect_scheduled_task_registration.py": "governance-doc-tooling",
     "tests/test_tpex_disposal_artifact.py": "service-oracle-data-market",
     "tests/test_validate_mops_quarterly_artifact.py": "governance-doc-tooling",
