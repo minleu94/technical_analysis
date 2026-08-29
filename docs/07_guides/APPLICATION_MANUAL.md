@@ -332,7 +332,7 @@ run 或重訓。2026-08-13 已實際完成此 recovery，Scheduler query 的
 `baldr-ml-direct-chain-maintainer` `Last Result=0`，沒有平行 chain。正式 gate 仍固定
 `formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。
 
-> **最後更新：2026-08-13｜適用 V4.0 Operational Production**。Decision／Advice／Rule 配置／Paper Portfolio 與 evidence loop 已可正式日常運作；不連接券商。ML 為 Production Co-pilot，非零 alpha 完全由自動 promotion artifact 決定；目前證據不足時顯示 `alpha=0` 是正確 fallback，不需要也禁止人工解除。
+> **最後更新：2026-08-29｜適用 V4.0 Operational Production**。Decision／Advice／Rule 配置／Paper Portfolio 與 evidence loop 已可正式日常運作；不連接券商。ML 為 Production Co-pilot，非零 alpha 完全由自動 promotion artifact 決定；目前證據不足時顯示 `alpha=0` 是正確 fallback，不需要也禁止人工解除。
 
 ## V4.0 每日操作
 
