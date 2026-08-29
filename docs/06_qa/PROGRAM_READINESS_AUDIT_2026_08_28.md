@@ -404,3 +404,11 @@ P0 的 owner／license／publication／PIT 與 downstream gate 仍未自動解�
 同一 host context 重新執行 `scripts/capture_p0_license_evidence.py` 的 bounded live-only GET；三個 allowlisted 官方條款 URL 均回 `HTTP 200`，`captured_count=3`、`failed_count=0`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_p0_license_evidence_capture_20260828_host_retry.json`（SHA-256=`0F22A0A3E9DF6C4E46DFAFD60B47757FD6F0735DD195B49C6E826DD66C89DE58`）。工具只保存 bounded response hash／metadata／keyword flags，不保存頁面全文，也沒有修改 source registry、正式資料或任何授權旗標。
 
 載入此 retry artifact 後，13/13 P0 row 的 `license_evidence_capture_status` 為 `captured_candidate`；這解除了「條款頁 transport 未取得」的機器觀測缺口，但沒有解除 `license_accepted=false`、`source_acceptance_decision_missing`、`official_publication_timestamp_missing` 或 `downstream_eligibility=none`。新的 unified readiness=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_latest_host_p0_license_retry_20260828.json`（status=`action_required`；SHA-256=`EF6DE8E02348E1D19B43D7D02540ED688497ECC72CEA0EA5937A23E4FA636C83`）。
+
+## MOPS EZSearch availability candidate（2026-08-28）
+
+為了驗證「資料補足不只一種來源」的可行性，另以 host context 執行官方 MOPS EZSearch 的 bounded read-only availability query，查詢範圍為 `2026-05-01..2026-05-31`、`sii,otc`、`F26,F27,F28,F29`。OTC 四個 query 均成功，各 `851` 列，合計 `3,404` events／`3,404` projections；duplicate、future、invalid 均為 `0`。每筆 projection 保留官方 `announcement_at`，並依 availability contract 將 date-only projection 設為次一曆日，避免同日 intraday look-ahead。
+
+SII 四個 query 均回 `invalid_response`；以單一 `sii/F26` 重試時另回 `network_error`。因此 artifact 的整體狀態仍為 `degraded`，不能宣稱 TWSE coverage 完整，也不能把失敗 query 當官方無資料。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828\mops_statement_availability_host_20260828.json`（SHA-256=`D2FCEA2642D3BF72D3B10F1640D458D72C76C0063F2B6F4603876D5D06199D72`）；SII retry=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828_sii_retry\mops_statement_availability_sii_f26_retry.json`（SHA-256=`7F835FC9384B9EDDF9E8345D864269E94D94E12A386A0A0C2814A911B722A5B0`）。
+
+這條路徑只產生 research candidate artifact，沒有寫入正式 availability mapping、SQLite、Registry、scheduler 或 Formal input；P0 source acceptance、license／owner decision、歷史 coverage 與正式 gate 均不變。後續可持續推進的具體工作是：在 SII endpoint 穩定後重試並做雙市場 coverage reconciliation，再由 owner／reviewer 決定是否納入有限 research PIT。
