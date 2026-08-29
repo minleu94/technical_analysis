@@ -224,6 +224,16 @@ UnicodeEncodeError：現在 parser 前會以 shared console guard 設定 UTF-8�
 不啟動 writer；production single-writer、backup／rollback、broker pool 及 scheduler governance
 均維持關閉，待 owner 提供容量處置與 canary 核准後才可繼續。
 
+## Full regression checkpoint（2026-08-29）
+
+在上述 candidate-only MOPS 擴充與 CLI encoding guard 後，以 repository 根目錄執行完整
+`\.venv\Scripts\python.exe -m pytest -q -o addopts=`：結果為 `3,820 passed`、`1 skipped`、
+`26 warnings`，無 collection error、無 test failure。warnings 僅包含 Windows host 無法
+查詢 physical core 的 joblib fallback、既有回測理想化成交假設提示，以及 pytest cache 目錄
+權限警告；沒有因此改寫任何正式資料或 readiness artifact。這證明目前程式內部回歸保持綠燈，
+但不替 Paper 真實 fills、owner／license decision、Formal input、容量處置或 production
+canary 產生事實。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
