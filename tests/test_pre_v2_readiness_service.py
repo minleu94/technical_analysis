@@ -960,6 +960,48 @@ def test_program_readiness_markdown_exposes_order_and_performance_boundary(tmp_p
     ]
 
 
+def test_program_readiness_projects_performance_owner_packet(tmp_path: Path) -> None:
+    packet_path = tmp_path / "performance-owner-packet.json"
+    packet_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "performance-canary-owner-review.v1",
+                "packet_status": "needs_named_owner_reviewer",
+                "owner_role": "",
+                "reviewer_role": "",
+                "owner_reviewer_required": True,
+                "formal_oos_allowed": False,
+                "broker_order_allowed": False,
+                "production_worker_enabled": False,
+                "production_fetch_pool_enabled": False,
+                "automatic_delete_allowed": False,
+                "candidate_only": True,
+                "write_performed": False,
+                "destructive_action_performed": False,
+                "review_records": [
+                    {"lane": "technical_production_canary", "decision": "pending"},
+                    {"lane": "technical_single_writer_staging", "decision": "observed_staging_only"},
+                    {"lane": "direct_ooc_storage", "decision": "pending_capacity_owner_review"},
+                    {"lane": "broker_bounded_fetch", "decision": "pending_production_pool_review"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = inspect_program_readiness(
+        data_root=tmp_path / "data",
+        output_root=tmp_path / "output",
+        performance_owner_packet_path=packet_path,
+    )
+
+    performance = report["workstreams"]["performance"]
+    assert "performance_owner_packet_invalid" not in performance["blockers"]
+    assert performance["details"]["owner_packet"]["status"] == "needs_named_owner_reviewer"
+    assert performance["details"]["owner_packet"]["review_lane_count"] == 4
+    assert performance["details"]["owner_packet"]["pending_lane_count"] == 3
+
+
 def test_program_readiness_accepts_real_staging_process_pool_worker_contract(
     tmp_path: Path,
 ) -> None:

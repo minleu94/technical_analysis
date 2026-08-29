@@ -189,3 +189,50 @@ def test_projection_keeps_bounded_lane_progress_without_nested_details(tmp_path:
     )
     assert "尚未提供來源接受決議（source_acceptance_decision_missing）" in blockers
     assert "Formal 輸入未就緒：pit_sector_membership" in blockers
+
+
+def test_projection_surfaces_performance_owner_packet_review_state(tmp_path: Path):
+    payload = _payload()
+    payload["workstreams"]["performance"] = {
+        "status": "partial",
+        "blockers": ["technical_production_single_writer_canary_not_completed"],
+        "next_actions": ["等待 owner review"],
+        "external_input_required": True,
+        "details": {
+            "owner_packet": {
+                "status": "needs_named_owner_reviewer",
+                "review_lane_count": 4,
+                "pending_lane_count": 3,
+                "observed_lane_count": 1,
+                "candidate_only": True,
+                "write_performed": False,
+                "destructive_action_performed": False,
+            },
+            "artifacts": {
+                "technical_canary": {"status": "confirmation_required"},
+                "broker": {"status": "measured"},
+                "ml_direct_chain": {"status": "blocked_insufficient_storage"},
+            },
+        },
+    }
+    path = tmp_path / "program-readiness.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    projected = load_program_readiness(path)
+    performance = projected["workstreams"]["performance"]
+
+    assert performance["metrics"] == {
+        "owner_packet_status": "needs_named_owner_reviewer",
+        "review_lane_count": 4,
+        "pending_lane_count": 3,
+        "observed_lane_count": 1,
+        "candidate_only": True,
+        "write_performed": False,
+        "destructive_action_performed": False,
+        "technical_canary_status": "confirmation_required",
+        "broker_status": "measured",
+        "ml_direct_chain_status": "blocked_insufficient_storage",
+    }
+    progress = format_program_readiness_lane_progress("performance", performance)
+    assert "owner packet 待具名 owner／reviewer（needs_named_owner_reviewer）" in progress
+    assert "owner review 待處理 3/4" in progress

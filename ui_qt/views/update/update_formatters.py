@@ -55,6 +55,11 @@ def format_status_token(status: Any) -> str:
         "candidate_only": "僅限候選",
         "candidate_evidence_only": "僅限候選證據",
         "governance_review": "待治理審核",
+        "needs_named_owner_reviewer": "待具名 owner／reviewer",
+        "ready_for_owner_review": "可交 owner 審核",
+        "pending_capacity_owner_review": "待容量 owner 審核",
+        "pending_production_pool_review": "待 production pool 審核",
+        "observed_staging_only": "僅觀測 staging",
         "not_supplied": "未提供",
         "not_observed": "未觀測",
         "not_available": "尚未觀測",
@@ -306,6 +311,7 @@ _READINESS_BLOCKER_LABELS = {
     "direct_chain_storage_preflight_blocked": "Direct/OOC 容量預檢受阻",
     "technical_production_single_writer_canary_not_completed": "technical 正式 single-writer canary 尚未完成",
     "formal_credit_not_authorized": "Formal credit 尚未授權",
+    "performance_owner_packet_invalid": "效能 owner packet 無法驗證",
 }
 
 
@@ -417,10 +423,15 @@ def format_program_readiness_lane_progress(lane: str, value: Mapping[str, Any]) 
             ("technical_canary_status", "technical canary"),
             ("broker_status", "broker"),
             ("ml_direct_chain_status", "Direct/OOC"),
+            ("owner_packet_status", "owner packet"),
         ):
             status = str(metrics.get(key) or "").strip()
             if status:
                 parts.append(f"{label} {format_status_token(status)}（{status}）")
+        if "pending_lane_count" in metrics or "review_lane_count" in metrics:
+            pending = _safe_nonnegative_int(metrics.get("pending_lane_count"))
+            total = _safe_nonnegative_int(metrics.get("review_lane_count"))
+            parts.append(f"owner review 待處理 {pending}/{total}")
         return "；".join(parts)
 
     if lane == "update_history":

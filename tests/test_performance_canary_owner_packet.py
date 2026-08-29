@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 
 from app_module.performance_canary_owner_packet import (
+    MAX_PERFORMANCE_OWNER_PACKET_BYTES,
     PERFORMANCE_CANARY_OWNER_PACKET_SCHEMA_VERSION,
     build_performance_canary_owner_packet,
+    load_performance_canary_owner_packet,
     render_markdown,
     validate_output_path,
 )
@@ -221,3 +223,26 @@ def test_cli_writes_json_and_markdown(tmp_path: Path, capsys) -> None:
     assert payload["schema_version"] == PERFORMANCE_CANARY_OWNER_PACKET_SCHEMA_VERSION
     assert json.loads(output_json.read_text(encoding="utf-8"))["candidate_only"] is True
     assert "Review lanes" in output_md.read_text(encoding="utf-8")
+
+
+def test_owner_packet_loader_preserves_non_authorizing_boundary(tmp_path: Path) -> None:
+    artifacts = _artifacts(tmp_path)
+    packet = _build_packet(artifacts)
+    packet_path = _write(tmp_path / "packet.json", packet)
+
+    loaded = load_performance_canary_owner_packet(packet_path)
+
+    assert loaded["packet_status"] == "needs_named_owner_reviewer"
+    assert loaded["candidate_only"] is True
+    assert loaded["write_performed"] is False
+    assert MAX_PERFORMANCE_OWNER_PACKET_BYTES >= packet_path.stat().st_size
+
+
+def test_owner_packet_loader_rejects_authorizing_mutation(tmp_path: Path) -> None:
+    artifacts = _artifacts(tmp_path)
+    packet = _build_packet(artifacts)
+    packet["production_fetch_pool_enabled"] = True
+    packet_path = _write(tmp_path / "unsafe-packet.json", packet)
+
+    with pytest.raises(ValueError, match="production_fetch_pool_enabled"):
+        load_performance_canary_owner_packet(packet_path)

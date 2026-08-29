@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 
 PERFORMANCE_CANARY_OWNER_PACKET_SCHEMA_VERSION = "performance-canary-owner-review.v1"
+MAX_PERFORMANCE_OWNER_PACKET_BYTES = 4 * 1024 * 1024
 _EXPECTED_SCHEMAS = {
     "technical_preview": "technical-indicator-production-canary.v1",
     "worker_recovery": "technical-indicator-worker-recovery.v1",
@@ -315,6 +316,60 @@ def build_performance_canary_owner_packet(
     }
 
 
+def load_performance_canary_owner_packet(
+    path: str | Path,
+    *,
+    max_bytes: int = MAX_PERFORMANCE_OWNER_PACKET_BYTES,
+) -> dict[str, Any]:
+    """Load one explicit, non-authorizing owner packet for readiness projection.
+
+    The readiness inspector may consume a packet produced by this module, but
+    must not trust arbitrary JSON or turn the packet into a production gate.
+    Keep this loader bounded to OS TEMP and require every safety flag to remain
+    fail-closed before exposing the packet's small summary to a read model.
+    """
+
+    resolved = Path(path).expanduser().resolve()
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(f"performance owner packet missing: {resolved}")
+    if not _is_inside(resolved, temp_root):
+        raise ValueError("performance owner packet must remain in OS TEMP")
+    try:
+        safe_max_bytes = max(1, int(max_bytes))
+    except (TypeError, ValueError):
+        safe_max_bytes = MAX_PERFORMANCE_OWNER_PACKET_BYTES
+    if resolved.stat().st_size > safe_max_bytes:
+        raise ValueError("performance owner packet exceeds bounded size")
+    try:
+        payload = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("performance owner packet is unreadable") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("performance owner packet must be a JSON object")
+    if payload.get("schema_version") != PERFORMANCE_CANARY_OWNER_PACKET_SCHEMA_VERSION:
+        raise ValueError("performance owner packet schema is unsupported")
+    for key, expected in (
+        ("owner_reviewer_required", True),
+        ("formal_oos_allowed", False),
+        ("broker_order_allowed", False),
+        ("production_worker_enabled", False),
+        ("production_fetch_pool_enabled", False),
+        ("automatic_delete_allowed", False),
+        ("candidate_only", True),
+        ("write_performed", False),
+        ("destructive_action_performed", False),
+    ):
+        if payload.get(key) is not expected:
+            raise ValueError(f"performance owner packet must keep {key}={str(expected).lower()}")
+    records = payload.get("review_records")
+    if not isinstance(records, list) or not records:
+        raise ValueError("performance owner packet review_records are missing")
+    if len(records) > 64 or any(not isinstance(record, Mapping) for record in records):
+        raise ValueError("performance owner packet review_records are invalid")
+    return payload
+
+
 def validate_output_path(output_path: str | Path, *, input_paths: Mapping[str, str | Path]) -> Path:
     output = Path(output_path).expanduser().resolve()
     temp_root = Path(tempfile.gettempdir()).resolve()
@@ -374,8 +429,10 @@ def _is_inside(path: Path, root: Path) -> bool:
 
 
 __all__ = [
+    "MAX_PERFORMANCE_OWNER_PACKET_BYTES",
     "PERFORMANCE_CANARY_OWNER_PACKET_SCHEMA_VERSION",
     "build_performance_canary_owner_packet",
+    "load_performance_canary_owner_packet",
     "render_markdown",
     "validate_output_path",
 ]

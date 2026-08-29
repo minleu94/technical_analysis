@@ -314,6 +314,15 @@ def _project_lane_metrics(lane: str, payload: Mapping[str, Any]) -> dict[str, An
             value = details.get(key)
             if isinstance(value, bool):
                 metrics[key] = bool(value)
+        owner_packet = details.get("owner_packet")
+        if isinstance(owner_packet, Mapping):
+            _copy_short_status(owner_packet, "status", metrics, "owner_packet_status")
+            for key in ("review_lane_count", "pending_lane_count", "observed_lane_count"):
+                _copy_nonnegative_int(owner_packet, key, metrics)
+            for key in ("owner_role_present", "reviewer_role_present", "candidate_only", "write_performed", "destructive_action_performed"):
+                value = owner_packet.get(key)
+                if isinstance(value, bool):
+                    metrics[key] = bool(value)
         artifacts = details.get("artifacts")
         if isinstance(artifacts, Mapping):
             for artifact_name in (

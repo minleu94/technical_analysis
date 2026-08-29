@@ -27,6 +27,9 @@ from app_module.pre_v2_readiness_service import PreV2ReadinessService
 from app_module.runtime_services.environment_readiness_service import (
     EnvironmentReadinessService,
 )
+from app_module.performance_canary_owner_packet import (
+    load_performance_canary_owner_packet,
+)
 from app_module.update_status_history import (
     MAX_STATUS_HISTORY_BYTES,
     read_update_status_history,
@@ -74,6 +77,7 @@ def inspect_program_readiness(
     technical_production_canary_path: str | Path | None = None,
     broker_performance_path: str | Path | None = None,
     ml_direct_chain_status_path: str | Path | None = None,
+    performance_owner_packet_path: str | Path | None = None,
     runtime_write_probe_path: str | Path | None = None,
     runtime_readiness_path: str | Path | None = None,
     runtime_registry_snapshot_probe_path: str | Path | None = None,
@@ -157,6 +161,7 @@ def inspect_program_readiness(
             _optional_path(technical_production_canary_path),
             _optional_path(broker_performance_path),
             _optional_path(ml_direct_chain_status_path),
+            _optional_path(performance_owner_packet_path),
         ),
     }
     report: dict[str, Any] = {
@@ -192,6 +197,11 @@ def inspect_program_readiness(
             "ml_direct_chain_status_path": (
                 str(_optional_path(ml_direct_chain_status_path))
                 if ml_direct_chain_status_path is not None
+                else None
+            ),
+            "performance_owner_packet_path": (
+                str(_optional_path(performance_owner_packet_path))
+                if performance_owner_packet_path is not None
                 else None
             ),
             "runtime_readiness_path": (
@@ -768,9 +778,53 @@ def _inspect_performance_lane(
     technical_canary_path: Path | None,
     broker_path: Path | None,
     ml_direct_chain_path: Path | None,
+    owner_packet_path: Path | None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {}
     blockers: list[str] = []
+    owner_packet_summary: dict[str, Any] | None = None
+    if owner_packet_path is not None:
+        try:
+            owner_packet = load_performance_canary_owner_packet(owner_packet_path)
+            records = owner_packet.get("review_records")
+            review_records = records if isinstance(records, list) else []
+            decisions = [
+                str(record.get("decision") or "").strip().lower()
+                for record in review_records
+                if isinstance(record, Mapping)
+            ]
+            owner_packet_summary = {
+                "path": str(owner_packet_path),
+                "status": str(owner_packet.get("packet_status") or "unknown"),
+                "owner_role_present": bool(str(owner_packet.get("owner_role") or "").strip()),
+                "reviewer_role_present": bool(str(owner_packet.get("reviewer_role") or "").strip()),
+                "review_lane_count": len(review_records),
+                "pending_lane_count": sum(
+                    1
+                    for decision in decisions
+                    if decision in {"pending", "pending_capacity_owner_review", "pending_production_pool_review"}
+                ),
+                "observed_lane_count": sum(
+                    1 for decision in decisions if decision in {"observed", "observed_staging_only", "measured"}
+                ),
+                "candidate_only": True,
+                "write_performed": False,
+                "destructive_action_performed": False,
+            }
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+            blockers.append("performance_owner_packet_invalid")
+            owner_packet_summary = {
+                "path": str(owner_packet_path),
+                "status": "invalid",
+                "diagnostic": f"{type(error).__name__}:{error}",
+                "review_lane_count": 0,
+                "pending_lane_count": 0,
+                "observed_lane_count": 0,
+                "candidate_only": True,
+                "write_performed": False,
+                "destructive_action_performed": False,
+            }
+    artifacts["owner_packet"] = owner_packet_summary
     if ml_direct_chain_path is not None:
         try:
             raw_direct_chain = _read_json_mapping(ml_direct_chain_path)
@@ -850,6 +904,8 @@ def _inspect_performance_lane(
                 "technical_canary_path": str(technical_canary_path) if technical_canary_path else None,
                 "broker_path": str(broker_path) if broker_path else None,
                 "ml_direct_chain_path": str(ml_direct_chain_path) if ml_direct_chain_path else None,
+                "owner_packet_path": str(owner_packet_path) if owner_packet_path else None,
+                "owner_packet": owner_packet_summary,
                 "artifacts": artifacts,
             },
         )
@@ -979,6 +1035,8 @@ def _inspect_performance_lane(
             "technical_canary_path": str(technical_canary_path) if technical_canary_path else None,
             "broker_path": str(broker_path) if broker_path else None,
             "ml_direct_chain_path": str(ml_direct_chain_path) if ml_direct_chain_path else None,
+            "owner_packet_path": str(owner_packet_path) if owner_packet_path else None,
+            "owner_packet": owner_packet_summary,
             "artifacts": artifacts,
             "parallelism_enabled": False,
             "single_writer_required": True,
@@ -1171,6 +1229,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--technical-production-canary", type=Path)
     parser.add_argument("--broker-performance-baseline", type=Path)
     parser.add_argument(
+        "--performance-owner-packet",
+        type=Path,
+        help="唯讀 performance-canary-owner-review.v1 handoff；只投影 owner review 狀態，不授權 production gate",
+    )
+    parser.add_argument(
         "--ml-direct-chain-status",
         type=Path,
         help="唯讀 Direct/OOC maintainer status；只投影容量／維護阻塞，不啟動 worker",
@@ -1231,6 +1294,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         technical_production_canary_path=args.technical_production_canary,
         broker_performance_path=args.broker_performance_baseline,
         ml_direct_chain_status_path=args.ml_direct_chain_status,
+        performance_owner_packet_path=args.performance_owner_packet,
         runtime_write_probe_path=args.runtime_write_probe,
         runtime_readiness_path=args.runtime_readiness_json,
         runtime_registry_snapshot_probe_path=args.runtime_registry_snapshot_probe,
