@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import io
 from pathlib import Path
+import sys
+
+import pytest
 
 from scripts.apply_monthly_revenue_availability_candidate import main
 
@@ -143,3 +147,20 @@ def test_repeating_same_candidate_is_idempotent_and_does_not_create_backup(tmp_p
     assert "added_count: `0`" in output
     assert "unchanged_count: `1`" in output
     assert list(backup_dir.glob("*.csv")) == backups_after_first
+
+
+def test_cli_help_reconfigures_windows_console_before_argparse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chinese merge help must remain printable on cp1252 hosts."""
+
+    payload = io.BytesIO()
+    stream = io.TextIOWrapper(payload, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    stream.flush()
+    assert exc_info.value.code == 0
+    assert "預設" in payload.getvalue().decode("utf-8")

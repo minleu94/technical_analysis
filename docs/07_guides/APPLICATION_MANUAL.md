@@ -3389,6 +3389,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：MOPS 季報 availability CLI 啟動時先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `--help` 或輸出繁中 summary 不再因 `UnicodeEncodeError` 中止，且不改變查詢、候選輸出或正式 gate。
 - 2026-08-29：Paper Portfolio daily CLI 啟動時也先以容錯方式設定 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `scripts/run_paper_portfolio_daily.py --help` 或顯示繁中受控狀態時不再因 `UnicodeEncodeError` 中止，且不改變 snapshot、ledger、正式行情 DB 或 broker 邊界。
 - 2026-08-29：Portfolio Stress history CLI 同步先設定容錯 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `scripts/append_portfolio_stress_history.py --help` 或顯示拒絕原因時不再因 `UnicodeEncodeError` 中止，且不改變 history 寫入確認邊界。
+- 2026-08-29：月營收 availability candidate merge CLI 也先設定容錯 UTF-8 stdout/stderr；Windows CP1252 主控台執行 `scripts/apply_monthly_revenue_availability_candidate.py --help` 或顯示 merge diagnostics 時不再因 `UnicodeEncodeError` 中止，且不改變候選／正式 mapping 的 apply confirmation 邊界。
 - 2026-08-28：MOPS 季報 availability CLI 新增 1–31 天分段 query 與最多 3 次 error-only retry；artifact manifest 保留每段 query window、attempt count 與前次錯誤碼，讓 MOPS 1,000 列上限及暫時網路錯誤可重試但仍可稽核，不把失敗誤標成官方無資料。
 - 2026-08-28：歷史 MOPS EZSearch row schema drift（例如缺 `CTIME`）改採逐列 quarantine；artifact 會保留 bounded invalid samples／完整錯誤計數並標成 `degraded`，不再因單一 malformed row 丟掉同一回應的有效列。
 - 2026-08-28：季度財報 backfill dry-run 新增完整 diagnostics／missing-availability 計數與 20 筆 bounded console 輸出；缺 `available_date` 仍 fail-closed，且明確提供 raw／availability 路徑時不初始化不必要的正式 config／log side effect。

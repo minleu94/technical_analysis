@@ -23,9 +23,13 @@ from data_module.monthly_revenue_availability_merge import (
     apply_monthly_revenue_availability_merge,
     plan_monthly_revenue_availability_merge,
 )
+from runtime.console_encoding import configure_utf8_console  # noqa: E402
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # The module docstring is rendered by argparse for ``--help``; configure
+    # UTF-8 before parsing so a Windows cp1252 console cannot abort the CLI.
+    configure_utf8_console()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--target", type=Path, default=None)
