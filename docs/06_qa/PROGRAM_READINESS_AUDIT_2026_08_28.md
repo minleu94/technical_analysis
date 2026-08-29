@@ -721,3 +721,13 @@ Evidence DB／Registry，也不產生 `approved-weekly-history-projection.v1`。
 `downstream_eligibility=none`、`candidate_only=true`、`write_performed=false`。
 只有外部人工完成逐期 review，並沿既有 governed path 另外產生相容的 approved projection，
 才可供 UI 揭露；本 packet 不得直接送入 Formal／scheduler。
+
+## CLI console encoding continuation（2026-08-29）
+
+在 Windows CP1252 console 實測 `scripts/run_paper_portfolio_daily.py --help`、
+`scripts/append_portfolio_stress_history.py --help` 與
+`scripts/apply_monthly_revenue_availability_candidate.py --help`；修正三個入口在
+`argparse` 前先設定容錯 UTF-8 stdout/stderr，避免中文說明／錯誤在 guarded workflow
+尚未開始前就 `UnicodeEncodeError`。新增的回歸測試與 `py_compile` 均通過，這只改善
+操作與診斷可見性，不建立 ledger／history、 不套用 monthly mapping，也不改變任何
+Paper／Formal／P0／scheduler／broker gate。
