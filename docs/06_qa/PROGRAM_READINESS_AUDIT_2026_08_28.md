@@ -62,6 +62,33 @@ period 自動推導、snapshot 缺邊界或數量不一致會回 `needs_review`�
 則回 `rejected`。`ready` 也不會自動 append，仍需沿既有 `append_paper_trade_csv.py`
 的明確 confirm 與 source hash recheck；工具不從 snapshot、market price 或 virtual trace 反推 fills。
 
+## Paper fills owner handoff／真實成交查找結果（2026-08-29）
+
+本輪先在正式資料根目錄 `D:\Min\Python\Project\FA_Data` 與 repository 做 bounded、唯讀查找，
+以 `paper`、`fill`、`trade`、`execution`、`ledger`、`order` 等檔名／內容交叉盤點。找到的相關檔案
+只有 Paper status／snapshot、Equal Weight benchmark、研究或回測 trades／parquet 與既有 research
+manifest；沒有可證明為 broker／Paper execution producer 輸出的真實 fills CSV／JSON。`output\portfolio\trades.jsonl`
+及所有 backtest／research artifacts 明確排除，不能轉成成交帳，也沒有建立空 ledger 來假裝已有成本。
+
+為讓外部 producer 能直接交接，已以既有 CLI 產生空的 `paper-trade-import.v1` 欄位模板：
+`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\paper_fills_template_20260829.csv`
+（`row_count=0`、SHA-256=`0B6284E2869DA7958B4C4C0A28EBD083665F1998726DBCA257FE819068F70D96`）。模板欄位涵蓋
+`fill_id`／`order_id`、portfolio／event date、股票與 side、requested／filled quantity、reference／fill price、
+Decimal commission／tax／slippage、turnover／execution gap、status、source event 與 override reason；空模板
+本身不是成交事件，也未寫任何正式 SQLite。
+
+以此空模板對 `2026-07-12..2026-08-28` 做唯讀 reconciliation，結果為
+`status=rejected`，blockers=`paper_trade_input_empty`、`paper_trade_period_unavailable`，
+`ledger_append_allowed=false`、`write_performed=false`、`fills=0`。這不是程式把資料判錯，而是可重現地證明
+目前沒有一筆可驗證的真實 fills 或可對應的成本 period。正確 Paper readiness 仍為 `21` snapshots、`21`
+Equal Weight observations、最新 daily status=`passed`，但 `paper_trade_ledger_db_missing`、cost records／fills=`0`、
+weekly=`not_computable_cost_ledger_missing`。
+
+下一個外部交接點是由 Paper execution producer／broker 匯出實際 fills，或由具名 reviewer 依原始 execution
+event 填回上述模板；拿到完整 period 後先跑 reconciliation，只有 `status=ready` 才能進入既有 preview→hash
+recheck→明確 confirm 的 ledger append。不得用 snapshot、market price、manual trades、backtest trades 或
+virtual trace 補造 fill；在交接前 Paper weekly 的 `not_computable` 必須維持。
+
 ## Formal／ML input owner packet（2026-08-28）
 
 Formal candidate inventory 已在明確的 output root 做 bounded、只讀 manifest 盤點：實際
