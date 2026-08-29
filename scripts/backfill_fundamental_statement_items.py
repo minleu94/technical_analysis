@@ -31,22 +31,46 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm", choices=["apply-statement-items-backfill"], default=None)
     args = parser.parse_args(argv)
 
-    config = TWStockConfig()
-    db_file = args.db_file or config.db_file
-    raw_dir = args.raw_dir or (config.data_root / "financial_data")
-    availability_file = args.availability_file or config.statement_availability_file
-    backup_dir = args.backup_dir or config.backup_dir
+    if args.apply and args.confirm != "apply-statement-items-backfill":
+        print(
+            "Applying statement items backfill requires "
+            "--confirm apply-statement-items-backfill"
+        )
+        return 2
+
+    config: TWStockConfig | None = None
+    if (
+        args.raw_dir is None
+        or args.availability_file is None
+        or (args.apply and (args.db_file is None or args.backup_dir is None))
+    ):
+        config = TWStockConfig()
+
+    if args.raw_dir is not None:
+        raw_dir = args.raw_dir
+    else:
+        assert config is not None
+        raw_dir = config.data_root / "financial_data"
+    if args.availability_file is not None:
+        availability_file = args.availability_file
+    else:
+        assert config is not None
+        availability_file = config.statement_availability_file
     statement_types = tuple(
         item.strip() for item in args.statement_types.split(",") if item.strip()
     )
 
     if args.apply:
-        if args.confirm != "apply-statement-items-backfill":
-            print(
-                "Applying statement items backfill requires "
-                "--confirm apply-statement-items-backfill"
-            )
-            return 2
+        if args.db_file is not None:
+            db_file = args.db_file
+        else:
+            assert config is not None
+            db_file = config.db_file
+        if args.backup_dir is not None:
+            backup_dir = args.backup_dir
+        else:
+            assert config is not None
+            backup_dir = config.backup_dir
         result = apply_statement_items_backfill(
             db_file=db_file,
             backup_dir=backup_dir,
@@ -68,10 +92,13 @@ def main(argv: list[str] | None = None) -> int:
         availability_file=availability_file,
         source_version=args.source_version,
         statement_types=statement_types,
+        diagnostic_limit=20,
     )
     print(plan.to_markdown())
     for diagnostic in plan.diagnostics:
         print(f"- {diagnostic.code}: {diagnostic.message}")
+    if len(plan.diagnostics) < plan.diagnostic_count:
+        print(f"- diagnostics_shown: {len(plan.diagnostics)} (bounded)")
     return 0 if plan.ready_for_apply else 1
 
 

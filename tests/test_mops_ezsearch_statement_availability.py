@@ -151,7 +151,27 @@ def test_artifact_deduplicates_exact_events_but_keeps_earliest_revision() -> Non
     assert artifact["availability_projection"][0]["announced_date"] == "2026-07-27"
 
 
-def test_artifact_rejects_m31_meeting_notice_as_statement_publication() -> None:
+def test_artifact_keeps_valid_rows_when_historical_row_schema_is_incomplete() -> None:
+    invalid = _row()
+    invalid.pop("CTIME")
+    artifact = build_statement_availability_artifact(
+        [_result(invalid, _row())],
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-28T12:00:00+08:00",
+    )
+
+    quality = artifact["quality_summary"]
+    assert quality["event_count"] == 1
+    assert quality["projection_count"] == 1
+    assert quality["invalid_event_count"] == 1
+    assert quality["invalid_event_error_counts"] == {
+        "MOPS statement row is missing required fields: CTIME": 1
+    }
+    assert quality["invalid_event_samples"][0]["row_index"] == 1
+
+
+def test_artifact_quarantines_m31_meeting_notice_as_statement_publication() -> None:
     result = _result(
         _row(
             item="M31",
@@ -159,23 +179,33 @@ def test_artifact_rejects_m31_meeting_notice_as_statement_publication() -> None:
         )
     )
 
-    with pytest.raises(ValueError, match="announcement item"):
-        build_statement_availability_artifact(
-            [result],
-            start_date=date(2026, 7, 27),
-            end_date=date(2026, 7, 28),
-            captured_at="2026-07-28T12:00:00+08:00",
-        )
+    artifact = build_statement_availability_artifact(
+        [result],
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-28T12:00:00+08:00",
+    )
+
+    assert artifact["quality_summary"]["event_count"] == 0
+    assert artifact["quality_summary"]["invalid_event_count"] == 1
+    assert artifact["quality_summary"]["invalid_event_error_counts"] == {
+        "MOPS statement row announcement item does not match the query": 1
+    }
 
 
-def test_artifact_rejects_future_timestamp() -> None:
-    with pytest.raises(ValueError, match="later than captured_at"):
-        build_statement_availability_artifact(
-            [_result(_row())],
-            start_date=date(2026, 7, 27),
-            end_date=date(2026, 7, 28),
-            captured_at="2026-07-27T10:00:00+08:00",
-        )
+def test_artifact_quarantines_future_timestamp() -> None:
+    artifact = build_statement_availability_artifact(
+        [_result(_row())],
+        start_date=date(2026, 7, 27),
+        end_date=date(2026, 7, 28),
+        captured_at="2026-07-27T10:00:00+08:00",
+    )
+
+    assert artifact["quality_summary"]["event_count"] == 0
+    assert artifact["quality_summary"]["invalid_event_count"] == 1
+    assert artifact["quality_summary"]["invalid_event_error_counts"] == {
+        "MOPS statement row timestamp is later than captured_at": 1
+    }
 
 
 def test_artifact_rejects_non_sha256_source_hash() -> None:

@@ -134,9 +134,11 @@ def main(argv: list[str] | None = None) -> int:
             "official_no_data_query_count"
         ],
         "failed_query_count": artifact["quality_summary"]["failed_query_count"],
+        "invalid_event_count": artifact["quality_summary"]["invalid_event_count"],
         "status": (
             "ready"
             if artifact["quality_summary"]["failed_query_count"] == 0
+            and artifact["quality_summary"]["invalid_event_count"] == 0
             and artifact["quality_summary"]["successful_query_count"] > 0
             else "degraded"
             if artifact["quality_summary"]["successful_query_count"] > 0
@@ -147,7 +149,12 @@ def main(argv: list[str] | None = None) -> int:
         "production_blend_alpha_bp": 0,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return 0 if artifact["quality_summary"]["successful_query_count"] > 0 else 3
+    return (
+        0
+        if artifact["quality_summary"]["successful_query_count"] > 0
+        and artifact["quality_summary"]["invalid_event_count"] == 0
+        else 3
+    )
 
 
 def _configure_utf8_stdio() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
@@ -160,6 +161,8 @@ def build_statement_availability_artifact(
     query_manifest: list[dict[str, Any]] = []
     seen_event_hashes: set[str] = set()
     duplicate_event_count = 0
+    invalid_event_errors: Counter[str] = Counter()
+    invalid_event_samples: list[dict[str, Any]] = []
 
     for result in query_results:
         if result.market not in MOPS_MARKETS:
@@ -194,16 +197,36 @@ def build_statement_availability_artifact(
         if result.retry_error_codes:
             manifest_item["retry_error_codes"] = list(result.retry_error_codes)
         query_manifest.append(manifest_item)
-        for raw_row in result.rows:
-            row = _parse_statement_row(
-                raw_row,
-                expected_market=result.market,
-                expected_item=result.announcement_item,
-                start_date=start_date,
-                end_date=end_date,
-                captured_at=captured,
-                source_hash=f"sha256:{result.response_sha256}",
-            )
+        for row_index, raw_row in enumerate(result.rows, start=1):
+            try:
+                row = _parse_statement_row(
+                    raw_row,
+                    expected_market=result.market,
+                    expected_item=result.announcement_item,
+                    start_date=start_date,
+                    end_date=end_date,
+                    captured_at=captured,
+                    source_hash=f"sha256:{result.response_sha256}",
+                )
+            except ValueError as error:
+                # Historical EZSearch responses are not schema-stable (for
+                # example, older rows can omit CTIME). Keep valid rows from
+                # the same response, but never silently turn malformed rows
+                # into availability evidence. The bounded sample and
+                # aggregated error count make the degraded result actionable
+                # without copying the raw response into the artifact.
+                error_text = str(error) or type(error).__name__
+                invalid_event_errors[error_text] += 1
+                if len(invalid_event_samples) < 20:
+                    invalid_event_samples.append(
+                        {
+                            "market": result.market,
+                            "announcement_item": result.announcement_item,
+                            "row_index": row_index,
+                            "error": error_text,
+                        }
+                    )
+                continue
             if row["event_hash"] in seen_event_hashes:
                 duplicate_event_count += 1
                 continue
@@ -250,7 +273,9 @@ def build_statement_availability_artifact(
             "projection_count": len(projection_rows),
             "duplicate_event_count": duplicate_event_count,
             "future_event_count": 0,
-            "invalid_event_count": 0,
+            "invalid_event_count": sum(invalid_event_errors.values()),
+            "invalid_event_error_counts": dict(sorted(invalid_event_errors.items())),
+            "invalid_event_samples": invalid_event_samples,
             "query_count": len(query_manifest),
             "successful_query_count": sum(
                 1

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import csv
+from collections import Counter
 import shutil
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from data_module.backup_retention import create_retained_backup
 from data_module.fundamental_statement_availability_sources import (
@@ -25,6 +26,8 @@ STATEMENT_FILE_SUFFIXES = {
     "balance_sheet": "_balance_sheet.csv",
     "cash_flows_statement": "_cash_flows_statement.csv",
 }
+STATEMENT_ITEMS_BACKFILL_PLAN_SCHEMA_VERSION = "statement-items-backfill-plan.v1"
+_MISSING_AVAILABILITY_CODE = "fundamental_availability.missing_available_date"
 
 
 @dataclass(frozen=True)
@@ -32,26 +35,49 @@ class StatementItemsBackfillPlan:
     records: tuple[StatementItemRecord, ...]
     diagnostics: tuple[FactorDiagnostic, ...]
     raw_row_count: int
+    diagnostic_count: int = 0
+    diagnostic_counts: tuple[tuple[str, int], ...] = ()
+    missing_availability_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "records", tuple(self.records))
         object.__setattr__(self, "diagnostics", tuple(self.diagnostics))
+        object.__setattr__(self, "diagnostic_counts", tuple(self.diagnostic_counts))
+        if self.diagnostic_count < len(self.diagnostics):
+            object.__setattr__(self, "diagnostic_count", len(self.diagnostics))
+        if self.diagnostic_count < 0 or self.missing_availability_count < 0:
+            raise ValueError("diagnostic counts must be non-negative")
 
     @property
     def ready_for_apply(self) -> bool:
-        return bool(self.records) and not self.diagnostics
+        return (
+            bool(self.records)
+            and self.diagnostic_count == 0
+            and self.missing_availability_count == 0
+        )
+
+    @property
+    def diagnostic_summary(self) -> Mapping[str, int]:
+        return dict(self.diagnostic_counts)
 
     def to_markdown(self) -> str:
-        return "\n".join(
-            [
-                "# Statement Items Backfill Plan",
-                "",
-                f"- ready_for_apply: {str(self.ready_for_apply).lower()}",
-                f"- raw_row_count: {self.raw_row_count}",
-                f"- normalized_record_count: {len(self.records)}",
-                f"- diagnostics: {len(self.diagnostics)}",
-            ]
-        )
+        lines = [
+            "# Statement Items Backfill Plan",
+            "",
+            f"- ready_for_apply: {str(self.ready_for_apply).lower()}",
+            f"- raw_row_count: {self.raw_row_count}",
+            f"- normalized_record_count: {len(self.records)}",
+            f"- diagnostics: {self.diagnostic_count}",
+            f"- missing_availability_count: {self.missing_availability_count}",
+        ]
+        if self.diagnostic_counts:
+            lines.append(
+                "- diagnostic_counts: "
+                + ", ".join(f"{code}={count}" for code, count in self.diagnostic_counts)
+            )
+        if len(self.diagnostics) < self.diagnostic_count:
+            lines.append(f"- diagnostics_shown: {len(self.diagnostics)} (bounded)")
+        return "\n".join(lines)
 
 
 @dataclass(frozen=True)
@@ -68,17 +94,31 @@ def plan_statement_items_backfill(
     availability_file: Path,
     source_version: str,
     statement_types: tuple[str, ...],
+    diagnostic_limit: int = 100,
 ) -> StatementItemsBackfillPlan:
+    if diagnostic_limit < 0:
+        raise ValueError("diagnostic_limit must be non-negative")
     availability_result = load_statement_availability_overrides_csv(Path(availability_file))
     if availability_result.diagnostics:
+        availability_diagnostic_counts = Counter(
+            item.code for item in availability_result.diagnostics
+        )
         return StatementItemsBackfillPlan(
             records=(),
-            diagnostics=availability_result.diagnostics,
+            diagnostics=availability_result.diagnostics[:diagnostic_limit],
             raw_row_count=0,
+            diagnostic_count=len(availability_result.diagnostics),
+            diagnostic_counts=tuple(sorted(availability_diagnostic_counts.items())),
+            missing_availability_count=availability_diagnostic_counts.get(
+                _MISSING_AVAILABILITY_CODE, 0
+            ),
         )
 
     records: list[StatementItemRecord] = []
     diagnostics: list[FactorDiagnostic] = []
+    diagnostic_counts: Counter[str] = Counter()
+    diagnostic_count = 0
+    missing_availability_count = 0
     raw_row_count = 0
     for statement_type in statement_types:
         raw_rows = list(_iter_statement_rows(Path(raw_dir), statement_type=statement_type))
@@ -90,12 +130,21 @@ def plan_statement_items_backfill(
             source_version=source_version,
         )
         records.extend(parse_result.records)
-        diagnostics.extend(parse_result.diagnostics)
+        diagnostic_count += len(parse_result.diagnostics)
+        for diagnostic in parse_result.diagnostics:
+            diagnostic_counts[diagnostic.code] += 1
+            if diagnostic.code == _MISSING_AVAILABILITY_CODE:
+                missing_availability_count += 1
+            if len(diagnostics) < diagnostic_limit:
+                diagnostics.append(diagnostic)
 
     return StatementItemsBackfillPlan(
         records=tuple(records),
         diagnostics=tuple(diagnostics),
         raw_row_count=raw_row_count,
+        diagnostic_count=diagnostic_count,
+        diagnostic_counts=tuple(sorted(diagnostic_counts.items())),
+        missing_availability_count=missing_availability_count,
     )
 
 
