@@ -689,6 +689,12 @@ backfill CLI 現在可重複傳入 `--availability-file`，會對相同完整列
 
 將這份 candidate 加入既有季度 candidate、2024-Q1 相鄰窗口與 retroactive baseline 後，hybrid planner dry-run 為 `availability_file_count=27`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics／missing availability=`0`、quality=`observed 899,703`／`degraded 745,852`，`ready_for_apply=true`。相較 2018-Q2 盤點，observed coverage 再增加 `37,775` rows、degraded rows 減少 `37,775`；這只是候選 mapping 的 schema／整合可行性證明，沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
 
+## 歷史 MOPS coverage 擴充至 2017-Q4（2026-08-29）
+
+2018-03（主要對應 `2017-Q4`）完成 40 個 7 天 bounded query：40 個有資料、官方無資料／真正失敗=`0`，取得 `5,708` events／projections，invalid=`0`；artifact 狀態=`ready`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260829_2017q4\mops_statement_availability_host_2017q4.json`（SHA-256=`522CD080237E6D32812D1388E53048CDA8B0E23F147268983954EC9814C1FD31`），mapping SHA-256=`864719D35EBC30E7F780A4BE8AB8EFBEE06AA88944CA3A9DDAB8AD291E4D271E`。`validate_statement_availability.py` 結果為 `valid=true`、accepted=`5,708`、diagnostics=`0`。
+
+將這份 candidate 加入既有季度 candidate、2024-Q1 相鄰窗口與 retroactive baseline 後，hybrid planner dry-run 為 `availability_file_count=28`、raw／normalized=`1,645,555 / 1,645,555`、diagnostics／missing availability=`0`、quality=`observed 935,549`／`degraded 710,006`，`ready_for_apply=true`。相較 2018-Q1 盤點，observed coverage 再增加 `35,846` rows、degraded rows 減少 `35,846`；這只是候選 mapping 的 schema／整合可行性證明，沒有套用正式 mapping／SQLite，也不解除 P0 acceptance、license／owner decision、PIT、Formal 或 scheduler gate。
+
 ## 歷史 MOPS 擴充後 unified readiness recheck（2026-08-28）
 
 載入最新 chunked MOPS P0 audit、license candidate、Evidence sidecar、Paper／Formal／Runtime／performance artifacts 後，唯讀重算報告=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_historical_mops_v2_20260828.json`（generated_at=`2026-08-28T19:01:33-07:00`、SHA-256=`2612A6FD19044166D0FBAC8CBD131123372E9046428BDA0976EF601C4377B736`）。安全欄確認 `side_effect_free=true`、`network_requests=false`、`directories_created=false`。
