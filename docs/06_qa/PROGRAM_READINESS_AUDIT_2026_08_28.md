@@ -142,6 +142,13 @@ broker production pool 未開啟等 blocker 仍必須按原流程處理。
 status、review lane 總數／待處理數及 candidate-only 安全旗標。packet 遺失、schema 不符或安全
 旗標被改動會回報 `performance_owner_packet_invalid`，不會默認通過，也不會掃描其他 TEMP 檔案。
 
+已用 host P0／Evidence sidecar／Paper／Formal／Runtime／效能 artifacts 產生含 packet 的完整
+readiness：`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_with_performance_owner_packet_full_20260828.json`
+（status=`action_required`；SHA-256=`976E5B1CF0505915032254ADEADBFAE81CF2680398150565A0A6EB56D5878FBE`）。
+performance lane=`partial`，owner packet=`needs_named_owner_reviewer`、review `3/4` 待處理；
+其他 P0／Evidence／Paper／Formal／Direct storage／technical canary blockers 沒有被這份 projection
+掩蓋或解除。
+
 ## 可重複的整體盤點入口
 
 新增 `scripts/inspect_program_readiness.py` 作為單一唯讀盤點入口。它會重用既有的
