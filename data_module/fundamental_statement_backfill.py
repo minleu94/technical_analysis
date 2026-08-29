@@ -12,7 +12,7 @@ from typing import Iterable, Mapping
 
 from data_module.backup_retention import create_retained_backup
 from data_module.fundamental_statement_availability_sources import (
-    load_statement_availability_overrides_csv,
+    load_statement_availability_overrides_csv_files,
 )
 from data_module.fundamental_statement_data import (
     StatementItemRecord,
@@ -91,14 +91,15 @@ class StatementItemsBackfillApplyResult:
 def plan_statement_items_backfill(
     *,
     raw_dir: Path,
-    availability_file: Path,
+    availability_file: Path | str | Iterable[Path | str],
     source_version: str,
     statement_types: tuple[str, ...],
     diagnostic_limit: int = 100,
 ) -> StatementItemsBackfillPlan:
     if diagnostic_limit < 0:
         raise ValueError("diagnostic_limit must be non-negative")
-    availability_result = load_statement_availability_overrides_csv(Path(availability_file))
+    availability_paths = _normalize_availability_paths(availability_file)
+    availability_result = load_statement_availability_overrides_csv_files(availability_paths)
     if availability_result.diagnostics:
         availability_diagnostic_counts = Counter(
             item.code for item in availability_result.diagnostics
@@ -153,7 +154,7 @@ def apply_statement_items_backfill(
     db_file: Path,
     backup_dir: Path,
     raw_dir: Path,
-    availability_file: Path,
+    availability_file: Path | str | Iterable[Path | str],
     source_version: str,
     statement_types: tuple[str, ...],
 ) -> StatementItemsBackfillApplyResult:
@@ -201,6 +202,14 @@ def apply_statement_items_backfill(
         backup_file=backup_file,
         plan=plan,
     )
+
+
+def _normalize_availability_paths(
+    availability_file: Path | str | Iterable[Path | str],
+) -> tuple[Path, ...]:
+    if isinstance(availability_file, (str, Path)):
+        return (Path(availability_file),)
+    return tuple(Path(path) for path in availability_file)
 
 
 def _iter_statement_rows(raw_dir: Path, *, statement_type: str) -> Iterable[dict[str, str]]:

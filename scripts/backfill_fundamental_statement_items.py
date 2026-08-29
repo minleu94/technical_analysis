@@ -22,7 +22,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--db-file", type=Path, default=None)
     parser.add_argument("--raw-dir", type=Path, default=None)
-    parser.add_argument("--availability-file", type=Path, default=None)
+    parser.add_argument(
+        "--availability-file",
+        type=Path,
+        action="append",
+        default=None,
+        help="Candidate mapping CSV; repeat to combine multiple bounded acquisitions.",
+    )
     parser.add_argument("--backup-dir", type=Path, default=None)
     parser.add_argument("--statement-types", default="income_statement,balance_sheet,cash_flows_statement")
     parser.add_argument("--source-version", default=f"financial-data-statements-{date.today().isoformat()}")
@@ -39,9 +45,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     config: TWStockConfig | None = None
+    availability_files = tuple(args.availability_file or ())
     if (
         args.raw_dir is None
-        or args.availability_file is None
+        or not availability_files
         or (args.apply and (args.db_file is None or args.backup_dir is None))
     ):
         config = TWStockConfig()
@@ -51,11 +58,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         assert config is not None
         raw_dir = config.data_root / "financial_data"
-    if args.availability_file is not None:
-        availability_file = args.availability_file
+    if availability_files:
+        availability_file = availability_files
     else:
         assert config is not None
-        availability_file = config.statement_availability_file
+        availability_file = (config.statement_availability_file,)
     statement_types = tuple(
         item.strip() for item in args.statement_types.split(",") if item.strip()
     )
@@ -80,6 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             statement_types=statement_types,
         )
         print(result.plan.to_markdown())
+        print(f"- availability_file_count: {len(availability_file)}")
         print(f"- applied: {str(result.applied).lower()}")
         print(f"- inserted_count: {result.inserted_count}")
         print(f"- backup_file: {result.backup_file or 'none'}")
@@ -95,6 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         diagnostic_limit=20,
     )
     print(plan.to_markdown())
+    print(f"- availability_file_count: {len(availability_file)}")
     for diagnostic in plan.diagnostics:
         print(f"- {diagnostic.code}: {diagnostic.message}")
     if len(plan.diagnostics) < plan.diagnostic_count:

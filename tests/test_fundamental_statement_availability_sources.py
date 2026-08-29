@@ -7,6 +7,7 @@ from data_module.fundamental_statement_availability_sources import (
     STATEMENT_AVAILABILITY_COLUMNS,
     load_statement_availability_overrides,
     load_statement_availability_overrides_csv,
+    load_statement_availability_overrides_csv_files,
 )
 from decision_module.factors.factor_dtos import FactorQuality
 
@@ -141,6 +142,44 @@ def test_load_statement_availability_overrides_csv_reads_governed_file(tmp_path)
     assert result.overrides[("2330", "income_statement", "2024-Q1")].available_date == date(
         2024, 5, 11
     )
+    assert result.diagnostics == ()
+
+
+def test_load_statement_availability_overrides_csv_files_merges_and_deduplicates(
+    tmp_path,
+):
+    first_file = tmp_path / "first.csv"
+    second_file = tmp_path / "second.csv"
+    first = _formal_row()
+    second = _formal_row(
+        stock_code="2317",
+        period="2024-Q2",
+        as_of_date="2024-06-30",
+        announced_date="2024-08-09",
+        available_date="2024-08-10",
+        source_hash=f"sha256:{'b' * 64}",
+    )
+
+    for path, rows in ((first_file, [first]), (second_file, [second])):
+        path.write_text(
+            ",".join(STATEMENT_AVAILABILITY_COLUMNS)
+            + "\n"
+            + "\n".join(
+                ",".join(row[column] for column in STATEMENT_AVAILABILITY_COLUMNS)
+                for row in rows
+            )
+            + "\n",
+            encoding="utf-8-sig",
+        )
+
+    result = load_statement_availability_overrides_csv_files(
+        (first_file, second_file, first_file)
+    )
+
+    assert set(result.overrides) == {
+        ("2330", "income_statement", "2024-Q1"),
+        ("2317", "income_statement", "2024-Q2"),
+    }
     assert result.diagnostics == ()
 
 

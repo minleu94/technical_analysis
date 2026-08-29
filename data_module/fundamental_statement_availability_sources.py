@@ -6,7 +6,7 @@ import csv
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 from data_module.fundamental_availability import (
     FIRST_OBSERVED_EVIDENCE_CLASSES,
@@ -226,8 +226,25 @@ def load_statement_availability_overrides(
 def load_statement_availability_overrides_csv(
     path: Path,
 ) -> StatementAvailabilityOverrideLoadResult:
-    path = Path(path)
-    if not path.exists():
+    return load_statement_availability_overrides_csv_files((Path(path),))
+
+
+def load_statement_availability_overrides_csv_files(
+    paths: Iterable[Path | str],
+) -> StatementAvailabilityOverrideLoadResult:
+    """Load multiple candidate mappings as one governed revision set.
+
+    Identical rows repeated across overlapping query windows are ignored. Rows
+    with the same natural key but different provenance remain visible to the
+    formal revision-chain validator, which will fail closed instead of
+    guessing which candidate should win.
+    """
+
+    rows: list[Mapping[str, str]] = []
+    diagnostics: list[FactorDiagnostic] = []
+    seen_rows: set[tuple[tuple[str, str], ...]] = set()
+    normalized_paths = tuple(Path(path) for path in paths)
+    if not normalized_paths:
         return StatementAvailabilityOverrideLoadResult(
             overrides={},
             diagnostics=(
@@ -235,8 +252,40 @@ def load_statement_availability_overrides_csv(
                     code="fundamental_statement_availability.mapping_file_missing",
                     factor_name="fundamental.statement_availability",
                     stock_code="",
-                    message=f"statement availability mapping file missing; path={path}",
+                    message="statement availability mapping file list is empty",
                 ),
+            ),
+        )
+
+    for path in normalized_paths:
+        file_rows, file_diagnostics = _read_statement_availability_csv(path)
+        diagnostics.extend(file_diagnostics)
+        for row in file_rows:
+            fingerprint = tuple(sorted((key, value) for key, value in row.items()))
+            if fingerprint in seen_rows:
+                continue
+            seen_rows.add(fingerprint)
+            rows.append(row)
+
+    loaded = load_statement_availability_overrides(rows)
+    diagnostics.extend(loaded.diagnostics)
+    return StatementAvailabilityOverrideLoadResult(
+        overrides=loaded.overrides,
+        diagnostics=tuple(diagnostics),
+    )
+
+
+def _read_statement_availability_csv(
+    path: Path,
+) -> tuple[list[Mapping[str, str]], tuple[FactorDiagnostic, ...]]:
+    path = Path(path)
+    if not path.exists():
+        return [], (
+            FactorDiagnostic(
+                code="fundamental_statement_availability.mapping_file_missing",
+                factor_name="fundamental.statement_availability",
+                stock_code="",
+                message=f"statement availability mapping file missing; path={path}",
             ),
         )
 
@@ -247,21 +296,18 @@ def load_statement_availability_overrides_csv(
             column for column in _BASE_STATEMENT_AVAILABILITY_COLUMNS if column not in fieldnames
         ]
         if missing_columns:
-            return StatementAvailabilityOverrideLoadResult(
-                overrides={},
-                diagnostics=(
-                    FactorDiagnostic(
-                        code="fundamental_statement_availability.mapping_missing_columns",
-                        factor_name="fundamental.statement_availability",
-                        stock_code="",
-                        message=(
-                            "statement availability mapping missing required columns; "
-                            f"path={path}; missing={','.join(missing_columns)}"
-                        ),
+            return [], (
+                FactorDiagnostic(
+                    code="fundamental_statement_availability.mapping_missing_columns",
+                    factor_name="fundamental.statement_availability",
+                    stock_code="",
+                    message=(
+                        "statement availability mapping missing required columns; "
+                        f"path={path}; missing={','.join(missing_columns)}"
                     ),
                 ),
             )
-        return load_statement_availability_overrides(list(reader))
+        return [dict(row) for row in reader], ()
 
 
 def _resolve_provenance(
