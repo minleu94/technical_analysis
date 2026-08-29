@@ -261,11 +261,15 @@ def load_statement_availability_overrides_csv_files(
         file_rows, file_diagnostics = _read_statement_availability_csv(path)
         diagnostics.extend(file_diagnostics)
         for row in file_rows:
-            fingerprint = tuple(sorted((key, value) for key, value in row.items()))
+            normalized_row = {
+                str(key): str(value or "")
+                for key, value in row.items()
+            }
+            fingerprint = tuple(sorted(normalized_row.items()))
             if fingerprint in seen_rows:
                 continue
             seen_rows.add(fingerprint)
-            rows.append(row)
+            rows.append(normalized_row)
 
     loaded = load_statement_availability_overrides(rows)
     diagnostics.extend(loaded.diagnostics)
