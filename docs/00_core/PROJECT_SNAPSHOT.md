@@ -106,6 +106,7 @@
 
 - 以正式 Paper snapshot／Equal Weight SQLite 唯讀重建 `2026-08-24..2026-08-28`：5 筆 snapshot、5 筆 benchmark 都存在，但 Paper Trade Ledger 不存在，因此 `cost_record_count=0`、`weekly_report_status=not_computable`。這不是缺 benchmark，也不是可用 snapshot 反推 fills；仍需真實受控 execution event。
 - 空白 `paper-trade-import.v1` fills template 已輸出至 TEMP，欄位包含 status、requested／filled、Decimal 成本、turnover、execution gap、source event 與 override；row count 固定為 0，未建立 ledger、未寫正式資料。
+- 新增唯讀 `scripts/inspect_paper_trade_reconciliation.py` 與 `paper-trade-reconciliation.v1`；它只接受外部 fills CSV，先重驗 CSV hash／execution contract，再以 query-only 讀取明確期初／期末 Paper snapshot，逐股票對帳 buy／sell filled quantity delta，並檢查既有 ledger 的 fill-id collision。`ready` 只表示候選 fills 可進入既有明確 confirm append；缺 snapshot 邊界、數量不一致或 future／invalid row 會停在 `needs_review`／`rejected`，不從 snapshot 反推成交、不建立或修改 ledger。
 
 ## 2026-08-28 Data Update live status timeline（current engineering）
 

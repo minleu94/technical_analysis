@@ -538,6 +538,7 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_inspect_paper_portfolio_weekly_evidence_cli.py": "governance-doc-tooling",
     "tests/test_append_portfolio_stress_history_cli.py": "governance-doc-tooling",
     "tests/test_append_paper_trade_csv_cli.py": "governance-doc-tooling",
+    "tests/test_paper_trade_reconciliation.py": "governance-doc-tooling",
     "tests/test_position_thesis_contract.py": "general-unit-keep-in-pytest",
     "tests/test_position_health_state_machine.py": "general-unit-keep-in-pytest",
     "tests/test_position_health_transition_repository.py": "general-unit-keep-in-pytest",

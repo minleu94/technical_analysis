@@ -39,6 +39,23 @@ Evidence scheduler readiness 也已收斂為 fail-closed：即使 source coverag
 
 直接以 SQLite `mode=ro`／`PRAGMA query_only=ON` 讀取 `D:\Min\Python\Project\FA_Data\output\scheduled\v2_2_weekly_collection\evidence_scheduler.db`，目前共有 8 筆 collection，狀態全部是 `pending_human_review`：`2026-07-06..07-12`、`07-13..07-19`、`07-20..07-26`、`07-27..07-29`、`07-27..08-02`、`08-03..08-09`、`08-10..08-16`、`08-17..08-23`。這些列是實際 sidecar append 結果，不是 replay 或 projection；它們仍需具名 owner／reviewer 逐期核准，核准前 `weekly=0/3`、`formal_credit_authorized=false`、`production_scheduler_allowed=false` 都維持不變。
 
+## Paper fills／成本帳 reconciliation preview（2026-08-28）
+
+最新 Paper weekly read-only inspection 對 `2026-08-24..2026-08-28` 觀察到
+`5` 筆 snapshot、`5` 筆 Equal Weight benchmark，但成本帳仍為
+`paper_trade_ledger_db_missing`，所以 weekly report 仍是 `not_computable`。為了讓下一筆
+真實 fills 不必直接猜測或直接寫入，新增 `scripts/inspect_paper_trade_reconciliation.py`。
+它要求外部提供完整 fills CSV，先重驗 `paper-trade-import.v1` 的欄位／Decimal 成本／狀態，
+再以 SQLite `mode=ro`／`PRAGMA query_only=ON` 讀取明確 period 的期初／期末 snapshot，逐股票
+對帳 buy／sell filled quantity delta，並可檢查既有 ledger 的 fill-id collision。
+
+輸出 schema 為 `paper-trade-reconciliation.v1`，固定 `candidate_only=true`、
+`write_performed=false`、`broker_order_allowed=false`。只有明確 period、snapshot 邊界、
+數量 delta 與輸入欄位均通過時才回報 `status=ready`／`ledger_append_allowed=true`；
+period 自動推導、snapshot 缺邊界或數量不一致會回 `needs_review`，invalid／future／collision
+則回 `rejected`。`ready` 也不會自動 append，仍需沿既有 `append_paper_trade_csv.py`
+的明確 confirm 與 source hash recheck；工具不從 snapshot、market price 或 virtual trace 反推 fills。
+
 本輪 UI／資料更新回歸也已重跑：`tests/test_ui_qt_update_view_workbench.py` 為 `79 passed`，`scripts/qa_validate_update_tab.py` 為 `23 passed / 0 failed / 4 skipped`，全域 `mypy` 檢查 `522 source files` 無 error。這證明資料更新顯示與唯讀 readiness 投影沒有因本輪資料 candidate 擴充而退化，但不會替 pending weekly review 產生核准事實。
 
 P0 license／terms 的候選證據入口也已完成：`scripts/capture_p0_license_evidence.py` 會從 27 條 route 收斂 3 個唯一 allowlisted 官方 URL，僅保留 bounded response metadata、SHA-256 與關鍵限制 flags，不保存頁面全文、不改 source acceptance。2026-08-28 已產生 no-network preview；同日嘗試受控 bounded GET 時，當前 Windows host 以 `WinError 10013` 拒絕 socket，因此三個 target 都被保留為 `transport_error`。這是本機 egress／權限證據，不是官方來源不存在；需在允許 HTTPS 的執行環境重跑，或由 Owner／Reviewer 提供可驗證的外部保存頁面 hash，才能進入 license review。

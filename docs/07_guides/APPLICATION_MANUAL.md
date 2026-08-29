@@ -2930,6 +2930,29 @@ JSON 內的事件已由系統驗證為真實成交，owner 仍須提供可稽核
 
 CSV 至少要有 `fill_id`、`order_id`、`portfolio_id`、`event_date`、`stock_code`、`side`、`requested_quantity`、`filled_quantity`、`reference_price`、`fill_price`、`commission`、`tax`、`slippage_cost`、`turnover_bp`、`execution_gap_bp`、`status` 與 `source_event_id`；`override_reason` 可選。預覽成功後才加上 `--confirm-append-paper-ledger`。匯入 producer 固定寫入 `source_type=paper_trade_import`，並將 CSV hash 綁入 `source_event_id`，以便週報保留來源追溯。
 
+在確認 append 前，建議先用 query-only reconciliation 對帳外部 fills 與 Paper snapshot 的期初／期末股數：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\inspect_paper_trade_reconciliation.py `
+  --input-csv <PAPER_FILLS.csv> `
+  --state-db <PAPER_PORTFOLIO.sqlite> `
+  --ledger-db <PAPER_TRADE_LEDGER.sqlite> `
+  --portfolio-id paper-main `
+  --period-start 2026-08-24 `
+  --period-end 2026-08-28 `
+  --format markdown
+```
+
+這個預覽先重驗完整 `paper-trade-import.v1` execution contract，再以 SQLite
+`mode=ro`／`PRAGMA query_only=ON` 讀取明確期間的唯一期初／期末 snapshot，逐股票比較
+buy／sell 的 `filled_quantity` 與 snapshot quantity delta，也會檢查既有 ledger 的
+`fill_id` collision。輸出 `paper-trade-reconciliation.v1` 固定是 candidate-only、
+`write_performed=false`；只有明確期間、snapshot 邊界與數量對帳均通過才顯示
+`status=ready`／`ledger_append_allowed=true`。period 自動推導或對帳不一致只回
+`needs_review`；欄位 invalid、future event、portfolio 不符或 collision 回 `rejected`。
+snapshot 不會被用來反推成交，`ready` 也不會自動寫 ledger；確認仍須回到上方
+`append_paper_trade_csv.py --confirm-append-paper-ledger`，並重新驗證輸入檔 hash。
+
 若缺少欄位格式，可先建立空白範本（只寫入欄位標題，不建立 ledger）：
 
 ```powershell
@@ -3256,6 +3279,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：持倉管理新增 Paper Portfolio 唯讀 readiness 分頁、Paper weekly evidence 顯示與 `inspect_paper_portfolio_readiness.py`／`inspect_paper_portfolio_weekly_evidence.py`。正式輸出重新檢查到 21 筆 raw paper snapshots，其中最新 `2026-08-28` 超過台北今日 `2026-08-27`；readiness／weekly／Equal Weight builder 現在會 fail-closed 或降級並排除 future row 的 current projection，保留 blocker／diagnostic，不刪除或回填資料。Equal Weight ledger／交易成本帳尚未配置，故 UI 明示 `degraded`／`not_computable`，不把 paper 日更冒充成本後績效或正式持倉。
 - 2026-08-27：修正 Paper／Decision Desk 每日排程的日期選擇語意：排程預設使用最近已到達的台北 08:30 cutoff，Paper runner 對明確未到達的 `--decision-at` 回報 `skipped_future_decision` 並不開啟 state／market DB，避免再次產生 future／look-ahead snapshot；既有 future row 仍保留供稽核。
 - 2026-08-27：Paper Portfolio 新增完整 execution contract 的「匯入 Paper 成交 CSV」入口與 `append_paper_trade_csv.py`。預覽要求狀態、reference／fill price、Decimal 成本、turnover、execution gap 與來源事件；確認後只 append Paper Trade Ledger，不修改手動 Portfolio、snapshot 或 broker。
+- 2026-08-28：新增 `inspect_paper_trade_reconciliation.py` 唯讀 fills preflight；外部 CSV 先通過 execution contract，再與明確期初／期末 Paper snapshot 對帳 filled quantity delta，並檢查既有 ledger 的 fill-id collision。只有 `status=ready` 才可交給既有明確 confirm append，工具本身不建立或修改 ledger。
 - 2026-08-27：修正「資料更新 > 全部資料」月營收狀態卡的可見欄位；卡片現在會同步顯示已匯入期別、目前完整 PIT 可用期別，以及待生效期別與完整可用起始日，避免只看到日期／筆數而誤判月營收狀態。
 - 2026-08-27：Runtime Observatory 新增「正式路徑環境（唯讀診斷）」卡片與 `inspect_runtime_environment_readiness.py`。它會立即／每 30 秒揭露 `DATA_ROOT`、`OUTPUT_ROOT`、logs 與 Research Run Registry 的存在、可讀性、`os.access` 可寫提示、既有 logger／Registry 的不寫入 handle probe 與 diagnostic；不建立目錄、probe 檔或 SQLite。`os.access_plus_existing_handle` 仍不是正式 schema／原子提交保證，正式 Registry 權限仍以實際錯誤與受控 smoke 為準；CLI 的 Markdown 輸出固定以 UTF-8 顯示繁中。
 - 2026-08-27：Pre-V2／Workbench／Evidence source coverage 的 current Decision Desk 查詢新增台灣市場日期上限；future snapshot 只保留 raw 診斷並從 current latest 排除。`EvidenceSourceCoverageService` 與 `inspect_decision_desk_snapshots.py` 改為 query-only 檢查，正式唯讀 DB 不會再因 writer repository 建 schema 而報錯。
