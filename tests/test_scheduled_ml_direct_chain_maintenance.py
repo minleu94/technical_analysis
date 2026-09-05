@@ -85,6 +85,63 @@ def test_main_blocks_before_launch_when_storage_headroom_is_low(
     assert status["storage_preflight"]["free_bytes"] == 10
 
 
+def test_main_preflight_only_records_headroom_without_starting_chain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    status_path = tmp_path / "scheduled" / "latest_status.json"
+    training = tmp_path / "training"
+    training.mkdir()
+    args = SimpleNamespace(
+        poll_seconds=30,
+        retry_delay_seconds=120,
+        minimum_free_space_bytes=20,
+        preflight_only=True,
+        status_path=status_path,
+        data_root=tmp_path,
+        output_root=tmp_path / "output",
+    )
+    monkeypatch.setattr(
+        runner,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_resolve_inputs",
+        lambda _args: (
+            ["python.exe", "maintainer.py"],
+            {"training_output_dir": str(training), "database_mode": "ro"},
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_storage_preflight",
+        lambda _path, minimum_free_space_bytes: {
+            "free_bytes": 100,
+            "minimum_free_space_bytes": minimum_free_space_bytes,
+            "within_minimum_free_space": True,
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "_maintenance_lock_state",
+        lambda _path: (_ for _ in ()).throw(
+            AssertionError("preflight-only must not inspect or acquire custody")
+        ),
+    )
+
+    assert runner.main([]) == 0
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "preflight_only"
+    assert status["preflight_only"] is True
+    assert status["execution_started"] is False
+    assert status["destructive_action_performed"] is False
+    assert status["formal_oos_allowed"] is False
+    assert status["broker_order_allowed"] is False
+    assert status["storage_preflight"]["within_minimum_free_space"] is True
+
+
 def _write_publication(output_root: Path) -> Path:
     publication_root = output_root / "ml_pit_year_shards"
     publication_dir = publication_root / "runs" / "pit-bootstrap"

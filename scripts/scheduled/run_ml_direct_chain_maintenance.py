@@ -51,6 +51,14 @@ def _parser() -> argparse.ArgumentParser:
             "filesystem has less free space than this threshold"
         ),
     )
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help=(
+            "resolve and record immutable inputs plus storage headroom, then "
+            "stop before acquiring the maintenance lock or launching Direct/OOC"
+        ),
+    )
     return parser
 
 
@@ -359,6 +367,9 @@ def main(argv: list[str] | None = None) -> int:
         "task": "baldr-ml-direct-chain-maintainer",
         "status_path": str(status_path),
         "started_at": started_at,
+        "preflight_only": bool(getattr(args, "preflight_only", False)),
+        "execution_started": False,
+        "destructive_action_performed": False,
         "formal_oos_allowed": False,
         "production_alpha_bp": 0,
         "broker_order_allowed": False,
@@ -371,6 +382,18 @@ def main(argv: list[str] | None = None) -> int:
             minimum_free_space_bytes=args.minimum_free_space_bytes,
         )
         metadata["storage_preflight"] = storage_preflight
+        if bool(getattr(args, "preflight_only", False)):
+            _write_status(
+                status_path,
+                {
+                    **base_status,
+                    **metadata,
+                    "status": "preflight_only",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "execution_disposition": "not_started",
+                },
+            )
+            return 0
         if not storage_preflight["within_minimum_free_space"]:
             _write_status(
                 status_path,
