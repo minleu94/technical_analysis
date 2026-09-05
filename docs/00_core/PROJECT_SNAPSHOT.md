@@ -10,6 +10,15 @@
 > [ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
 > 8/30 Runtime／Performance fresh proof 見 [Runtime Performance Readiness Refresh](../06_qa/RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md)。
 
+## 2026 年 8 月 Gate Review（Terra Forward Clock）
+
+> **補登時間：2026-09-05 14:32 Asia/Taipei**。本節只結算 `terra-forward-clock-12` 的 Development clock 與 Formal evidence clock，不改寫其他 scoped 現況，也不把 development invocation、weekly sidecar、prospective one-shot、replay 或 fixture 換成 Formal elapsed days 或 evidence credit。
+
+- **Maturity**：Development clock 在 8 月完成 prospective-only clock／lineage、read-only readiness 與 weekly operations evidence hardening；正式 weekly sidecar 截至月末共有 10 筆 `pending_human_review` records，owner-approved UI projection 維持 `3/3`。Formal clock 的 8 月 snapshot increment=`0`、outcome revision=`0`、matured denominator=`0`、elapsed formal-day increment=`0`、Formal credit=`0`；既有 1 筆 shadow `manual_observed` 與 2026-08-27／28 prospective artifacts 均未納入 Formal。
+- **Source incidents**：8/30 P0 bounded official retry 的 13 筆 machine evidence 為 `1 verified / 9 degraded / 3 official_no_data`；accepted／limited 仍為 `0`，downstream eligibility=`none`。三筆 official-no-data 只代表該 request date 的自然來源回應，不能當成永久缺失或 owner acceptance；本月未因這些結果寫正式 mapping／market DB 或放寬 Formal path。
+- **Drift**：Rule-only Formal lane 未變，最新 owner-attested binding 仍是 `formal-rule-only-20260807-r1` 且未消耗；`formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`、`promotion_eligible=false`、`broker_order_allowed=false`。8 月沒有合法 training／retraining／promotion／unblind／blend，也沒有 owner-approved Formal publication。
+- **Open blockers**：缺少 2026-08-07 session 的真實 decision-time Rule-only `manual_observed` artifact；10 筆 weekly rows 尚待具名 owner／reviewer；三條 owner-controlled Formal inputs 仍為 `0/3`；P0 尚缺逐來源 license／quality／PIT／coverage 決議；Paper Trade Ledger 仍缺真實 fills／cost。Formal Week 7 已於自然週結束後在 External Validation Register 唯一補登，Week 8（2026-08-31 至 2026-09-06）尚未自然結束，不得提前追加。
+
 | Lane | 現況 | 尚未完成 |
 |---|---|---|
 | P0 | 13/13 machine rows；8/30 retry=`1 verified / 9 degraded / 3 official_no_data`；官方 license page candidate 3/3；accepted=`0`、limited=`0`、downstream eligibility=`none` | publication／獨立 coverage denominator／decision-time PIT／license acceptance／13 筆具名決議；3 個 request-date `official_no_data` 須於自然交易日重試 |
