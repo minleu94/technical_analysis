@@ -181,6 +181,32 @@
 
 ---
 
+### 容量 / retention / immutable artifact 清理
+
+**變更範圍：**
+- 正式 output、immutable run、模型 publication、checkpoint 或大型 QA artifact 的刪除／搬移
+- retention 規則、保留數、current pointer、dependency closure 或 recovery 語意變更
+- 容量 blocker 的建立或解除
+
+**必須更新（Must）：**
+- `docs/06_qa/<DATED_CLEANUP_AUDIT>.md` - owner 授權、exact scope、before／after bytes、全部刪除／保留 ID、pointer／hash、依賴、不可逆性、recovery 與 post-check
+- `docs/00_core/PROJECT_SNAPSHOT.md` - current capacity、readiness 影響、stale status supersession
+- `docs/01_architecture/system_architecture.md` - 若改變 retention／pointer／custody／tombstone 邊界
+- `docs/00_core/DOCUMENTATION_INDEX.md` - 新增 durable audit 入口
+
+**應該更新（Should）：**
+- `docs/07_guides/APPLICATION_MANUAL.md` - 若使用者日後需判讀、執行或排錯 retention／preflight
+- `docs/00_core/ROADMAP_6M_ENGINEERING.md` - 若容量影響 Gate／里程碑／production canary
+- 既有 readiness／runbook 文件 - 保留歷史 ID，不偷換；artifact 已刪時新增 tombstone／supersession
+
+**固定安全檢查：**
+- 不破壞 raw source；不對 broad root／wildcard 做遞迴刪除
+- 先做 untruncated inventory、active lock／process、repo reference、pointer 與完整 dependency closure 檢查
+- resume deletion 與 complete-run deletion 分開核准；明示只能重算或冷 archive 的 recovery 界線
+- read-only inspector 的 `automatic_delete_allowed=false` 不因一次人工授權而變成長期自動刪除權
+
+---
+
 ### 策略設計 / 策略規格變更
 
 **變更範圍：**
@@ -363,10 +389,12 @@
 
 ---
 
-**最後更新**：2026-07-11
+**最後更新**：2026-08-30
 
 ## 更新記錄
 
+- 2026-08-30：補入 P0／Evidence／Paper／Formal／Runtime／Performance／Data Update refresh 文件，並把 UI 舊 readiness artifact marker、週末 freshness 語意與最新測試 inventory 納入 coverage。
+- 2026-08-29：新增容量／retention／immutable artifact 清理的文件 coverage、custody、pointer／dependency、tombstone 與安全檢查要求。
 - 2026-07-06：新增 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 的 scoped authority 邊界，定位為 V2.0 之後長期版本階梯 companion。
 - 2026-07-11：新增 Post-Refactor Product Roadmap、Target Architecture 與新版 Vision scoped authority；補充 Product / Engineering、Current / Target 一致性 Gate。
 

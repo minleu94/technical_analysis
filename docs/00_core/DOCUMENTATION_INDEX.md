@@ -6,8 +6,23 @@
 
 > Evidence rehearsal closeout：[Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)（`engineering_rehearsal_complete`；不是 external completion）。
 
-> **最後整理**：2026-07-13
+> **最後整理**：2026-08-30
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
+>
+> **Current audit entry**：[Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)
+> 統一 P0／Evidence／Paper／Formal／Runtime／Update／Performance 判讀；
+> [ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)
+> 保存本次 owner-authorized cleanup 的 exact scope、before／after、retained chain、pointer 與 tombstone。
+>
+> Paper／成交交接：[Paper Portfolio Readiness Refresh 2026-08-30](../06_qa/PAPER_PORTFOLIO_READINESS_REFRESH_2026_08_30.md)；記錄 21/21 snapshot／benchmark、合法休市日 status、空白 fills handoff 與成本 ledger 缺口。
+>
+> Formal／ML input：[Formal Input Readiness Refresh 2026-08-30](../06_qa/FORMAL_INPUT_READINESS_REFRESH_2026_08_30.md)；記錄 strict `0/3`、過期 prospective path 與不升格 staging 的補件路徑。
+
+> Runtime／Performance：[Runtime Performance Readiness Refresh 2026-08-30](../06_qa/RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md)；記錄 TEMP actual write probe、Registry／technical canary preview、fresh PIT／Direct／OOC headroom、`preflight-only` 與 owner packet。
+
+> Data Update：[Data Update Display Refresh 2026-08-30](../06_qa/DATA_UPDATE_DISPLAY_REFRESH_2026_08_30.md)；修正 freshness 檢查日與資料 end date 的週末誤比對、加入明確 reference 的舊 readiness artifact 標記，並記錄 current timeline 重驗。
+
+> Unified current artifact：8/30 `program_readiness_current_20260830.json`（TEMP，SHA-256=`5229F27373B0CF83E875E4B05D2867121D9E16D18813E91529C337F545720F6E`）由上述各 lane refresh 重建；不自動掃描、不授權 production。
 
 ---
 
@@ -33,7 +48,7 @@
 | [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) | 外部開源專案參考、資料源補強優先序、V1.5 至 V2.0 版本形狀與 deferred 技術邊界；作為 6M Roadmap / Version Roadmap companion，不取代 Vision。 |
 | [system_vision_specification.md](../01_architecture/system_vision_specification.md) | baldr North Star、Product Principles、Bounded Advice Policy、Evidence Requirements、Success Levels 與 Non-goals。 |
 | [LEGACY_ROADMAP_CARRYOVER.md](LEGACY_ROADMAP_CARRYOVER.md) | 舊 Roadmap 未完成事項的逐項處置、移交月份與 Month 3 前結案 Gate。 |
-| [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 30 秒讀完的目前狀態摘要、本週優先事項與高風險區。 |
+| [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) | 頂部 Canonical Current Status 可快速讀取；其後保留逐日工程證據、本週優先事項與高風險區。 |
 | [GATE_2_DATA_GOVERNANCE_CONSOLIDATION_AUDIT_2026_07_22.md](../06_qa/GATE_2_DATA_GOVERNANCE_CONSOLIDATION_AUDIT_2026_07_22.md) | Gate 2 資料治理工程收斂稽核報告、全量 SQLite 數據與 P0 資料源缺口矩陣。 |
 | [SCHEDULER_HEALTH_OBSERVABILITY_REPORT.md](../06_qa/SCHEDULER_HEALTH_OBSERVABILITY_REPORT.md) | 排程與日常證據可觀測性健康報告、寫入意圖與相依性過濾。 |
 | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) | 本文件，文檔導航。 |
@@ -247,12 +262,19 @@
 
 | 文件 | 說明 |
 |---|---|
+| [P0_EVIDENCE_REFRESH_2026_08_30.md](../06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md) | 2026-08-30 bounded 官方唯讀 retry；記錄 `1 verified / 9 degraded / 3 official_no_data`、13 份 deferred intake、owner packet、artifact hash 與不升格安全邊界。 |
+| [EVIDENCE_WEEKLY_APPROVAL_REFRESH_2026_08_30.md](../06_qa/EVIDENCE_WEEKLY_APPROVAL_REFRESH_2026_08_30.md) | 2026-08-30 自然 weekly collection 後的唯讀 owner/reviewer packet；10 筆 pending periods、source hash、review 欄位與 zero-credit 邊界。 |
+| [RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md](../06_qa/RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md) | 2026-08-30 Runtime／Performance fresh proof；TEMP write probe、Registry／technical canary preview、PIT／Direct／OOC headroom、preflight-only runner 與 owner packet 的安全邊界。 |
+| [DATA_UPDATE_DISPLAY_REFRESH_2026_08_30.md](../06_qa/DATA_UPDATE_DISPLAY_REFRESH_2026_08_30.md) | 2026-08-30 Data Update timeline 日期語意修正；避免週末 freshness check 因檢查日晚於資料 end date 被誤標 degraded。 |
+| [PROGRAM_STATUS_REBASELINE_2026_08_29.md](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md) | 2026-08-29 全程式現況 rebaseline；以七個 readiness lane 區分已完成工程、外部 Gate、真實資料／fills、production canary 與可持續推進順序。 |
+| [ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md) | 使用者授權的 release_v4 一次性 retention cleanup；記錄 43 個刪除目標、18 個 retained runs、三個 current pointer、約 403.95 GiB 釋放、dependency closure、不可逆性與歷史 runbook tombstone。 |
 | [GATE_1_ADVICE_CLOSEOUT_2026_07_12.md](../06_qa/GATE_1_ADVICE_CLOSEOUT_2026_07_12.md) | Gate 1 Daily Usable Advice closeout：契約、唯讀 UI、驗證結果與非目標。 |
 | [GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md](../06_qa/GATE_2_TO_7_PURE_ENGINEERING_CLOSEOUT_2026_07_12.md) | Gate 2–7 純工程結案證據：35/35 requirements、獨立 commit slices、驗證結果與 formal product closeout 邊界。 |
 | [GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) | 人工補件、資料授權、真實時間、evidence maturity、ML revalidation 與正式核准的持續工作清單。 |
 | [GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md) | 後續 agent 的 Gate 2–7 接手入口：append-only registry、Workbench projection、CLI 與文件導覽。 |
 | [V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md](../06_qa/V2_3_P0_SOURCE_ACCEPTANCE_REGISTER.md) | V2.3 P0 資料來源逐項人工接受台帳；含 Owner 候選稽核紀錄與尚待補證據。 |
-| [GATE_7_ML_SHADOW_ENGINEERING.md](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md) | 結構化傳統 ML shadow challenger 的資料凍結、available-date、purged walk-forward、calibration、drift、promotion review 與重驗規則。 |
+| [GATE_7_ML_SHADOW_ENGINEERING.md](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md) | ML shadow challenger 的資料凍結、available-date、purged walk-forward、calibration、drift、promotion review 與重驗規則；2026-07-30 Production Co-pilot 為歷史 engineering 命名，current Formal inputs 仍 0/3。 |
+| [V4_0_OPERATIONAL_PRODUCTION_CLOSEOUT_2026_07_30.md](../06_qa/V4_0_OPERATIONAL_PRODUCTION_CLOSEOUT_2026_07_30.md) | [Historical / Superseded] 2026-07-30 bounded Rule／release_v4 engineering freeze；其 Operational Production 標題不再代表目前 V4 maturity，current truth 以 2026-08-29 rebaseline 為準。 |
 | [PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md](../06_qa/PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) | Owner 核准的 Gate 7 prospective-only 正式模擬持倉工程計畫：no-backfill clock、Portfolio／Rule／PIT capture、frozen candidate、calibration、watcher 護欄與逐 slice 驗收。 |
 | [PROSPECTIVE_FORMAL_CLOCK_ACTIVATION_2026_08_18.md](../06_qa/PROSPECTIVE_FORMAL_CLOCK_ACTIVATION_2026_08_18.md) | Owner 的 prospective clock activation handoff：保存決議時間、owner 選定的未來決策日、deferred input paths 與 zero-credit／fail-closed 邊界；不是 strict readiness 或 Formal evidence。 |
 | [PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md](../06_qa/PROSPECTIVE_FORMAL_RESTART_DIRECTION_2026_08_19.md) | Owner 鎖定的 prospective restart 方向：舊 clock 禁止回填、另建新未來 clock、Codex 提出 Rule Champion、TWSE／TPEX 官方 PIT sector、Broker 持續關閉，以及下一個長任務責任與 DoD。 |
@@ -408,10 +430,10 @@
 
 > 本節只作導航摘要；現況仍以 `PROJECT_SNAPSHOT.md` 為準，方向／工程／架構分別回到各自 Scoped SSOT。
 
-- **工程狀態**：A～F committed handoff 已由 G 的跨流 composition／pure verifier 驗證；Gate 2～7 pure engineering 與 evidence rehearsal engineering 已完成，但不是 formal product closeout。
-- **外部狀態**：Week 1 已完成，weekly history 為 `1/3 waiting_for_time`，multi-day dry-run 為 `3/3 ready`；forward maturity、P0 source/license decisions、paper/exit evidence、ML formal OOS／promotion 與 production automation 仍 pending。
-- **產品／安全邊界**：V2.1 bounded Advice 為 `formal_closeout_complete`；`formal_oos_allowed=false`、`production_blend_alpha_bp=0`，scheduler／broker／auto action 未啟用。
-- **下一階段執行入口**：先讀 [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md)；External Evidence 第一個技術切片固定是 [OOS Exposure／Custody Audit](../superpowers/plans/2026-07-13-oos-exposure-custody-audit-execution-plan.md)，不讀 2025 outcome values，也不改 Gate。
+- **工程狀態**：V3.3 engineering foundation 與 Gate 1 bounded Advice 已 closeout；整體 readiness 仍 `action_required`，不是正式 V4.0。
+- **外部狀態**：P0 13/13 machine evidence 但 acceptance 0；Evidence formal credit 未授予／historical working-copy 1/3／UI projection 3/3／pending 10；Paper 21/21 但 fills／cost 0；Formal inputs 0/3。
+- **Runtime／Performance**：environment／TEMP transaction／Registry clone 與 technical staging 已量測；8/30 fresh D 槽 storage headroom 約 338.9 GiB、inventory=`headroom_ok`，但 production Registry／technical canary 尚未完成。
+- **產品／安全邊界**：`formal_oos_allowed=false`、alpha 0、scheduler／broker／auto action 未啟用。先讀 [Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)，再按 lane 進入 External Validation Register／Control Center；舊 OOS Exposure plan 只作歷史計畫，不再是固定 current first slice。
 
 ---
 
@@ -425,6 +447,9 @@
 
 ## 🔄 更新記錄
 
+- 2026-08-29：新增全程式 Program Status Rebaseline 與 ML release_v4 retention cleanup custody audit；更新 Index current summary、Snapshot 快速入口、Evidence／Paper／Formal／Runtime／Performance 判讀與當時 cleanup 後 410.31 GiB headroom，不再把 2026-07 的 OOS plan 或單一 weekly X/3 當 current Next。
+- 2026-08-30：新增 P0／Evidence refresh 與 Paper readiness refresh；校正 sidecar pending=`10`、13/13 P0 的 `1 verified / 9 degraded / 3 official_no_data`、合法休市日 reconciliation，並記錄 Paper ledger 缺失與真實 fills handoff，不以 snapshot／回測補造成交。
+- 2026-08-30：補入 Formal／ML strict input refresh，確認三份 owner-controlled input 仍 `0/3`，未把 prospective／staging artifact 改接正式 path；同步 Snapshot／Rebaseline／Index 的 current 判讀。
 - 2026-07-13：完成 Gemini 文件交叉稽核裁決；校正 Scoped reading order、V2.1 closeout、目前 UI／weekly progress導航與 External Evidence 執行基線，新增 OOS Audit plan、Experiment V1 preregistration template 與 Terra handoff。External Gate、formal OOS、alpha 與 production automation 狀態不變。
 - 2026-07-13：新增 External Evidence 與 Investment Effectiveness Validation 核准設計及 Master Plan 索引；文件只定義後續 EV1～EV5 執行路徑，Snapshot、Roadmap、external Gate 與正式產品狀態均未改變。
 - 2026-07-12：完成全 docs 位置稽核；將 Multi-Agent workflow 移至 `docs/agents/`、Shim／Legacy removal audit 移至 `docs/06_qa/`，並將兩份已完成重構文件移至 `docs/09_archive/`，同步所有索引與引用。

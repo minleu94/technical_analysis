@@ -332,9 +332,13 @@ run 或重訓。2026-08-13 已實際完成此 recovery，Scheduler query 的
 `baldr-ml-direct-chain-maintainer` `Last Result=0`，沒有平行 chain。正式 gate 仍固定
 `formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。
 
-> **最後更新：2026-08-29｜適用 V4.0 Operational Production**。Decision／Advice／Rule 配置／Paper Portfolio 與 evidence loop 已可正式日常運作；不連接券商。ML 為 Production Co-pilot，非零 alpha 完全由自動 promotion artifact 決定；目前證據不足時顯示 `alpha=0` 是正確 fallback，不需要也禁止人工解除。
+> **最後更新：2026-08-30｜適用 V3.3 Engineering / V4 Evidence Accumulation**。
+> `release_v4` 是工程與儲存 namespace，不代表正式 V4.0。Decision／bounded Advice／Rule-only
+> 日常檢查可用；Paper snapshot、Evidence loop 與 ML 都仍受 Gate 控制。目前 Paper ledger
+> missing、Formal inputs=`0/3`、`formal_oos_allowed=false`、alpha=0、production scheduler／
+> broker orders 關閉。任何畫面 `ready` 都必須按本節說明判斷 proof tier。
 
-## V4.0 每日操作
+## release_v4 每日工程操作（非正式 V4.0 closeout）
 
 ### ML Co-pilot 排程自動補跑
 
@@ -376,6 +380,22 @@ runner 在建立 immutable publication 前會對 raw PIT 輸出磁碟做唯讀 h
 `status=blocked_insufficient_storage` 與 `storage_preflight`，不啟動 builder、不留下
 新的部分 publication；可用 `--minimum-free-space-bytes` 在受控環境調整門檻。這個
 容量檢查不會刪除或搬移既有 run，舊 publication 的 retention 必須另由 owner 審核。
+
+若只想確認 immutable pointer、database `ro/query_only` 與 Direct/OOC 磁碟 headroom，
+不想取得 maintenance lock 或啟動長時間 chain，可使用安全的 preflight-only 模式：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\scheduled\run_ml_direct_chain_maintenance.py `
+  --data-root D:\Min\Python\Project\FA_Data `
+  --output-root D:\Min\Python\Project\FA_Data\output `
+  --status-path $env:TEMP\ml_direct_storage_preflight.json `
+  --minimum-free-space-bytes 21474836480 `
+  --preflight-only
+```
+
+結果會是 `status=preflight_only`、`execution_started=false`；即使 headroom 足夠也不會
+啟動 child maintainer。這個 artifact 只供 readiness／owner packet 讀取，仍固定
+`formal_oos_allowed=false`、`broker_order_allowed=false`。
 
 2026-08-12 首次自動 refresh 已發布 publication
 `pit-29505ceb0005d068610dde01`：decision cutoff=`2026-08-12T08:30:00+08:00`、
@@ -428,7 +448,7 @@ latest manifest。整條自動鏈固定維持 `database_mode=ro`、`query_only=t
 3. 可見 action 為 `ADD_CANDIDATE`、`HOLD`、`REDUCE_CANDIDATE`、`EXIT_CANDIDATE`、`NO_NEW_POSITION`、`AVOID`。它們是配置與硬限制後的決策建議，不是券商委託。
 4. 檢查 `OUTPUT_ROOT/scheduled/ml_allocation_copilot/latest_status.json`：`selected_alpha_bp=0` 表示 Rule-only；只有可信 promotion custody、consumer re-verification 與所有 thresholds 都通過，才可能出現 2000／3500／5000。`shadow_day_credit_allowed=false` 代表本日 observation 已正常保存，但因正式 Rule/context custody 不足而不計入 20 日 Promotion 門檻，不是 runner 失敗。request 中自行填入非零 alpha 不會生效。
 5. 檢查 `OUTPUT_ROOT/scheduled/decision_evidence_capture/latest_status.json` 與 `OUTPUT_ROOT/scheduled/paper_portfolio_daily/latest_status.json`。前者應揭露 snapshot/event counts；後者應揭露 T-1 diagnostics、cash、total value 及 market DB `ro/query_only`。
-6. Gate 2 weekly history 不得由 scheduler sidecar 自動計入 Gate：Windows weekly collection 只產生 `pending_human_review`，不代表人工核准或 formal credit。若未設定具名 owner 核准的 `approved-weekly-history-projection.v1`，目前 UI／readiness 會如實顯示 `0/3 waiting_for_time`；若日後提供 projection，也只供 UI 進度揭露，不能改變 `formal_credit_authorized=false`、`production_scheduler_allowed=false`。forward、Paper elapsed、Exit outcome、ML shadow days 與非零 alpha 仍由各自的 evidence maturity 決定。
+6. Gate 2 weekly history 不得由 scheduler sidecar 自動計入 Gate：Windows weekly collection 只產生 `pending_human_review`，不代表人工核准或 formal credit。若未設定具名 owner 核准的 `approved-weekly-history-projection.v1`，UI／readiness 會依 canonical DB 顯示未取得 credit；若有 projection，也只供 UI 進度揭露，不能改變 `formal_credit_authorized=false`、`production_scheduler_allowed=false`。2026-08-30 現況需分層閱讀：歷史 working-copy=`1/3`、owner-approved UI projection=`3/3`、sidecar pending=`10`、multi-day=`3/3`，但 formal/canonical credit 仍未授予。forward、Paper elapsed、Exit outcome、ML shadow days 與非零 alpha 仍由各自的 evidence maturity 決定。
 
 ### ML Promotion Reference 與 Shadow Evidence
 
@@ -458,7 +478,7 @@ Canonical reference v2 為 22,093 rows、62 features／3 formal families，refer
 
 2026-07-31 最新 canonical reference-v2 接線驗證已保存 observation revision=7、fully matured outcome=0；shadow evidence hash=`sha256:82332fb24eb62dcf2018e8d940d9f7e4faa21dd83a5e9bd48990dbd2d6d36669`，metrics hash=`sha256:607adf7b48f4210809ee2f31d355d3adfef56027cb0d7d6322db3fd02dda750d`。該 observation 明確為 `promotion_day_credit_allowed=false`，所以 5／10／20／60 日 promotion 計數均為 `0/20`；全市場 OOC 與正式 semantic replay 亦尚未形成 compatible evidence，reference baseline／feature distribution 則為 `ready`。
 
-## V4.0 排程
+## release_v4 工程排程（不代表 V4.0 closeout）
 
 | 本機時間 | Task | 寫入範圍 |
 |---|---|---|
@@ -472,7 +492,7 @@ Canonical reference v2 為 22,093 rows、62 features／3 formal families，refer
 | 05:18 | `baldr-ml-promotion-authority-daily` | DPAPI machine authorization；不足即不簽 |
 | 05:20 | `baldr-ml-allocation-copilot-daily` | immutable lane sidecar/promotion status |
 | 05:25 | `baldr-decision-evidence-capture-daily` | durable DDD snapshot + evidence events |
-| 05:28 | `baldr-paper-portfolio-daily` | isolated append-only Paper ledger |
+| 05:28 | `baldr-paper-portfolio-daily` | isolated Paper snapshot／status；不自動產生真實 fills 或成本 ledger |
 | 05:30 | `baldr-ml-direct-chain-maintainer` | 自動 bootstrap／維持 Direct → OOC watcher；只使用 hash-bound immutable input |
 | 週日 18:00 | `baldr-v2-2-weekly-collection` | append-only weekly evidence sidecar + machine revalidation |
 
@@ -657,19 +677,27 @@ Evidence `latest_status.json` 使用 schema v3，並保存
 
 正式配置投影必須提供 `CausalPortfolioState`：`as_of_date` 嚴格早於 decision date、`AllocationWeightContract` 連同現金總和 10,000 bp、完整列出所有現有持倉 symbol，並帶可重算的 `state_hash`。每個 symbol 的 context `current_weight_bp` 與 request cash 必須和該 state 完全一致。缺 state、漏持倉、日期／hash／cash／context 不一致時，系統不猜 current=0：結果會是 `NO_NEW_POSITION`、`executable_weights=null`，但保留 target 與 diagnostics 供排錯。
 
-> Gate 2–7 最新狀態統一在 `docs/06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md` 查看；weekly machine Gate 已為 `4/3 complete`，其餘項目由 append-only machine evidence／policy revision 更新，不再使用 blanket human acceptance。禁止覆寫歷史或把工程完成解讀成模型績效通過。
+> Gate 2–7 的工作台帳可在
+> [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 查看，
+> 但其中 `4/3 complete` 是 2026-07-30 的歷史投影，不是 current SSOT。2026-08-29
+> Evidence 必須分層為 formal/canonical credit 未授予、歷史 working-copy=`1/3`、
+> owner-approved UI projection=`3/3`、sidecar pending=`10`、multi-day=`3/3`，且
+> `formal_credit_authorized=false`。Current 全程式狀態以
+> [Project Snapshot](../00_core/PROJECT_SNAPSHOT.md) 頂部與
+> [Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md) 為準。
 
 > Daily / Weekly / Monthly / Maturity / Failure 的完整操作契約見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。`verify_artifact_lineage.py` 只做唯讀工程驗證，fixture 不得冒充 forward/paper/live evidence。
 
-> 下方日期標示為 2026-07-13 或更早的 Gate 數字是歷史操作紀錄；若與本頁頂部 V4.0 區塊衝突，以 V4.0 區塊及 External Validation Register 最新 append-only revision 為準。
+> 下方日期標示為 2026-07-13 或更早的 Gate 數字是歷史操作紀錄；若與本頁頂部
+> current engineering 區塊衝突，以 `PROJECT_SNAPSHOT.md` 的 Canonical Current Status、
+> External Validation Register 最新 append-only revision 與具時間戳的 readiness artifact 為準。
 
 ## V3 pruning review package（唯讀提案）
 
 執行 `scripts\build_v3_pruning_package.py --input <metrics.json> --output <package.json>`，可把已成熟的 effectiveness metrics 轉成 `retain`、`restrict`、`downweight`、`retire` 或 `defer` 審查提案。樣本不足、必要指標缺失或人工驗證未完成時必定 `defer`。所有 proposal 固定 `apply_action=false`、`review_required=true`，package 固定 `auto_trading=false`；不得用此輸出直接修改推薦權重、threshold、production scheduler 或交易狀態。
 
-> **最後更新**：2026-07-13
-> **適用版本**：目前主要 PySide6 UI，入口為 `ui_qt/main.py`。
-> **範圍**：本手冊涵蓋目前左側主導覽的 8 個主工作區與跨工作區流程。開發中或 Roadmap 規劃功能不會描述成已可用。
+> **歷史整合段落基準**：2026-07-13。本文頂部 2026-08-29 metadata 與 current
+> rebaseline 優先；本段只保留當時系統工程整合判讀。主 UI 入口仍為 `ui_qt/main.py`。
 
 ## 2026-07-13 系統工程整合判讀
 
@@ -879,7 +907,7 @@ Corporate-action availability history 是 Terra V0.1 前置的 staging-only 輔�
 - Data Update → 排程狀態頁的初始預覽會讀取明確的 `data_freshness/latest_status.json` 路徑，並以中文狀態、原始 token、檢查時間、日價／技術指標最新日與 warnings／errors 摘要呈現；它只代表這一個 freshness 工作，不是整體 Scheduler。按「檢查此資料源狀態」後才會讀取明確 `scheduled/*/latest_status.json` 並彙整核心／受控／需處理／不可用工作。每日資料更新 task 的註冊／執行不等於 Evidence／ML 生產寫入授權；`production_scheduler_allowed=false` 固定保留，頁面不提供手動觸發或 Task Scheduler 修改。
 - 更新時間軸的步驟／歷史表格與 freshness／TPEX 摘要會同時顯示中文狀態與原始 machine token（例如 `完成（passed）`）；原始 token 仍保留供排錯，不代表任何正式治理或交易授權。
 - 更新時間軸的 freshness 摘要會另外顯示 artifact 內的日價／技術指標最新日、對應 quick-run 的檢查／預期日，以及 TWSE／TPEx 最新日檔是否存在；這些欄位只來自明確 freshness artifact 的 allowlist，未提供或格式不符時顯示未知／缺漏，不會由狀態 token 推導。
-- 當 freshness artifact 已提供上述觀測時，時間軸也會與 quick-run 目標資料日比對；日期不一致、quick status 不是成功狀態或原始日檔缺漏，整體狀態會顯示 `freshness 異常（degraded）` 並列出診斷。舊版 artifact 沒有 optional checks 時不會被自動回填或推導。
+- 當 freshness artifact 已提供上述觀測時，時間軸會把 `data_update_quick_expected_date`、日價最新日與技術指標最新日和 quick-run 目標資料日比對；`data_update_quick_checked_date` 是檢查發生日期，只會檢查是否早於 expected date，不要求和資料 end date 相等。因此週末在 8/30 檢查 8/28 的最後交易日不會被誤標 `degraded`；真正日期不一致、quick status 不是成功狀態或原始日檔缺漏，整體狀態才會顯示 `freshness 異常（degraded）` 並列出診斷。舊版 artifact 沒有 optional checks 時不會被自動回填或推導。
 - 時間軸也會翻譯 `in_progress`、`schema_mismatch`、`blocked_provenance` 等排程／治理 token；未知 token 仍原文顯示，避免把未辨識狀態誤當成功。
 - Portfolio → Paper Portfolio 的 readiness／weekly 摘要也會以中文說明包住原始狀態（例如 `成本帳：尚不可計算（成本帳缺漏）（not_computable_cost_ledger_missing）`）；這只是可讀性改善，缺少真實 fills 時仍不會計算成本後週報。
 
@@ -1058,7 +1086,7 @@ python ui_qt/main.py
 
 行動中心下方保留四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者掃描重點後再往下看表格。「Evidence」子頁已替換為唯讀 Research Console；「持倉追蹤」與「操作節奏」仍是摘要與下鑽入口。Research Console 的可見性不代表 formal evidence、source acceptance 或 promotion 已完成。
 
-Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Phase 0 weekly history 的目前 live 值以 `inspect_pre_v2_readiness.py` 為準：本機未設定 projection 時，正式 DB legacy history 為 `0/3 waiting_for_time`；若載入具名 owner 的 approved projection，UI 只展示 projection 累積（目前外部 projection 為 `3/3`），不授予 formal credit。歷史 working-copy 的 Week 1 `1/3` 僅供追溯；multi-day dry-run record 已為 `3/3 ready`，但 Week 2 / Week 3 與真實 manual review / action-item rhythm 仍需正式資料與真實時間累積，不能因 UI 重排、replay summary、fixture 或人工改表而標示為完成。
+Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Evidence 必須按來源層判讀：formal/canonical DB credit 未授予；未設定 projection 時 legacy DB 可能顯示 `0/3`；歷史 working-copy Week 1=`1/3`；owner-approved UI projection=`3/3`；正式 sidecar 已有 `10` 期 `pending_human_review`；multi-day dry-run=`3/3`。目前缺口已不是「等待 Week 2／3 出現」，而是由具名 reviewer 對 10 期逐期裁決、取得 formal credit，並完成 backup／rollback／recovery 與 scheduler approval。UI 重排、replay、fixture 或人工改表都不能替代上述步驟。
 
 ## Gate 1 Advice：決策工作台的唯讀操作
 
@@ -1098,6 +1126,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 
 窄視窗（小於 720px）會將左側資料來源導覽移到內容上方，核心狀態卡改為雙欄、候選資料卡改為單欄、快速／安全／狀態檢查按鈕改為直列；整個更新頁可垂直捲動。這只是畫面排版，更新日期、worker、SQLite 同步與 fail-closed 規則不變。
 
+一般桌面寬度的「全部資料」頁會把「快速更新」、「安全更新」與「檢查數據狀態」固定放在標題下方的「立即操作」列，接著才是手動更新摘要、六張核心狀態卡、時間軸與 readiness／P0 診斷。核心卡在寬版採三欄、窄版採雙欄；按鈕不再被長篇狀態表推到頁面最下方。候選資料與月營收分頁也把檢查／抓取操作列放在治理說明與 CLI 範例之前，進入子分頁即可操作。
+
 狀態卡片包括：
 
 - 每日股票數據
@@ -1110,6 +1140,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 月營收卡片會以「最新可用日」顯示該期全部資料的 `available_date`，並在附加列顯示 `fundamental_monthly_revenues` 的「已匯入期別」；這兩者不能視為每日交易資料的「最新日期」。若同一期仍有部分公司尚未到可得日，該期仍列為待生效；卡片會顯示待生效期別數與完整可用起始日。這是 point-in-time 可見性保護，不代表更新失敗。
 
 若 `OUTPUT_ROOT/monthly_revenue_mops_snapshots` 中存在比 SQLite 已匯入期別更新的受控命名 snapshot，卡片會改顯示「候選可用」，並列出「候選待套用期別」與抓取日。即使候選與已匯入期別相同，也會顯示「候選快照期別」與抓取日，避免重抓或修訂候選在畫面上消失。這只代表已取得新的數值候選，不代表公告日 availability mapping 或 SQLite 已完成；仍須先跑 availability validator 與 backfill dry-run，再由人工確認是否正式套用。snapshot 選擇依檔名的資料期別／抓取日，不依檔案大小，UpdateView 與兩個 availability builder 共用同一規則，避免歷史大檔遮蔽最新候選。
+
+狀態檢查也會依台灣市場日期與一般 MOPS 公告節奏提供「預期最新期別」提示：每月 1--9 日先以前兩個月作操作提示，10 日起以之前一個月作提示。例如 2026-09-04 的提示是 `2026-07`。這只是候選抓取的導引，不是官方公告證據；若正式資料仍停在 2026-06，卡片會標成「待更新」並明示必須先取得數值 snapshot 與可得日 mapping。已有更新候選時則優先顯示候選狀態，不把候選誤報成正式資料已套用。
 
 若 snapshot 尚未放入正式 `OUTPUT_ROOT`，可設定 `MONTHLY_REVENUE_SNAPSHOT_CANDIDATE=<絕對路徑>` 讓狀態檢查唯讀投影該明確候選；這不會掃描 TEMP、不會自動替換正式 snapshot，也不會改變更新頁的正式 backfill 欄位。路徑不存在或檔名不符合受控規則時，卡片會保留「缺漏／候選無效」與診斷，不會悄悄退回另一份 snapshot。
 
@@ -1210,6 +1242,11 @@ history；不可用舊 latest status 回填。
 performance lane，另加 `--ml-direct-chain-status <ML_DIRECT_CHAIN_STATUS_JSON>`；
 當 status 是 `blocked_insufficient_storage` 時，報告會保留
 `direct_chain_storage_preflight_blocked`，只提示容量／保留策略，不啟動 worker。
+這個 status 是一次執行的 terminal evidence，不是永久磁碟屬性。2026-08-29 cleanup 後，
+較新的唯讀 retention inventory 已觀察 D free 約 `338.9 GiB`、`headroom_ok`；cleanup 前
+`6.11/6.56 GiB` status 應標成 historical。不要手改舊 status；若只為刷新畫面，使用
+`run_ml_direct_chain_maintenance.py --preflight-only`，不要呼叫一般 wrapper，因為 headroom
+通過後一般 wrapper 會真正啟動 Direct/OOC rebuild。完成 preflight 後再重建 unified readiness。
 若已建立效能 owner handoff，另加
 `--performance-owner-packet <PERFORMANCE_OWNER_PACKET_JSON>`；報告與 UI 會顯示
 `needs_named_owner_reviewer`／`ready_for_owner_review`、review lane 總數與待處理數，
@@ -1242,6 +1279,8 @@ Paper 成本後週報或平行 worker 已完成。若要保存報告，才另以
 若要在受控環境改用另一個已核准的 artifact，可設定 `DATA_UPDATE_STATUS_ARTIFACT`、`DATA_UPDATE_HISTORY_ARTIFACT`、`DATA_FRESHNESS_STATUS_ARTIFACT`、`TPEX_REFRESH_STATUS_ARTIFACT`、`MONTHLY_REVENUE_SNAPSHOT_CANDIDATE` 或 `MONTHLY_REVENUE_AVAILABILITY_CANDIDATE`；每個變數都必須是完整檔案路徑。未設定時使用上述固定出口，找不到時畫面會明示「缺漏／未設定」，不會自行搜尋相鄰目錄。
 
 每日股價、大盤指數、產業指數、券商分點、技術指標、月營收，以及法人／信用／集保三個候選資料源分頁，都會在「檢查此資料源狀態」下方顯示同一份唯讀來源摘要；全域檢查完成後也會同步刷新這九份摘要。個別來源查詢失敗時只會將該來源標為異常，不會把其他來源卡片誤刷成錯誤。候選來源摘要仍屬 research-only，不代表正式評分或交易訊號。
+
+若正式資料根目錄目前唯讀，來源狀態查詢仍會回傳 SQLite／Candidate DB 的實際結果；寫入 status manifest 失敗只會留下 `status_manifest_write_skipped:<error_type>` 警告，不會把可讀取的資料源誤標成查詢失敗。
 
 若狀態卡顯示黃色「待更新」且文字含 `讀取模式：immutable_fallback`，代表 Windows 當下無法取得一般 SQLite read lock，系統使用最後已提交的 immutable 唯讀快照；這不是資料已確認最新，請先停止其他 SQLite 寫入工作，再按「檢查數據狀態」重查。SQLite 資料檢視頁的頁首也會顯示「immutable 唯讀快照，可能非即時」。
 
@@ -1982,12 +2021,14 @@ MOPS snapshot 可以作月營收**數值**主來源，但不能自行證明歷�
 - `正式可得日對照檔`：指定 `monthly_revenue_availability.csv`，用來決定每筆月營收從哪一天起可被因子層讀取。
 - `本次寫入版本名稱`：寫入資料表的版本名稱，用於日後追溯與比對。
 
-此分頁提供兩個操作：
+此分頁提供三個操作：
+
+- `抓取最新候選快照`：依頁面顯示的預期期別，向 MOPS 官方 static endpoint 取得 TWSE／TPEx 數值候選。只寫入 `OUTPUT_ROOT/monthly_revenue_mops_snapshots/` 下的受控 CSV 與 `raw_html/`，不寫正式 SQLite、不修改正式 availability mapping；完成後會自動把輸出 CSV 帶入快照欄位。
 
 - `先檢查，不寫入`：只檢查可回填筆數與診斷結果，不寫入正式資料庫。
 - `確認後寫入月營收`：先跳出確認視窗，再建立 DB 備份並寫入 `fundamental_monthly_revenues`。此按鈕不抓取新 MOPS HTML、不修改 raw CSV，也不更新 availability mapping。
 
-更新頁目前只負責 SQLite backfill；若已有新的官方 availability candidate，先在外部執行上述 merge CLI，完成人工檢查與 mapping 備份後，再重新載入此分頁做 dry-run。UI 不會把「候選可用」誤顯示成「已套用」。
+操作順序是「抓取候選 snapshot → 以官方公告日期 builder／validator 產生並檢查 availability candidate → 先合併正式 mapping → 回到此頁執行 dry-run → 人工確認後 apply」。更新頁目前只負責候選 snapshot 與 SQLite backfill；不會用 snapshot 查詢日推定公告日，也不會自動把候選 mapping 或數值寫入正式資料。UI 不會把「候選可用」誤顯示成「已套用」。
 
 若要補抓最新月份，先以 MOPS snapshot CLI 取得數值，再用 TWSE／TPEx historical availability builder 取得官方 `出表日期` 候選；兩者交集才可進 backfill dry-run。兩條來源缺一時，更新頁只應顯示候選／缺口，不可用 snapshot 查詢日或本機檔案日期推定公告日。
 
@@ -2360,7 +2401,7 @@ No-look-ahead 邊界：
 - Recommendation 類來源只會選 `created_at` 日期不晚於當日 decision date 的 persisted result；若沒有當日以前 result，會記錄 `recommendation_asof_result_missing`，並略過 `recommendation` / `why-not` / `liquidity-gate` 類來源，不用未來 result 補值。
 - Event metadata 會帶入 `replay_mode=historical_replay`、`source_label=simulated_scheduler`、`replay_run_id`、`replay_decision_date` 與 `replay_data_as_of_date`，方便和真實 scheduled dry-run 分開查。
 - Forward outcome 計算會以 `data_as_of_date` 限制價格可見日；`final` 模式以 replay 最後一個交易日作上限，`daily` 模式以每日 replay date 作上限。在可見日尚未成熟的 5 / 10 / 20 / 60 日 window 仍會維持 pending，不會提前看未來價格。Pending outcome 會依交易日序列揭露 `expected_maturity_date` 與剩餘交易日；日曆資料不足時顯示 `waiting_for_calendar`，不得用 calendar days 補算。
-- Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 workbench 設計方向；不計入目前 weekly history `1/3 waiting_for_time`、已達 `3/3 ready` 的 multi-day dry-run 實際紀錄、manual approval 或 production scheduler gate，也不是投資有效性證明。
+- Replay report 只能用來看 source gap、payload gap、decision workflow 與 V2.0 Workbench 設計方向；不計入 formal/canonical credit，也不能把歷史 working-copy `1/3`、UI projection `3/3`、sidecar pending `10` 或 multi-day `3/3` 互相替代。它不構成具名 review、manual approval、production scheduler gate 或投資有效性證明。
 
 結果判讀：
 
@@ -2672,7 +2713,7 @@ Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified 
 - Workbench > Evidence / Research Console：此子頁固定分成 Safety Boundary、Development Pipeline、Evidence / Source Gates 三區。Safety Boundary 必須顯示 `formal_oos_allowed=False`、`production_blend_alpha_bp=0`、Production ML disabled、正式 Recommendation / Portfolio 維持 Rule-only，以及 promotion / retrain / scheduler / trading disabled。Development Pipeline 只複製顯式 `RESEARCH_CONSOLE_PROJECTION` 指向的 sanitized `ResearchConsoleProjection.json`，顯示 Dataset V0、Rule Development Baseline、ML Development Challenger、E2E identity、row / feature count、label maturity、artifact citation 與 blockers；缺欄使用 `Missing / Unknown`，不補零。Evidence / Source Gates 固定保留 EV1–EV5、13 個 P0 source、獨立 Broker lane、P0 Data Source Control Center 與 Artifact Inspector；Control Center 逐列顯示 governance/machine/audit/decision status、row 數、blockers 與 `downstream_eligibility`，沒有 audit 時仍顯示 13 列 `contract_only`，不把 development、candidate、provisional、degraded、fixture 或 replay 冒充 formal accepted / forward evidence。頁面唯一控制是「重新載入唯讀 projection」，沒有 Apply、Promote、Retrain、Blend、Accept Source 或 Trade。
 - Research Console 排錯：未設定 `RESEARCH_CONSOLE_PROJECTION`、檔案不存在、JSON/schema 不合法時，頁面仍可開啟並顯示 `Missing` 或 `degraded`；若 projection scope 不是 exact `historical_research_seen_development_data`，或宣稱 formal OOS、非零／非整數 alpha、promotion eligible、缺少 canonical apply flag、出現額外 flag、任一 flag 不是 literal `false`，service 會以 `projection_boundary_violation` fail-closed，不套用該內容。`lineage.generated_at` 必須是含時區的 ISO-8601；缺少、格式錯誤、超過未來 5 分鐘或距目前超過 7 天時，分別顯示 `projection_generated_at_missing`、`projection_generated_at_invalid`、`projection_generated_at_future` 或 `projection_stale`，保留 sanitized identity 供排錯但整體固定降級，不代表 formal elapsed day。E2E row 的 artifact hash 是實際 projection bytes 的 SHA-256；injected mapping 沒有實體檔時保持 Unknown。啟動與重新載入只讀 JSON，不掃描 development／正式資料目錄、不建立 SQLite 連線、table、directory 或 artifact。
 - 工程預演狀態 / Evidence Rehearsal：在「Evidence mode」下方查看注入的 `EvidenceRehearsalDashboard`。此唯讀區塊固定揭露「工程／Replay／Shadow；不是 forward evidence」、rehearsal tier、coverage、blockers、是否提供 Shadow comparison 與 `Forward handoff：pending`。coverage 會逐來源列出 observed、missing、degraded、future-blocked 與 immature-label 計數；`missing`、source outage 或 `insufficient_sample` 必須維持已阻擋／預演狀態，不得被畫成 clean、ready 或正式通過。這個區塊沒有 apply / promote 按鈕，不能寫入 DB、啟用 scheduler、改變 Advice 或把 replay / shadow 結果視為 forward evidence；要補齊問題時，只能依 blocker 回到既有人工、資料授權或真實時間流程處理。
-- Daily Checklist：以 status card 顯示 freshness、Evidence gate、multi-day dry-run、manual review 與 scheduler write-mode 等 gate，內容可換行，不再以寬表格呈現。Phase 0 weekly history 以 readiness inspector 的 live 值為準：未設定 approved projection 時為 `0/3 waiting_for_time`；projection 只作 UI 揭露，不能授予 formal credit。multi-day dry-run record 已為 `3/3 ready`，但 Week 2 / Week 3 與 manual review / action-item rhythm 只能繼續靠真實時間累積，不能用 fixture、單次 smoke、手動改表或 replay 補齊。
+- Daily Checklist：以 status card 顯示 freshness、Evidence gate、multi-day dry-run、manual review 與 scheduler write-mode 等 gate，內容可換行，不再以寬表格呈現。未設定 approved projection 時 legacy DB 可能顯示 `0/3`；歷史 working-copy=`1/3`、UI projection=`3/3`、sidecar pending=`10`、multi-day=`3/3`，但 formal credit 仍未授予。現在要完成的是 10 期具名 review、formal credit、backup／rollback／recovery 與 scheduler approval；fixture、單次 smoke、手動改表或 replay 都不能補齊。
 - Warnings / degraded source：missing DB、missing table、snapshot missing、replay limitation 或 Agent sample limitation 都會以 warning 保留；Warnings 會依唯讀 / Phase Gate、缺漏來源、Replay / 模擬資料、資料品質、需要人工覆盤與其他警示分組，每組預設顯示前三項，其他項目可展開查看。不要手動補空資料或改表讓畫面變綠。
 
 Replay summary 只能使用 JSON summary；不得把 replay DB 直接交給 prototype CLI 或 Qt Workbench。`--db-path` 建議使用 working-copy DB 或明確允許的 read-only source path；missing / degraded source 是要被呈現的 evidence gap，不可手動補 fixture 當作 gate 通過。Workbench CLI 與 Qt shell 都是 V2.0/V2.1 資訊架構與 read-only contract 檢查，不代表 production scheduler approval，也不是交易建議。
@@ -2793,6 +2834,7 @@ registration inspector 與真實 terminal history 驗證；本段不代表目前
 - 若正式 `OUTPUT_ROOT` ACL 不允許 freshness status／log 寫入，owner 可在受控 Task Scheduler 執行環境明確設定 `BALDR_FRESHNESS_STATUS_PATH`；未設定 `BALDR_FRESHNESS_LOG_PATH` 時 wrapper 會將 `.log` 放在 status path 旁。UI 另設定 `DATA_FRESHNESS_STATUS_ARTIFACT` 讀取該明確 status 檔。這只是把 read-only 觀測輸出導到已核准可寫路徑，不會建立或修改 DB、source acceptance、Evidence、Formal 或 broker 權限；未設定覆寫時仍使用既有 `<OUTPUT_ROOT>/scheduled/data_freshness/`。
 - `baldr-recommendation-snapshot-daily`：每日本機時間 05:10，在 freshness check 後產生一筆 research-only recommendation snapshot，保存到 `<OUTPUT_ROOT>/recommendation/runs/`，並寫 `<OUTPUT_ROOT>/scheduled/recommendation_snapshot/latest_status.json`。status 會列出 `result_id`、`recommendations_count`、`screening_matrix_rows`、`why_not_payload_rows`、`liquidity_gate_payload_rows`、`writes_recommendation_result=true`、`writes_evidence_db=false`、`auto_trading=false` 與 `lifecycle_action=false`。它只保存推薦結果供 evidence dry-run 與 UI 判讀，不寫 production evidence DB、不改 portfolio、不自動交易、不自動 lifecycle。
 - `baldr-evidence-pipeline-dry-run-daily`：每日本機時間 05:15，只執行 evidence pipeline `--dry-run`；scheduled wrapper 會把已解析的 `DATA_ROOT`、`OUTPUT_ROOT` 與 `DB_PATH` 明確傳給內層 pipeline，避免環境覆蓋時讀到另一套預設來源。scheduled status 會同時承接 freshness 與 pipeline `overall_status`。子程序 exit code 為 `0` 只代表正常完成並產生報告；只要 pipeline 為 degraded、warnings_count 大於 0、blocking gaps 非空，或 freshness 不是 passed，`latest_status.json` 的 `status` 就不會誤標為 passed。因 05:10 已先保存當日 recommendation snapshot，dry-run 可讀到最新 recommendation payload（含 screening matrix / why-not / liquidity gate payload，若當日推薦流程有產出）。輸出位於 `<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/`。2026-07-06 後，`latest_status.json` 會另外保存 pipeline summary 摘要欄位，例如 `pipeline_overall_status`、`pipeline_diagnostic_codes`、`source_coverage_warnings`、`recommendation_screening_matrix_available`、`recommendation_exclusion_payload_available` 與 `source_coverage_basis`；2026-07-09 後也會保存 `pipeline_warning_counts`、`pipeline_warning_unique_count` 與 `pipeline_warning_top_counts`，對應 markdown report 的 `Warning Summary` / `Warning Breakdown`，方便 read-only morning report 直接判讀 V1.7 payload readiness、warning occurrence 總量與 warning 分布。新版 status 另分開保存 `pipeline_natural_maturity_warning_counts`、`pipeline_actionable_warning_counts`、`natural_maturity_only` 與 `manual_action_required`；只有非自然 warning、error、blocking gap、缺少 pipeline summary 或 freshness 非 passed 才列為需人工處理，`insufficient_future_data` 仍是自然成熟度，不應以補跑或人工填值消除。安全旗標固定為 `dry_run=true`、`confirm=false`、`writes_evidence_db=false`、`production_scheduler_allowed=false`。證據覆盤的「排程狀態」會把 pipeline warnings 與 freshness warnings 分開顯示；若看到 `freshness warnings: 無` 但 `pipeline warnings` 有數量，代表資料新鮮度檢查沒有 warning，但 evidence dry-run 仍有來源品質或事件品質 warning。這些欄位只來自同次 dry-run stdout，不額外重跑 pipeline。
+- `baldr-evidence-pipeline-dry-run-daily`：每日本機時間 05:15，只執行 evidence pipeline `--dry-run`；scheduled wrapper 會把已解析的 `DATA_ROOT`、`OUTPUT_ROOT` 與 `DB_PATH` 明確傳給內層 pipeline，避免環境覆蓋時讀到另一套預設來源。scheduled status 會同時承接 freshness 與 pipeline `overall_status`。子程序 exit code 為 `0` 只代表正常完成並產生報告；只要 pipeline 為 degraded、warnings_count 大於 0、blocking gaps 非空，或 freshness 不是 passed，`latest_status.json` 的 `status` 就不會誤標為 passed。因 05:10 已先保存當日 recommendation snapshot，dry-run 可讀到最新 recommendation payload（含 screening matrix / why-not / liquidity gate payload，若當日推薦流程有產出）。輸出位於 `<OUTPUT_ROOT>/scheduled/evidence_pipeline_dry_run/`。2026-07-06 後，`latest_status.json` 會另外保存 pipeline summary 摘要欄位，例如 `pipeline_overall_status`、`pipeline_diagnostic_codes`、`source_coverage_warnings`、`recommendation_screening_matrix_available`、`recommendation_exclusion_payload_available` 與 `source_coverage_basis`；2026-07-09 後也會保存 `pipeline_warning_counts`、`pipeline_warning_unique_count` 與 `pipeline_warning_top_counts`，對應 markdown report 的 `Warning Summary` / `Warning Breakdown`，方便 read-only morning report 直接判讀 V1.7 payload readiness、warning occurrence 總量與 warning 分布。新版 status 另分開保存 `pipeline_natural_maturity_warning_counts`、`pipeline_actionable_warning_counts`、`natural_maturity_only` 與 `manual_action_required`；只有非自然 warning、error、blocking gap、缺少 pipeline summary 或 freshness 非 passed 才列為需人工處理，`insufficient_future_data` 仍是自然成熟度，不應以補跑或人工填值消除。安全旗標固定為 `dry_run=true`、`confirm=false`、`writes_evidence_db=false`、`production_scheduler_allowed=false`。證據覆盤的「排程狀態」會把 pipeline warnings 與 freshness warnings 分開顯示；若看到 `freshness warnings: 無` 但 `pipeline warnings` 有數量，代表資料新鮮度檢查沒有 warning，但 evidence dry-run 仍有來源品質或事件品質 warning。這些欄位只來自同次 dry-run stdout，不額外重跑 pipeline。產業指數更新的完整性比較以請求日前最近一個有效交易日的指數集合為基準，避免歷史停用／改名指數造成固定 false-positive；Portfolio alert 的 `portfolio_alerts_chip_data_missing:<stock_code>` 則是持倉代號與目前籌碼來源需要人工核對的資料品質問題，不得由 wrapper、dry-run 或 Codex automation 自動改碼。
 - `baldr-evidence-working-copy-smoke-manual`：不建立每日 task；只保留 manual-only script，必須人工指定 source DB 與 working-copy DB，且不得寫 source DB 或 default `DATA_ROOT/sqlite/twstock.db`。
 
 Codex app 另外有一個 read-only daily automation：`baldr scheduled evidence morning report`。它每日本機時間約 05:30 只查詢 Task Scheduler 狀態、`latest_status.json`、最新 data update / freshness / evidence dry-run report 與必要 log 區段，並產生繁體中文摘要；它不重新執行 data update / freshness / evidence pipeline、不建立或修改 Windows Task Scheduler task。
@@ -3144,7 +3186,7 @@ preview 會驗證 baseline safety flags、首日邊界、snapshot 日期唯一�
 1. **營運排程**：只讀 `<OUTPUT_ROOT>/scheduled/*/latest_status.json` 已保存產物，顯示核心資料更新、資料新鮮度、推薦快照、證據 dry-run、決策證據與 Paper Portfolio，以及 ML／官方市場事件／ML Direct-OOC 維護等安全狀態。
 2. **治理 Runtime**：只讀 `runtime/` 的任務、context 與 append-only 治理事件；它反映 agent／governance workflow，不是日常資料、推薦或 Paper 流程的健康度。
 
-營運排程的每一列是「已保存檔案的讀取結果」，**不是** Windows Task Scheduler 的註冊、啟動中、成功結束或 `Last Result` 證明；某 task 被列出或未列出，都不能反推其 Windows task 狀態。若要確認 Scheduler，請使用本手冊 V4.0 排程章節的 query 命令。
+營運排程的每一列是「已保存檔案的讀取結果」，**不是** Windows Task Scheduler 的註冊、啟動中、成功結束或 `Last Result` 證明；某 task 被列出或未列出，都不能反推其 Windows task 狀態。若要確認 Scheduler，請使用本手冊「release_v4 工程排程（不代表 V4.0 closeout）」章節的 query 命令。
 
 ### 11.1 正式路徑環境診斷
 
@@ -3156,8 +3198,6 @@ Runtime 頁面最上方的「正式路徑環境（唯讀診斷）」會立即顯
 - **無法使用**：資料根目錄不存在、父路徑不可見，或檢查本身失敗。
 
 卡片採首次立即讀取、之後約每 30 秒重新整理。它是 side-effect-free 的環境提示：目錄／檔案先以 `os.access` 檢查，若已有 `config.log` 或 Research Registry，再以不寫入內容的 handle probe 交叉檢查；不會建立檔案或執行 SQLite 寫入，因此仍不能證明 schema 變更、原子提交或網路磁碟鎖定一定成功。若卡片顯示需要處理，先依 diagnostic 修正 ACL／鎖定或改用具名且可寫的 `OUTPUT_ROOT`；系統不會替使用者修改權限。
-
-窄視窗使用 Runtime 時，寬度小於 720px 會自動將「任務狀態機／Context」與「治理 Runtime／事件流」由左右兩欄改為上下排列；整頁可垂直捲動，長狀態文字會換行，底部 Session context 會以省略號保留摘要。主視窗可縮至 320px（左導覽同步改為 icon-only）；這些都是顯示層調整，不會改變資料讀取、排程或寫入權限。
 
 窄視窗使用 Runtime 時，寬度小於 720px 會自動將「任務狀態機／Context」與「治理 Runtime／事件流」由左右兩欄改為上下排列；整頁可垂直捲動，長狀態文字會換行，底部 Session context 會以省略號保留摘要。主視窗可縮至 320px（左導覽同步改為 icon-only）；這些都是顯示層調整，不會改變資料讀取、排程或寫入權限。
 
@@ -3300,15 +3340,19 @@ row count／content hash 沒有變化。未同時提供 owner approval、無並�
 
 ## 13. Manual 覆蓋狀態
 
+> 本表的「完成」只表示操作手冊已覆蓋入口、步驟、參數、結果判讀與排錯，不表示該工作區
+> 的產品 Gate、外部資料、真實 fills、Formal OOS 或 production writer 已完成。Current product
+> readiness 請看 [Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)。
+
 | 工作區 | 啟動/入口 | 操作 | 參數 | 結果解讀 | 安全/排錯 |
 |---|---:|---:|---:|---:|---:|
 | 數據更新 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 市場探索 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 推薦分析 | 完成 | 完成 | 完成 | 完成 | 完成 |
 | 觀察清單 | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 市場探索 / 市場總覽；決策工作台 / 決策來源 | 完成（每日決策唯一實例位於市場探索 index 0；Workbench 僅導覽） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings、月營收／三大法人資料可見性判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；可見性區塊不改 action / focus / Score；weekly history 以 live readiness inspector 判定（未設定 projection 時 `0/3 waiting_for_time`，approved projection 僅作揭露），multi-day dry-run record 已為 `3/3 ready`，Week 2 / Week 3 與 manual review / action-item rhythm 仍待正式資料累積 |
+| 市場探索 / 市場總覽；決策工作台 / 決策來源 | 完成（每日決策唯一實例位於市場探索 index 0；Workbench 僅導覽） | 完成 | 完成 | 今日待判讀、空狀態、session-only 已查看提示、主結論 / 行動等級、焦點卡、quality / warnings、月營收／三大法人資料可見性判讀；Market Breadth v1 / Sector Rotation v1 / Relative Strength / Liquidity Ranking v1 / Watchlist Trigger v1 / Portfolio Alert v1 / Smart Money semantics / Why Not v1 / fundamental diagnostics prompts 已接線 | 完成；可見性區塊不改 action / focus / Score。Evidence 必須分層：formal/canonical credit 未授予、歷史 working-copy 1/3、owner-approved UI projection 3/3、pending sidecar 10、multi-day 3/3，且 `formal_credit_authorized=false`；不得用單一 X/3 或 replay 推論 scheduler approval |
 | Research Lab | 完成 | 完成 | 完成 | 完成 | 完成 |
-| 持倉管理 | 完成 | 完成 | 完成 | 部分完成：手動交易、CSV 預覽／匯入、日誌、監控、固定情境壓力投影與研究快照歷史可用；正式 Paper NAV／Equal Weight 成本後比較、fill／partial-fill／override 狀態與壓力正式 evidence 仍未完成 | 完成；所有新入口均維持明確確認、研究唯讀或 fail-closed 邊界，不接券商自動交易 |
+| 持倉管理 | 完成 | 完成 | 完成 | 部分完成：手動交易、CSV 預覽／匯入、日誌、監控、固定情境壓力投影與研究快照歷史可用；Paper 已有 21 snapshots／21 Equal Weight observations，但 Trade Ledger missing、fills／cost 0、weekly `not_computable_cost_ledger_missing`，尚缺真實 fill producer、partial-fill／override／execution gap | 完成；所有新入口均維持明確確認、研究唯讀或 fail-closed 邊界，不接券商自動交易 |
 | Runtime Observatory | 完成 | 完成 | 不適用 | 完成 | 完成 |
 
 功能行為改動時，必須同步更新本表與對應章節。
@@ -3338,6 +3382,8 @@ row count／content hash 沒有變化。未同時提供 owner approval、無並�
 
 Phase 3C (三大法人、信用交易、TDCC 集保庫存) 的資料抓取為 **manual-only candidate ingestion**，它不屬於 V3.0 engineering closeout gate，不掛載於「一鍵安全更新」，也不由正式排程執行。
 
+在資料更新頁的「三大法人」、「信用交易」與「集保股權」子分頁，按「更新至最新候選」或「抓取最新週候選」即可啟動同一套受控 runner。三大法人／信用交易預設從候選 DB 最新成功日期的下一個日期起，向前抓到不晚於台灣市場今日的官方交易日；沒有 checkpoint 時只採近 30 日 bounded window。TDCC 只抓官方 payload 自帶的最新單週資料，不輪詢歷史日期。每次都會先跳出確認視窗，明示 `PHASE3C_CANDIDATE_DB_PATH`，且只寫入隔離 Candidate DB；不會寫正式 `twstock.db`、不會更新 Scoring／Recommendation／Advice／Portfolio，也不會開啟 scheduler。完成後按「檢查此資料源狀態」可看到候選最新日、筆數、checkpoint 覆蓋率與相對正式日價基準日的新鮮度提示。
+
 執行腳本 `scripts/update_phase3c_candidates.py` 預設為 `--dry-run` 模式，不會建立 Candidate DB 或 table；它只進行來源與交易日 diagnostics，並在隔離暫定位置輸出摘要 sidecar。apply 必須同時提供確認 token 與明確的、位於 `DATA_ROOT` 外的 Candidate DB 路徑。
 
 ```powershell
@@ -3361,6 +3407,9 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 
 ## 14. 更新記錄
 
+- 2026-09-04：重整 Data Update 使用流程：全部資料頁把快速／安全更新與「檢查數據狀態」移到標題下方的「立即操作」列，核心卡改為寬版三欄／窄版雙欄；月營收、三大法人、信用交易與集保股權子分頁把操作列提前到治理說明前。新增月營收「抓取最新候選快照」及三個 Phase 3C 候選更新按鈕；服務層揭露月營收預期期別與候選新鮮度，並在正式根目錄唯讀時對 status manifest 寫入採 fail-soft。所有新抓取仍是候選／人工 gate，不會自動寫入正式 SQLite、availability mapping 或下游策略。
+- 2026-08-29：校正產品定位為 `V3.3 Engineering Complete / V4 Evidence Accumulation`；`release_v4` 不等於正式 V4.0 Production。新增 Evidence 五層判讀、Paper 21/21 但 ledger／fills／cost 缺口、Runtime proof tier 與 cleanup 後 stale storage status 排錯。
+- 2026-08-29：依使用者明確授權完成 ML release_v4 人工 retention cleanup 並建立 durable custody audit；三個主要 root 共釋放約 `403.95 GiB`，各保留 6 個完整 PIT／Direct／OOC run，D free 約 `410.31 GiB`。補上 exact target、pointer／dependency closure、resume abandonment、歷史 runbook tombstone 與 post-cleanup inventory SOP；不建立自動刪除權、不改 raw data／Formal／scheduler／broker Gate。
 - 2026-08-14：持倉管理的交易歷史新增可見的「刪除選取交易」按鈕。選取一筆交易後才可操作，確認後只刪除該筆原始交易並由既有 PortfolioService 重新驗證／重算持倉；刪除會造成不合法庫存時會被拒絕，持倉彙總列不會直接刪除整檔歷史。
 - 2026-08-27：持倉管理新增 Paper Portfolio 唯讀 readiness 分頁、Paper weekly evidence 顯示與 `inspect_paper_portfolio_readiness.py`／`inspect_paper_portfolio_weekly_evidence.py`。正式輸出重新檢查到 21 筆 raw paper snapshots，其中最新 `2026-08-28` 超過台北今日 `2026-08-27`；readiness／weekly／Equal Weight builder 現在會 fail-closed 或降級並排除 future row 的 current projection，保留 blocker／diagnostic，不刪除或回填資料。Equal Weight ledger／交易成本帳尚未配置，故 UI 明示 `degraded`／`not_computable`，不把 paper 日更冒充成本後績效或正式持倉。
 - 2026-08-27：修正 Paper／Decision Desk 每日排程的日期選擇語意：排程預設使用最近已到達的台北 08:30 cutoff，Paper runner 對明確未到達的 `--decision-at` 回報 `skipped_future_decision` 並不開啟 state／market DB，避免再次產生 future／look-ahead snapshot；既有 future row 仍保留供稽核。
@@ -3376,6 +3425,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-27：補強資料更新頁顯示一致性：全域／各來源日期控件的「今日」統一採台灣市場日期；localized `不可用` 會顯示為異常而非待更新；全域狀態檢查失敗會清除六個核心與三個候選來源頁的舊 inline 摘要並保留共同錯誤原因，候選來源分頁也會顯示檢查結果，方便排錯且不誤讀舊數字。
 - 2026-08-28：資料更新狀態卡與來源詳情會將 `degraded`／`partial`／`action_required` 等狀態統一轉成中文；核心資料落後 daily reference 時，直接顯示新鮮度基準日與資料最新日，並保留來源錯誤訊息供排錯。
 - 2026-08-28：Data Update「全部資料」新增 `program-readiness.v1` 七 lane 唯讀投影；設定 `PROGRAM_READINESS_ARTIFACT` 後可在同一頁查看整體狀態、blocker 與 next action，未設定／schema 錯誤會 fail-closed，且不會授予任何正式 gate。
+- 2026-08-30：修正更新時間軸把 freshness `data_update_quick_checked_date` 誤當資料 end date 的週末判定；現在檢查日只和 expected date 比較，8/30 檢查 8/28 最後交易日會正確顯示 `current`。新增兩筆回歸測試並記錄於 [Data Update Display Refresh](../06_qa/DATA_UPDATE_DISPLAY_REFRESH_2026_08_30.md)。
 - 2026-08-28：資料更新頁新增「本次手動更新」唯讀摘要，將 UI 觸發的執行中／完成／失敗／錯誤／取消與排程時間軸分開顯示；保留本輪資料區間、失敗步驟、日期計數與警告，避免失敗後只看到上一輪排程成功結果。
 - 2026-08-28：手動更新以失敗／背景例外結束後會自動做唯讀狀態重查，揭露可能已提交的部分 CSV／SQLite 變更；不重跑寫入、不把部分成功改標成完整成功。
 - 2026-08-28：Data Update 狀態卡燈號改為保留 `partial`／`degraded`／`action_required`／`running`／`pending_human_review`／`not_configured` 等細分語意，分別顯示部分完成、需注意、需處理、進行中、待人工覆核、未設定；machine token 仍保留於卡片內文，避免不同處理路徑被誤讀成同一個「待更新」。
@@ -3422,6 +3472,7 @@ $env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3
 - 2026-08-28：新增 `build_evidence_weekly_approval_input.py` 唯讀交接流程；可把 weekly sidecar 的 8 筆 `pending_human_review` 列整理成 `evidence-weekly-approval-input.v1`，供具名 owner／reviewer 逐期填寫，但不產生 approved projection、不授予 Formal credit、不寫 sidecar／正式 DB。
 - 2026-08-28：新增 `build_formal_input_owner_packet.py` 唯讀 owner handoff；將 bounded Formal candidate inventory 整理成 `formal-input-owner-review.v1`，讓三項 expected input 有具名 owner／reviewer review slot 與 bounded candidate metadata；不選 candidate、不發布正式 manifest、不授予 Formal／promotion／broker credit。
 - 2026-08-28：新增 `build_performance_canary_owner_packet.py` 唯讀效能 owner handoff；將 technical／worker／broker／Direct-OOC storage／retention TEMP evidence 組成 `performance-canary-owner-review.v1`，固定 candidate-only、不寫入、不刪除／搬移、不啟動 production worker／fetch pool。容量不足、technical canary 與 broker long-term review 仍維持原 gate。
+- 2026-08-30：Direct chain maintenance wrapper 新增 `--preflight-only`；只解析 immutable input 與 storage headroom，成功後不取得 lock、不啟動 child chain，供 fresh owner packet／readiness 使用。
 - 2026-08-28：readiness 聚合入口會先 trim／去重 blockers 與 next actions；Data Update／Research Console 不再因 evidence payload 的前後空白顯示多餘縮排或重複提示。這只改善唯讀可讀性，不改變 machine token、gate、寫入權限或 owner decision。
 - 2026-08-28：以 host artifacts 重新產生含 performance owner packet 的完整 readiness 唯讀基線；七 lane 狀態維持原判定，blocker／next action whitespace check=`0`，owner packet 仍待具名 reviewer，未因顯示修正而開啟任何正式 gate。
 - 2026-08-28：修正資料更新下鑽頁的唯讀狀態路由：三大法人／信用交易／集保股權不再回報 `unknown source`，會讀取明確 `PHASE3C_CANDIDATE_DB_PATH` 的候選 DB；排程狀態也會從 scheduled artifacts 重新彙整並同步更新摘要／raw JSON。這些查詢不寫 status manifest、正式 SQLite 或 Windows Task Scheduler。
@@ -3623,3 +3674,37 @@ retention 候選或任何刪除／搬移權限。
 輸出明確固定 `automatic_delete_allowed=false`。若 `scan_truncated=true`，候選清單只能作
 初步盤點，需提高 `--max-files` 重跑後再交 owner 決定；不要因清單出現 `status=complete`
 就直接刪除 immutable run。
+
+### 人工 retention 決策與清理後驗證
+
+Immutable PIT／Direct／OOC 清理不是一般「刪暫存檔」。若 owner 明確要求清理，依下列
+順序操作：
+
+1. 以足夠 `--max-files` 重跑 inventory，確認三個 root 均 `scan_truncated=false`、errors 空白。
+2. 解析三個 `latest_manifest.json`，保存 pointer file hash，確認 pointer 指向的 run 存在。
+3. 從 OOC `store_manifest_path` 回查 Direct，再以 Direct source training manifest hash 回查
+   PIT；至少保留 current pointer 與完整 OOC → Direct → PIT dependency closure。
+4. 搜尋 repository／runbook／release／QA 對候選 run ID 的引用。完整 run 若仍被引用，
+   優先冷 archive；若 owner 仍決定刪除，先建立 durable tombstone，不改寫歷史 ID／hash。
+5. 查 maintenance lock 與 active process custody；未知 owner 不得當 stale lock 強刪。
+6. 將「未完成 resume」與「完整歷史 run」分開核准。刪 resume 代表放棄 checkpoint、日後
+   必須重算；完整 run 刪除則失去該 cutoff 的本機 bytes，兩者都不是免費可逆。
+7. 只使用已解析的 exact literal path；禁止以 `release_v4` root、wildcard、modified time
+   或「最舊」單一條件遞迴刪除。
+8. 刪除後重跑完整 inventory、run count、pointer hash、dependency closure 與 repo reference
+   檢查，將 before／after bytes、全部 IDs、授權、不可逆性與 recovery 寫入 `docs/06_qa/`。
+
+2026-08-29 的 retained baseline 是 PIT／Direct／OOC 各 6 個完整 run；post-cleanup（歷史）
+inventory 於 `2026-08-28T23:48:53-07:00` 觀察到 D free=`440,561,684,480` bytes
+（約 410.31 GiB）、inventory=`headroom_ok`。完整 custody 見
+[ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
+其中一個已刪 incomplete Direct ID 仍保留在兩份歷史 runbook，已用 tombstone 揭露；
+current pointers 與 retained chain 未受影響。
+
+8/30 fresh read-only inventory 另觀察到 PIT／Direct／OOC current runs=`8/9/9`、D free 約
+`338.9 GiB`；這些是清理後自然產生的後續 outputs，不改寫 8/29 的 retained custody，也不
+自動刪除或搬移。若只需確認容量，使用 `--preflight-only`。
+
+`automatic_delete_allowed=false` 仍適用：本次清理是使用者看過範圍後另行明確授權的
+人工操作，不是 inspector 或 scheduler 自動取得刪除權。Headroom 恢復也不代表應立即
+執行 maintenance wrapper；wrapper 在 preflight 通過後可能真的開始 rebuild。

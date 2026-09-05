@@ -1,10 +1,18 @@
 # Gate 7 ML Shadow Engineering
 
-> **V4.0 覆寫（2026-07-30）**：Gate 7 已由「價格／技術 shadow challenger」升級為「全欄位配置型 Production Co-pilot」。Production Co-pilot 表示資料、訓練、推論、shadow sidecar 與 promotion/rollback lane 可正式日常執行；不表示目前已有非零配置權重。截至本次 freeze，reference v2 與逐 horizon metrics artifact 已存在，但 machine gate 仍缺正式 OOS、實際因果投組 replay 及 20 個真實成熟 shadow days，因此 ECE／Brier／PSI 為 `null / NOT EVALUATED`，並輸出 `alpha=0`、`formal_oos_allowed=false`。下方原 shadow 文件保留作歷史底座；若旗標或流程描述衝突，以本 V4.0 區塊為準。
+> **2026-08-30 current correction**：Gate 7 目前仍是 shadow-only；strict validator 以
+> cutoff=`2026-08-28T00:00:00+08:00` 重驗且完整 manifest scan 的
+> Formal inputs=`0/3`，`formal_oos_allowed=false`、production alpha=`0`、broker／promotion
+> disabled。2026-07-30 的「Production Co-pilot／V4.0 覆寫」是當日 engineering freeze 的
+> 歷史命名，只表示管線與 fail-closed lane 可日常檢查，不授予正式 OOS 或 V4 product
+> closeout。若狀態衝突，以 [Program Status Rebaseline](PROGRAM_STATUS_REBASELINE_2026_08_29.md)
+> 與 [Project Snapshot](../00_core/PROJECT_SNAPSHOT.md) 為準。
+>
+> **歷史 engineering overlay（2026-07-30）**：Gate 7 當時由「價格／技術 shadow challenger」擴充為「全欄位配置型 Production Co-pilot」。該詞只表示資料、訓練、推論、shadow sidecar 與 promotion/rollback lane 的工程入口可執行；不表示已有非零配置權重。截至該次 freeze，reference v2 與逐 horizon metrics artifact 已存在，但 machine gate 仍缺正式 OOS、實際因果投組 replay 及 20 個真實成熟 shadow days，因此 ECE／Brier／PSI 為 `null / NOT EVALUATED`，並輸出 `alpha=0`、`formal_oos_allowed=false`。下方原 shadow 文件保留作歷史底座。
 
 > **Prospective-only 決議（2026-08-14）**：Owner 已確認現有 Portfolio 是測試資料，沒有可追溯的歷史 Formal transitions／Rule snapshots；後續依 [Prospective Formal Simulated Portfolio Execution Plan](PROSPECTIVE_FORMAL_SIMULATED_PORTFOLIO_EXECUTION_PLAN_2026_08_14.md) 建立從未來交易日起算、`real_money=false`／`broker_execution=false` 的正式模擬持倉 clock。既有 model 只能作 frozen research-trained challenger；model／training cutoff／calibration／evaluation identities 必須在 activation 前凍結，同一 clock 禁止以已消費的 Formal OOS period 重訓。此決議不回填 `2014–2026`、不讓新契約靜默通過舊 full-history v1 Gate，也不改變 calibration、20 日、class coverage、promotion authority、alpha 0 或 broker disabled 邊界。
 
-## V4.0 全欄位配置架構
+## 2026-07-30 release_v4 全欄位配置工程架構（歷史命名）
 
 資料治理先為每個 SQLite `table.column` 與 file-backed source field 登錄 source、dtype、unit/scale、event/announced/available/first-seen/effective/revision、missing/staleness/quality/license/hash。正式 dataset 契約只允許 `formal_backfill` 與已完成來源／授權驗證的 `first_seen_only`；本次 freeze 的 disposition summary 為 `formal_backfill=52`、`first_seen_only=0`、`research_shadow=32`，shadow 特徵獨立發布。identifier、leakage、blocked provenance 與 unreviewed 全部 fail closed，Wildcard 不得自動進模型。
 
@@ -122,7 +130,7 @@ Daily orchestrator 以 strict T-1 post-freeze rows、當日 proposal 與同一 f
 
 可正常解析但缺件，或簽章、路徑、時效、freeze、registry、identity、policy、實體 hash、threshold 任一驗證不通過時，runner 安全完成為 `passed_rule_only`，有效 alpha 原子回退 0。若部署端信任設定本身格式錯誤或 custody root 無效，task 可明確失敗，但仍不得產生非零 alpha、portfolio mutation 或 broker action。禁止手動設定 `formal_oos_allowed` 或繞過 consumer re-verification。
 
-> **目前狀態**：Production Co-pilot 的資料、訓練器、推論、四 lane、unsigned builder、DPAPI Authority、consumer custody 與 rollback 工程路徑可日常執行；canonical 11-symbol official-event training 已完成 22,093 rows／4 folds／426,624 base OOF／12,984 meta OOF，Rule production 不等待人工。全市場 raw PIT publication 已完成，direct numeric／OOC v5 仍由 checkpoint pipeline 建立；現有正式 training 尚缺 execution-ledger replay inputs，producer 會明確 blocked 而不合成績效。Formal ECE／PSI／OOS lane 等模型指標仍為 `NOT EVALUATED`，所以 ML 非零權重目前不具 eligibility，也不再等待或接受人工 promotion review。
+> **2026-07-30 歷史 engineering snapshot**：當時稱 Production Co-pilot 的資料、訓練器、推論、四 lane、unsigned builder、DPAPI Authority、consumer custody 與 rollback 工程路徑可日常執行；canonical 11-symbol official-event training 已完成 22,093 rows／4 folds／426,624 base OOF／12,984 meta OOF。這是 Rule／ML shadow engineering 能力，不是 current production maturity。Current truth 固定回到本文件頂部：Formal inputs=`0/3`、Formal ECE／PSI／OOS lane=`NOT EVALUATED`、`formal_oos_allowed=false`、alpha 0、promotion／broker disabled。
 
 2026-08-14 以現有 test fixtures 完成 formal downstream wiring 回歸：OOS replay／promotion pipeline `30 passed`、promotion evidence/reference/validation `53 passed`、copilot／portfolio consumer `31 passed`。三項正式 custody 到位後，正式執行順序固定為 `build_allocation_oos_replay_inputs()`、primary／verification identical result hash，再進入 promotion evidence；測試 fixture 不會被發布為正式 evidence。
 

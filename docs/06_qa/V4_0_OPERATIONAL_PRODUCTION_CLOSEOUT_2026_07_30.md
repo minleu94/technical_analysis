@@ -1,4 +1,13 @@
-# baldr V4.0 Operational Production 正式收尾報告
+# [Historical / Superseded] baldr V4.0 Operational Production 收尾報告
+
+> **2026-08-29 current correction**：本檔保存 2026-07-30 的 engineering／release freeze 與
+> 當時命名，不再作目前 product maturity 或 production readiness 權威。現在正確定位是
+> `V3.3 Engineering Complete / V4 Evidence Accumulation`，overall=`action_required`；P0
+> accepted=`0`、Evidence formal credit 未授予、Paper fills／cost=`0`、Formal inputs=`0/3`，
+> production Registry／technical canary 亦未完成。下文的「正式收尾／Operational
+> Production」只能按當日 bounded Rule engineering scope 閱讀，不得外推成正式 V4.0。
+> Current truth 見 [Program Status Rebaseline](PROGRAM_STATUS_REBASELINE_2026_08_29.md) 與
+> [Project Snapshot](../00_core/PROJECT_SNAPSHOT.md)。
 
 - 報告日期：2026-07-30
 - 決策資料 freeze：2026-07-30 08:30（Asia/Taipei）

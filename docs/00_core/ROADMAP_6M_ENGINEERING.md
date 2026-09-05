@@ -8,7 +8,7 @@
 
 > **2026-07-13 系統整合校正**：跨流 contracts、唯讀正式資料 smoke、Dashboard／Broker latency 與 pure closeout verifier 已完成工程驗證。Gate 2 真實 forward evidence、Gate 3 source／license acceptance、Gate 7 formal OOS、shadow-day 累積與 promotion review 均仍是 external pending，不能由本次工程測試折抵。
 >
-> **最後更新**：2026-08-28
+> **最後更新**：2026-08-30
 > **定位**：本文件是未來六個月工程執行的 scoped authority，將 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 轉成可交付、可測試、可回滾的 Gate。
 > **現況**：目前完成狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。既有 V3.0 engineering candidate、read-only Workbench、candidate source readiness 或 simulated phase progress 不自動折抵本 Roadmap 的產品 Gate。
 > **版本 companion**：產品成熟度版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
@@ -434,6 +434,30 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 - 新增 `scripts/build_formal_input_owner_packet.py` 與 `formal-input-owner-review.v1` 只讀 packet，為三項 expected input 建立具名 owner／reviewer review slot，保留 bounded manifest identity／原因；packet 不選 candidate、不寫 controlled path、不把 research／prospective artifact 改名成 Formal。
 - 實際 packet status=`needs_named_owner_reviewer`、formal ready=`0/3`、`formal_oos_allowed=false`、`candidate_only=true`；下一步是 owner-controlled publisher 產出三份 expected schema manifest，再重跑正式 readiness。這是可持續的 handoff 工程化，不折抵 Formal OOS、promotion 或 broker gate。
 
+### 2026-08-30 current Gate rebaseline
+
+- Gate 2 Evidence 已不再只是等待三個自然週期：歷史 working-copy=`1/3`、owner-approved
+  UI projection=`3/3`、正式 sidecar pending=`10`、multi-day=`3/3`，但
+  `formal_credit_authorized=false`、production scheduler disabled。下一步是具名 review、
+  formal credit 與 scheduler approval／recovery，而不是 replay 回填。
+- Gate 3 P0 已有 13/13 machine evidence 與 3/3 license page candidate；accepted／limited
+  仍為 0、downstream eligibility none。下一步是 publication／coverage denominator／license／
+  decision-time PIT 與逐列 owner 決議，不再優先增加同型 parser／contract。
+- Gate 4 Paper 已有 21 snapshots 與 21 Equal Weight observations；Trade Ledger missing、
+  fills／cost=`0`、weekly=`not_computable_cost_ledger_missing`。工程 contract 已有，真正缺
+  Paper execution producer 與真實 fills／partial-fill／override／execution gap。
+- Gate 7 Formal 對整個 output 的 `19,942` manifests 做 exact-schema cross-check 後仍為
+  `0/3`：causal=`0`、Rule=`0`、PIT=`1` 且唯一 PIT 為 prospective diagnostic-only。
+  owner packet 可 review 但 `publication_emitted=false`；shadow-only、alpha 0、broker false 不變。
+- performance 的實體容量 blocker 已由使用者授權 retention cleanup 解除；8/30 fresh
+  inventory 觀察 D free=`364,003,164,160` bytes（約 338.9 GiB）、PIT／Direct／OOC
+  current runs=`8/9/9`，唯讀 inventory=`headroom_ok`。舊 6.56／410.31 GiB status 仍保留為
+  歷史觀察；真正剩餘工程 Gate 是 technical production single-writer backup／rollback
+  canary，不能為刷新 status 擅自啟動 rebuild。
+- 完整 current 判讀見 [Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)，
+  cleanup custody／tombstone 見
+  [ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
+
 ### Entry Conditions
 
 - Gate 5 對 rule score、bucket、component、label 與 metric 已可判讀。
@@ -490,6 +514,7 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 
 ## 更新記錄
 
+- 2026-08-29：完成整體 Gate rebaseline 與 owner-authorized ML release_v4 retention cleanup 紀錄；三個主要 root 釋放約 `403.95 GiB`、D free 約 `410.31 GiB`，各保留 6 個完整 PIT／Direct／OOC run 與有效 current pointer。這解除實體 headroom blocker，但不改 Evidence credit、P0 acceptance、Paper fills、Formal 0/3、alpha 0、scheduler／broker 或 technical production canary Gate；cleanup 前的 6.56 GiB 條目保留作歷史。
 - 2026-08-28：新增唯讀 `scripts/qa_technical_indicator_latency.py`、full-batch／isolated writer、real calculator staging process-pool、worker crash recovery／queued cancellation、parent single-writer integration staging 與 broker 離線 bounded-fetch acceptance probes；Broker CSV writer 加上 process-local single-writer lock。technical／broker pool 目前只在 protected-root 外 staging 以 bounded in-flight、retry、parent single writer 與 fail-closed checks 證明形狀；technical batch 的 production feature flag／scheduler lifecycle 已接上且預設關閉，真實 broker／Selenium 平行抓取仍未啟用；後續須補 owner-approved backup／rollback、technical canary 與真實 broker canary／rate-limit evidence。
 - 2026-08-28：新增 `scripts/build_performance_canary_owner_packet.py`，把 technical preview、worker recovery／single-writer staging、broker real HTTP、Direct/OOC capacity preflight 與 retention inventory 收斂成 `performance-canary-owner-review.v1`。實測 packet status=`needs_named_owner_reviewer`；technical production canary 仍 `confirmation_required`、Direct/OOC free `6.56 GiB < 20 GiB`、broker production fetch pool 維持關閉。此 slice 只建立 TEMP candidate handoff，不啟動 worker／pool、不刪除或搬移 run、不寫正式資料；下一步是 owner capacity／canary／rate-limit review，而非直接提高 thread 數。
 - 2026-08-28：`inspect_program_readiness.py` 新增 `--performance-owner-packet`，Data Update／readiness bounded projection 會顯示 owner packet 的 status 與待處理 lane 計數；invalid schema／unsafe flag fail-closed，不把 `needs_named_owner_reviewer` 或 `ready_for_owner_review` 視為 production 授權。

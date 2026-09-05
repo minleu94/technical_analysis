@@ -6,6 +6,16 @@
 
 baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策工作台。核心不是「每天吐股票」，而是把資料、研究、回測、候選、持倉與策略生命週期串成可檢查的決策流程。
 
+## 目前狀態（2026-08-30）
+
+目前為 `V3.3 Engineering Complete / V4 Evidence Accumulation`，整體 readiness=`action_required`，
+不是正式 V4.0 Production。開始工作前先讀
+[Program Status Rebaseline](docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)；涉及
+`FA_Data/output/release_v4` 時再讀
+[Storage Retention Cleanup](docs/06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)，
+不可依舊 low-space artifact 或已刪 run 路徑推論現在狀態；8/30 fresh inventory 觀察到
+約 `338.9 GiB` headroom，Direct/OOC 僅以 `--preflight-only` 做安全檢查，未啟動長任務。
+
 ## 分支與工作流
 
 | 分支 | 用途 |
@@ -81,6 +91,7 @@ baldr 是一套可驗證、可回溯、可演化的台股研究與投資決策�
 
 ## 更新記錄
 
+- 2026-08-29：補入目前 maturity、七 lane rebaseline 與 release_v4 retention custody 入口。
 - 2026-07-06：補上 V2.0 之後長期版本階梯 companion 入口，供 Agent 在 V2.1-V4.0 規劃時定位 `VERSION_ROADMAP_V2_1_TO_V4_0.md`。
 - 2026-07-04：補上外部專案參考與 V1.5-V2.0 版本形狀 companion 入口，供 Agent 在方向規劃時定位 `EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`。
 - 2026-06-30：從根目錄 README 拆出 Agent / Developer 上下文，使 `README.md` 可作為乾淨使用者入口。

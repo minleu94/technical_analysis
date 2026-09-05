@@ -1,7 +1,14 @@
 ﻿# 專案盤點報告
 
-> **最後整理**：2026-07-06
+> **最後整理**：2026-08-30
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
+>
+> **目前程式盤點**：七個 readiness lane、已完成工程、未完成產品 Gate 與推進順序見
+> `docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md`。2026-08-29 的
+> `FA_Data/output/release_v4` retention 行為、43 個刪除目標、18 個 retained runs、pointer
+> 與歷史 tombstone 見
+> `docs/06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md`；8/30 P0 官方唯讀
+> refresh 見 `docs/06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md`；raw data 未納入清理。
 
 ---
 
@@ -60,7 +67,7 @@
 
 目前 `ui_qt` 近期狀態：
 
-- 8 個頂層工作區：數據更新、市場觀察（含主力流向 / Smart Money 子 Tab）、每日決策、策略回測（Research Lab 產品語意）、推薦分析、觀察清單、持倉管理、Runtime Observatory。
+- 8 個頂層工作區：決策工作台、市場探索（市場總覽／每日決策唯一實例與主力流向等子頁）、推薦分析、策略回測（Research Lab）、觀察清單、持倉管理、數據更新、Runtime。
 - `ui_qt/views/update_view.py` 已重整為數據更新工作台，包含左側資料來源導覽與「安全更新所有數據」入口。
 - `ui_qt/views/runtime_view.py` 與 `runtime/` 已完成 Runtime Observatory MVP。
 - `ui_qt` 主 UI 已接上 Daily Decision Desk v1，透過 service snapshot 顯示 Market Breadth、Sector Rotation、Relative Strength / Liquidity Ranking、Watchlist Trigger、Portfolio Alert 與 fundamental risk prompts。
@@ -119,13 +126,15 @@
 - Phase 5 圖表渲染、批次並行化、SQLite 穩定分頁與規格化 Excel 報告匯出已完成；PDF 報告輸出仍在後續 backlog。
 - Month 2 Research Run Registry、Cross-run Comparison 與 Registry-based Promote Gate 已完成 final governance gate；Month 3 Factor Layer / Portfolio Replay 可信度與 Month 5 Fundamental Layer v1 已關閉。Month 6 Strategy Lifecycle / Portfolio Feedback v1 已落地 lifecycle gate、append-only lifecycle evidence、current state projection、drift detector、Portfolio feedback attribution、Portfolio Review snapshot 與持倉管理生命週期回顧分頁。
 - Post-V1 V1.1 至 V1.9 v1 已完成，包含 workflow bridge、research credibility、weekly evidence operations、evidence review history、data credibility gate、cross-sectional factor snapshot、negative evidence、portfolio sandbox 與 read-only Agent / MCP。
-- V2.0 Phase 1 read-only Workbench prototype 與 formal read-only source adapter 已完成；接續主線是 Phase 0 evidence accumulation、V2.0 / V2.1 Workbench 主 UI gate、P0 data source dry-run、execution realism 與 scheduler approval gate。V2.0 之後長期版號階梯見 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`；production scheduler 仍未啟用，V3/V4 不代表已具投資有效性。
+- V3.3 engineering foundation 與 Workbench 主 UI 已 closeout；目前是 V4 evidence accumulation，而不是正式 V4.0。七個 current lane 中 Update History 最近觀測為 ready，Runtime 已有 TEMP transaction probe 但正式 Registry canary 仍待核准；P0 acceptance、Evidence formal credit、Paper fills／成本、Formal inputs 與 production canary 仍未完成。8/30 fresh capacity inventory 為 `headroom_ok`（約 338.9 GiB），但不改上述 Gate；Data Update timeline 與舊 readiness artifact 顯示邊界已補上 regression。
 - `docs/05_phases/` 保留為 Historical / Reference；Phase 文件內的下一步或 Gate 不作目前 roadmap 判斷。
 
 目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月路線以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；V2.0 之後長期版號階梯以 `docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md` 為準；舊 Roadmap 未完成事項是否已承接，以 `docs/00_core/LEGACY_ROADMAP_CARRYOVER.md` 為準。
 
 ## 6. 更新記錄
 
+- 2026-08-30：完成 P0／Evidence／Paper／Formal／Runtime／Performance／Data Update refresh；整理 current SSOT、8/30 fresh capacity、週末 freshness 語意、舊 readiness artifact marker 與完整 pytest `3,826 passed / 1 skipped`。
+- 2026-08-29：依全程式 rebaseline 校正八個工作區名稱與目前主線；新增七個 readiness lane、release_v4 retention cleanup 與容量不等於 Gate closeout 的邊界。
 - 2026-07-06：補上 V2.1 至 V4.0 長期版本路線圖入口，並同步 Post-V1 V1.7-V1.9、V2.0 Phase 1 與後續 gate-based 主線描述。
 - 2026-07-05：同步 Post-V1 V1.5 / V1.6 v1 完成狀態，新增 data credibility gate 與 cross-sectional factor pipeline closeout，下一步改為 V1.7 Negative Evidence。
 - 2026-07-03：同步 Post-V1 V1.1 至 V1.4 v1 完成狀態，並將 `docs/05_phases/` 定位改為 Historical / Reference。

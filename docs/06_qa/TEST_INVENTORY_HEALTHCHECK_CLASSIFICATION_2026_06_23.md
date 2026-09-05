@@ -2,7 +2,38 @@
 
 > 目的：盤點 `tests/` 底下所有有效 Python 測試檔，分類哪些可以被非破壞式 Full App Healthcheck Runner 呼叫、哪些只能作 service/oracle 證據、哪些必須保留在一般 pytest 或人工檢查流程。
 
-## 2026-08-28 machine refresh
+## 2026-08-30 machine refresh
+
+- `scripts/audit_test_inventory.py`：overall=`passed`，filesystem／inventory=`662/662`，
+  `3,827 tests collected`。
+- missing inventory paths、stale inventory paths、collection errors、documentation count drift 與
+  machine-checkable blockers 均為 `0`。
+- 目前 HEAD 完整 pytest：`3,826 passed / 1 skipped / 26 warnings in 552.80s`；本輪先
+  暴露並修正 2 個 inventory 文件統計問題與 1 個固定過期 approval fixture，修正後無
+  test failure／collection error。警告為 joblib physical-core fallback、既有理想化成交
+  假設與 sandbox `.pytest_cache` 寫入權限。
+- 下方 2026-08-28 與更早的 `3,817`、`3,797` 等數字均為歷史 checkpoint，不再作
+  current count SSOT。
+
+Current filesystem Python files: `662`
+
+| 分類 | 數量 |
+|---|---:|
+| `general-unit-keep-in-pytest` | 144 |
+| `governance-doc-tooling` | 116 |
+| `healthcheck-runner-owned` | 29 |
+| `legacy-or-low-priority` | 10 |
+| `manual-only` | 14 |
+| `service-oracle-data-market` | 92 |
+| `service-oracle-portfolio-decision-runtime` | 103 |
+| `service-oracle-recommendation` | 18 |
+| `service-oracle-research-backtest` | 56 |
+| `slow-e2e-or-environment` | 3 |
+| `ui-healthcheck-candidate-bridge` | 22 |
+| `ui-healthcheck-direct-bridge` | 12 |
+| `write-risk-dry-run-required` | 43 |
+
+## 2026-08-28 machine refresh（historical checkpoint）
 
 > Latest follow-up after the performance canary owner packet projection slice and readiness display normalization: filesystem／inventory=`662/662`、`3817 tests collected`；前一輪段落中的 `3816`／`3815`／`3811`／`661/661`／`3806`／`660/660`／`3801`／`659/659`／`3797`／`658/658`／`3792`／`657/657`／`3764`／`656/656`／`3748`／`654/654`／`3726`／`3719`／`3702`／`3691`／`3696` 僅作歷史基準，以下 current count 以本行與後續欄位為準。
 

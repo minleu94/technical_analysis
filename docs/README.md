@@ -1,7 +1,8 @@
 # Docs 文檔目錄
 
-> **最後整理**：2026-07-13
+> **最後整理**：2026-08-30
 > **權威判讀**：目前狀態看 `00_core/PROJECT_SNAPSHOT.md`，未來 6 個月看 `00_core/ROADMAP_6M_ENGINEERING.md`，V2.0 之後長期版號階梯看 `00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md`，外部參考與 V1.5-V2.0 版本形狀看 `00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md`，架構看 `01_architecture/system_architecture.md`，索引只負責導航。
+> **本輪盤點**：[2026-08-30 程式現況重估](06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)；[release_v4 儲存清理與保留鏈](06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)；P0／Evidence／Paper／Formal／Runtime／Data Update 的 fresh handoff 入口見 [Documentation Index](00_core/DOCUMENTATION_INDEX.md)。
 > **系統整合入口**：跨流 adapter 位於 `app_module/system_execution_blueprint_adapters.py`，純驗證入口位於 `scripts/verify_system_execution_blueprint.py`。兩者只組合／驗證既有輸出；任一 evidence、data、ML、dashboard 或 latency 契約失敗時，必須回到對應 owner 修正，不得在整合層補值或放寬 Gate。
 
 本目錄是專案文件的主要入口。文件已依用途分區，日常查找請優先使用：
@@ -47,8 +48,9 @@
 
 - V1 release baseline 已完成：資料與市場狀態、研究驗證、持倉檢查、每日決策四個產品閉環已形成可操作基準。
 - Post-V1 evidence-driven 主線已建立：Evidence Event Store、Forward Outcome、Evidence Importers、Forward Performance read model / dashboard、pipeline dry-run、Live vs Research Gap、Signal Decay、Decision Quality、Evidence Review dashboards、V1.3 weekly evidence operations 與 V1.4 weekly review history 都已具備 v1。
-- V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成；V2.0 Phase 1 read-only source adapter preflight 已完成，下一步是 V2.0 Phase 2 Unified Decision Workbench UI / dashboard 整合，再依 `VERSION_ROADMAP_V2_1_TO_V4_0.md` 逐步評估 V2.1-V2.5、V3.x 與 V4.0。
-- Production scheduler 仍未啟用；目前 safe scheduled path 只允許 read-only freshness check、evidence dry-run 與 Codex read-only morning report，不可解讀為 production write-mode scheduler。
+- V3.3 engineering foundation、Workbench 主 UI 與受控 evidence／Paper／ML shadow 工程入口已完成；目前進入 V4 evidence accumulation，整體 readiness 仍為 `action_required`，不是正式 V4.0。
+- P0 為 13/13 machine evidence 但 accepted 0；Evidence formal credit 未授予；Paper 21/21 但 fills／cost 0；Formal inputs 0/3。Production Evidence／ML／broker writer 仍未啟用。
+- 2026-08-29 retention cleanup 後 D 槽可用約 410.31 GiB，physical storage blocker 已解除；舊 low-space status 是歷史 artifact，且容量恢復不代表任何產品 Gate 通過。
 - `docs/05_phases/` 保留歷史設計與研究 SOP 脈絡，但不再作目前 roadmap 或完成狀態依據。
 
 詳細狀態以 [PROJECT_SNAPSHOT.md](00_core/PROJECT_SNAPSHOT.md) 為準；未來 6 個月方向以 [ROADMAP_6M_ENGINEERING.md](00_core/ROADMAP_6M_ENGINEERING.md) 為準；V2.0 之後長期版號階梯以 [VERSION_ROADMAP_V2_1_TO_V4_0.md](00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md) 為準；外部專案參考與 V1.5-V2.0 版本形狀以 [EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md](00_core/EXTERNAL_REFERENCE_VERSION_BLUEPRINT.md) 為準。

@@ -11,6 +11,10 @@
 - 既有歷史備份不會被本次程式變更自動刪除；只有下一次產生同 prefix 新備份時，才會清理該 prefix 的舊版本。
 - `_reference_fix` historical replay 仍有 V2.0 evidence quality 參考價值，已移到 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`；Workbench 只應讀取其中 JSON summary，不直接讀 replay DB。
 - 已完成 closeout 且可重建的 repo `tmp/pre_v2_source_gap_smoke/`、`tmp/evidence_ops_continue_20260703/`、`output/qa/statement_items_backfill/` 與 6/30 Temp clone 已刪除。
+- 2026-08-29 補充：`output/release_v4` 的 PIT／Direct／OOC immutable publications
+  不屬於本文件的一般 DB／CSV backup rotation。使用者另行授權的一次性 ML cleanup、
+  current pointer、retained dependency closure 與 tombstone，獨立記錄於
+  [ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
 
 ## Retention 規則
 
@@ -107,5 +111,6 @@ Prefix 例子：
 
 ## 更新記錄
 
+- 2026-08-29：補充 ML release_v4 immutable publication 不屬一般 backup rotation；導向獨立 owner-authorized cleanup custody audit，避免套用「同 prefix 保留五日」規則。
 - 2026-07-06：建立備份盤點與 retention 規則文件，記錄既有大檔來源、已納入 retention 的程式入口與需人工確認的清理候選。
 - 2026-07-06：依使用者明確指示執行 C 槽 cleanup；移動 `_reference_fix` replay artifact 至 `D:/Min/Python/Project/FA_Data/output/evidence_pipeline/historical_replay_reference_fix_20260706/`，並刪除已文件化且可重建的 repo working-copy / QA raw output 與 6/30 Temp clone。

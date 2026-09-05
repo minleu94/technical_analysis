@@ -1,6 +1,105 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
-## 2026-08-28 整體程式 readiness 聚合入口（current engineering）
+## 2026-08-30 Canonical Current Status（先讀此節）
+
+> 整體仍為 `action_required`：V3.3 工程底座大致完成，現在位於 V4 evidence／product
+> accumulation track，不是正式 V4.0 Production。完整判讀見
+> [Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)；8/30 P0
+> 官方唯讀 refresh 見 [P0 Evidence Refresh](../06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md)；本次 D 槽
+> 行為、43 個刪除目標、18 個 retained runs、pointer 與不可逆性見
+> [ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
+> 8/30 Runtime／Performance fresh proof 見 [Runtime Performance Readiness Refresh](../06_qa/RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md)。
+
+| Lane | 現況 | 尚未完成 |
+|---|---|---|
+| P0 | 13/13 machine rows；8/30 retry=`1 verified / 9 degraded / 3 official_no_data`；官方 license page candidate 3/3；accepted=`0`、limited=`0`、downstream eligibility=`none` | publication／獨立 coverage denominator／decision-time PIT／license acceptance／13 筆具名決議；3 個 request-date `official_no_data` 須於自然交易日重試 |
+| Evidence | formal/canonical DB credit 未授予；歷史 working-copy Week 1=`1/3`；owner-approved UI projection=`3/3`；sidecar pending=`10`（8/30 自然 collection 已追加）；multi-day=`3/3` | 10 期具名 review、`formal_credit_authorized=true` 的合規決議、scheduler approval／recovery；目前仍 false／disabled |
+| Paper | snapshots=`21`、Equal Weight=`21`、8/30 daily=`skipped_non_trading_day`（合法週末，latest snapshot=`2026-08-28`） | Trade Ledger missing、fills／cost=`0`、partial-fill／override／execution gap；weekly=`not_computable_cost_ledger_missing` |
+| Formal／ML | immutable PIT→Direct→OOC engineering chain 與 shadow contracts 已存在；8/30 strict validator 重驗 `0/3` | 三條 owner-controlled inputs 仍=`0/3`；`clock-20260819` path 未發布且已早於 cutoff；Formal OOS=false、alpha=0、promotion／broker=false |
+| Runtime | environment／existing-handle ready；TEMP actual ephemeral write／SQLite／Registry transaction probe=`passed`；正式 Registry clone proof `quick_check=ok`、98 rows | 正式 Registry production insert／read-back／rollback canary 仍 `confirmation_required`；不可裸稱 production writer ready |
+| Update History | 8/30 quick run 12/12 passed、core freshness 至 2026-08-28；修正週末檢查日誤比對後 timeline=`current`，history／手動摘要已接線 | TPEX path 仍未設定；後續只累積自然 terminal／freshness history，不得用 replay 補歷史 |
+| Performance | broker bounded real HTTP 與 technical process-pool／recovery／parent single-writer staging 已量測；PIT=`8`、Direct=`9`、OOC=`9` current runs；fresh inventories=`headroom_ok`；Direct/OOC `preflight_only` 已驗證 | technical production backup／rollback single-writer canary；broker long-term rate-limit／serialized fallback／production pool review；不得因 headroom_ok 自動啟動 chain |
+
+**Storage supersession**：清理後三個 ML root 合計由 `631,570,753,299` bytes 降為
+`197,836,559,482` bytes，釋放約 `403.95 GiB`；post-cleanup inventory 於
+`2026-08-28T23:48:53-07:00` 觀察到 D 槽可用 `440,561,684,480` bytes（約
+`410.31 GiB`），20 GiB 實體 headroom 已恢復。
+舊 `6.11/6.56 GiB`、`594.21 GiB` 與 `blocked_insufficient_storage` 段落只代表
+cleanup 前的歷史觀察。8/30 fresh read-only inventory 觀察到 D 槽可用
+`364,003,164,160` bytes（約 338.9 GiB），PIT／Direct／OOC 分別為 `8/9/9` 個 current
+run；另以新增的 `--preflight-only` 只解析 pointer／storage，不取得 lock、不啟動 chain。
+舊 scheduled／program-readiness artifact 不手改；current Runtime／Performance 判讀以
+[Runtime Performance Readiness Refresh](../06_qa/RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md)
+及其 TEMP hashes 為準。
+
+**2026-08-30 P0 continuation**：bounded 官方 live retry 已成功保存新 audit、candidate
+intake、owner packet 與 readiness。machine matrix=`13/13` rows、`1 verified / 9 degraded /
+3 missing`；其中 3 個 missing 明確為本次請求日期的 `official_no_data`，不是來源永久缺失。
+Intake=`deferred`、owner-review-ready=`0/13`；accepted／limited／downstream eligibility
+與 Formal／production safety flags 全部維持關閉。完整 hash、row-level 結果與第一次沙盒
+network-error 的非基線說明見 [P0 Evidence Refresh](../06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md)。
+
+**2026-08-30 Evidence continuation**：自然 weekly collection 已追加期間
+`2026-08-24..2026-08-30`、last trading date=`2026-08-28` 的 pending record；唯讀
+approval packet 現為 `10` 筆，status=`needs_named_owner_reviewer`。這只累積真實週期並
+集中 owner review 欄位，不把 pending 轉成 weekly／Formal credit；artifact custody 見
+[Evidence Weekly Approval Refresh](../06_qa/EVIDENCE_WEEKLY_APPROVAL_REFRESH_2026_08_30.md)。
+
+**2026-08-30 Paper continuation**：唯讀 readiness 重驗為 `partial`、`blockers=[]`；21
+筆 snapshot 與 21 筆 Equal Weight observation 首尾一致，8/30 `skipped_non_trading_day`
+是合法休市日且不應新增 snapshot。真正剩餘缺口是正式 Paper Trade Ledger 不存在（fills／cost
+均為 0），不能由 baseline、snapshot、manual trades 或回測反推。空白 fills handoff、hash、
+weekly `5/5` boundary 與週末 reconciliation 修正見
+[Paper Portfolio Readiness Refresh](../06_qa/PAPER_PORTFOLIO_READINESS_REFRESH_2026_08_30.md)。
+
+**2026-08-30 Formal continuation**：以 training cutoff=`2026-08-28T00:00:00+08:00`
+重跑 strict validator，結果仍為 `waiting_for_formal_inputs`、`0/3`。三個明確
+`BALDR_ML_FORMAL_*` path 都指向已過期且未發布的 `formal_prospective\clock-20260819`；
+另觀察到 6 個 prospective/staging clocks，但全數 `diagnostic_only`，不得改接成正式 input。
+完整 hash、原因與最短補件路徑見 [Formal Input Readiness Refresh](../06_qa/FORMAL_INPUT_READINESS_REFRESH_2026_08_30.md)。
+
+**2026-08-30 Runtime／Performance continuation**：TEMP ephemeral file／SQLite／Registry
+transaction probe 已實際寫入後清除並回報 `passed`，但正式 Registry preview 仍為
+`confirmation_required`（production write／rollback 均未執行）。單股 `2330` technical
+preview 仍為 `confirmation_required`；daily／technical latest=`2026-08-28`、daily rows=`3,075`、
+technical rows=`3,084`。容量 fresh inventory 為 `headroom_ok`，PIT／Direct／OOC current
+run=`8/9/9`；新的 Direct chain `preflight_only` artifact 證明未取得 lock、未啟動長任務。
+Performance owner packet 仍需具名 owner／reviewer，production worker／fetch pool／broker
+order／Formal OOS／automatic delete 全部關閉；完整 hash 與邊界見
+[Runtime Performance Readiness Refresh](../06_qa/RUNTIME_PERFORMANCE_READINESS_REFRESH_2026_08_30.md)。
+
+**2026-08-30 Data Update display continuation**：quick update run=`20260830-24700` 已成功完成，
+freshness probe 在週末以 `2026-08-30` 檢查最後交易日 `2026-08-28`。時間軸已修正為不把
+檢查日和資料 end date 做錯誤 equality 比對；唯讀重驗為 `status=current`，只保留
+`tpex_path_not_configured` 診斷。Update View 另會對明確 reference path 標記較舊 readiness
+artifact，但不自動替換。修正與 107 筆定向測試見
+[Data Update Display Refresh](../06_qa/DATA_UPDATE_DISPLAY_REFRESH_2026_08_30.md)。
+
+**2026-09-04 Data Update freshness continuation**：以正式資料根目錄唯讀重查，`daily_prices`
+最新日為 `2026-09-03`；`fundamental_monthly_revenues` 最新期別仍為 `2026-06`、最新可得日
+為 `2026-07-15`，依月初公告節奏提示預期期別 `2026-07`，因此 UI 顯示 `freshness_status=lagging`。
+目前三個 Phase 3C Candidate DB 資料日為：三大法人 `2026-08-13 / 21,122 rows`、信用交易
+`2026-08-13 / 2,212 rows`、TDCC `2026-08-07 / 4,026 rows`；三者既有資料不會被誤當成正式表，
+前兩者相對 `daily_prices=2026-09-03` 顯示候選落後警告，TDCC 依最新單週語意保留候選狀態。更新頁
+新增候選抓取／更新入口，但仍只寫候選 snapshot／Candidate DB；正式 availability mapping、
+`fundamental_monthly_revenues` 與任何 scoring／recommendation／交易邏輯均未由本輪自動改寫。
+
+**2026-08-30 Unified readiness continuation**：以本輪最新 P0／Evidence／Paper／Formal／Runtime／
+Performance／Data Update artifacts 重建 current report=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_current_20260830.json`，SHA-256=`5229F27373B0CF83E875E4B05D2867121D9E16D18813E91529C337F545720F6E`。結果為 `action_required`；Runtime 與 Update History=`ready`，Performance=`partial` 且只剩 technical production single-writer canary，其他 lane blockers 依各自 refresh 保留。這是 UI／read-only projection 入口，不是任何 production 授權。
+
+**測試證據**：本輪 HEAD 完整回歸=`3,826 passed / 1 skipped / 26 warnings`
+（共收集 `3,827` tests，552.80 秒），readiness／runtime／data／Paper／Formal／performance
+focused regression 亦全綠。無 collection error／test failure；警告為 joblib physical-core
+fallback、既有理想化成交假設與 sandbox `.pytest_cache` 寫入權限，不影響 Gate 判讀。
+
+**立即順序**：先完成 P0 owner／license／PIT 決議與 Evidence 具名 review；並行接上
+Paper 真實 fill producer及發布 Formal 3 inputs；容量已足夠後再做 Registry／technical
+production canary。不得以 retained ML run、projection、snapshot、replay 或 UI 綠燈替代正式 Gate。
+
+以下 2026-08-28／29 逐項段落是工程與證據流水帳；其中可變數字若與本節衝突，以本節及
+其 linked audits 為準。
+
+## 2026-08-28 整體程式 readiness 聚合入口（歷史工程紀錄）
 
 - 新增唯讀 `scripts/inspect_program_readiness.py`，將 P0、Evidence、Paper、Formal/ML、Runtime、Data Update history 與 performance 七個 lane 收斂到 `program-readiness.v1`；每個 lane 都保留實際 read model、blockers、外部輸入需求與下一步，並以 `execution_order` 對齊 [Program Readiness Audit](../06_qa/PROGRAM_READINESS_AUDIT_2026_08_28.md) 的推進順序；`--runtime-write-probe` 可載入明確 staging transaction artifact，`--runtime-registry-snapshot-probe` 可載入正式 Registry read-only clone transaction artifact，`--freshness-status-path` 可載入明確 freshness status，避免把 staging／clone／freshness 觀測與正式 ACL、排程註冊混成同一個診斷。
 - Readiness UI 的 bounded projection 現在也保留各 lane 的固定進度摘要：P0 的機器證據／accepted／route probe、Evidence 的 weekly／dry-run／Formal credit、Paper 的 snapshot／benchmark／cost ledger status／cost／fills、Formal／ML 的 `ready／total` input，以及 Runtime／performance／Update History 的 host probe／canary／排程／freshness；Evidence 另外顯示 sidecar 中 `pending_human_review` 的期數，讓 `weekly 0/3` 與「已有資料但待人工審核」分開閱讀。阻擋欄以中文意義加原始 machine token 顯示，不複製大型 details、不改變 gate。最新 chunked MOPS host audit 重算 artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_chunked_mops_host_full_20260828.json`（status=`action_required`；SHA-256=`56CE1B1D67B8CC1F25AC7B633E59A6ABA8B498FA871F4B290E1F954B090AF8F1`），P0=`13/13` machine evidence、`accepted=0`、route=`13/27` attempted，Evidence=`weekly 0/3`／`pending 9 期`／dry-run=`3/3`，Paper=`21` snapshot／benchmark、cost ledger=`missing`／cost=`0`／fills=`0`，Formal=`0/3`；Runtime／Update History ready，performance 保留 Direct storage 與 technical production single-writer canary blockers，正式寫入與 scheduler／broker／Formal 仍關閉。
@@ -22,7 +121,7 @@
 - 修正 `scripts/run_paper_portfolio_daily.py` 的 CLI 啟動順序：先設定容錯 UTF-8 console，再讓 argparse 渲染中文 `--help`／錯誤；cp1252 Windows 主控台不再在進入 guarded Paper runner 前因 `UnicodeEncodeError` 中止，並新增回歸測試覆蓋此邊界，不改變任何資料寫入或交易權限。
 - `scripts/append_portfolio_stress_history.py` 也在 argparse 前設定容錯 UTF-8 console，補上 cp1252 Windows `--help` 回歸測試；Stress history 仍維持預覽／明確確認分離與 research-only 邊界，沒有自動建立或修改 history DB。
 - `scripts/apply_monthly_revenue_availability_candidate.py` 同步在 argparse 前設定容錯 UTF-8 console，補上 cp1252 Windows `--help` 回歸測試；月營收 candidate merge 仍維持 preview／精確 confirm apply 的邊界，不會因編碼修正而寫入正式 mapping。
-- 2026-08-29 CLI guard 後的 deterministic inventory 為 `662/662` 個測試檔、`3,820 collected`，machine-checkable blocker=`0`；Paper daily／Stress history／月營收 merge 相關定向測試共 `19 passed`，尚未以此小修正宣稱完整 pytest 重跑或任何正式 gate 通過。
+- 2026-08-29 CLI guard 當時的 deterministic checkpoint 為 `662/662` 個測試檔、`3,820 collected`，machine-checkable blocker=`0`；Paper daily／Stress history／月營收 merge 相關定向測試共 `19 passed`。此段已由本文件頂部目前 HEAD 的 `3,827 collected / 3,826 passed / 1 skipped` 完整回歸 supersede，只保留該小修正當時的時間序列證據。
 - 以最新 host P0 audit 重試三個 allowlisted 官方條款 URL 後，license candidate capture 為 `3/3 captured`（TWSE、TPEx、TDCC，HTTP 200），13/13 P0 row 的 license 顯示 `captured_candidate`；這只表示條款頁的 bounded hash／metadata 可取得，不等於 `license_accepted` 或 owner acceptance。載入新 license artifact 重算的 unified readiness=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_after_latest_host_p0_license_retry_20260828.json`（status=`action_required`；SHA-256=`EF6DE8E02348E1D19B43D7D02540ED688497ECC72CEA0EA5937A23E4FA636C83`），P0 route=`14/27`、`accepted=0`，Evidence／Paper／Formal／performance blockers 仍原樣保留。
 - `inspect_program_readiness.py` 另支援 `--runtime-readiness-json`，可明確載入允許實際 host context 產生的 `runtime-environment-readiness.v1` 唯讀 artifact；schema 不符即 fail-closed，不重新探測或寫入正式路徑，也不把 host existing-handle readiness 誤降級成 sandbox token 的 `PermissionError`。以 host runtime／scheduler／Direct storage artifact 重算的最新 unified readiness 為 `C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\program_readiness_host_runtime_scheduler_storage_v2_20260828.json`（status=`action_required`；SHA-256=`42BCE67AA3D7261293AA85E23FE9B6E419ADB2C5C1E661350D2EB4AE010D0011`）；`runtime=ready`、`update_history=ready`，performance 仍保留 Direct 容量與 technical production canary blockers。
 - 新增一條不依賴既有季度候選檔的官方 MOPS EZSearch availability-only 探測：`2026-05-01..2026-05-31`、`OTC × F26–F29` 取得 `3,404` events／`3,404` projections，duplicate／future／invalid 均為 `0`；`SII × F26–F29` 四個 query 回 `invalid_response`，單項重試另回 `network_error`，所以整體 artifact 狀態仍為 `degraded`。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_mops_statement_availability_20260828\mops_statement_availability_host_20260828.json`（SHA-256=`D2FCEA2642D3BF72D3B10F1640D458D72C76C0063F2B6F4603876D5D06199D72`）；它保留官方公告時間與次日 available-date projection，仍是 research candidate，不自動寫入 mapping／SQLite、不改變 P0 `accepted=0` 或 Formal gate。
@@ -551,7 +650,7 @@
 - **Drift**：Rule-only formal path 未變；`formal_oos_allowed=false`、`formal_evidence_credit_authorized=false`、`production_blend_alpha_bp=0`。7 月沒有自然成熟 outcome、沒有合法 promotion input，也沒有 training／retraining／promotion／unblind／blend。
 - **Open blockers**：缺少綁定 2026-07-29 session 的真實 decision-time Rule-only `manual_observed` artifact；DEV-71 coverage 僅 4 bp；numeric source owner／reviewer acceptance 缺失。Formal Week 3（2026-07-27 至 2026-08-02）在 7 月月末尚未自然結束，週報只可於週期結束後 append。
 
-> **V4.0 Operational Production 收尾（2026-07-30）**：決策、結構化 Advice、Rule 配置、風控投影、Daily Decision Desk、Evidence Capture 與 append-only Paper Portfolio 已可日常運作；券商送單仍明確不存在。ML 已改為「全欄位 PIT feature packs → base experts → OOF Meta Allocator → 整數 bp 權重提案 → Rule/ML 同單位混合 → deterministic risk projection」的 Production Co-pilot。`0 / 2000 / 3500 / 5000 bp` 四條 lane、逐 horizon frozen calibration/PSI reference、unsigned Evidence Builder、獨立 DPAPI Authority 與每日 consumer 重驗均已接通；最新 reference hash=`sha256:8ee81ae9c5691c6e10d95f14eac293b2ecd121a53877f0d0de73e20b514dd5b0`，outcome contract hash=`sha256:95172f7d8678fd6ecde83c1c166b56878b0d3b769750290acb5b0b3753c96a11`。目前機器 blockers 是全市場 formal OOC publication 尚在建立、Formal replay 尚未由獨立 verifier 從官方交易日曆／production Rule Champion／完整六頭 Meta OOF 重建，以及 5／10／20／60 日各 `0/20` 個可計入 promotion 的成熟 shadow 決策日；真實狀態因此仍為 `production_blend_alpha_bp=0`、`formal_oos_allowed=false`，ECE／兩種 Brier／PSI 與成本後 lane 結果均為 **`NOT EVALUATED`**，不得填 0 或人工硬改。
+> **歷史工程命名（2026-07-30；已由 2026-08-29 rebaseline 校正）**：本段當時稱「V4.0 Operational Production 收尾」，現在只可解讀為 `release_v4` engineering／storage pipeline 已接線，不是正式 V4.0 product closeout。決策、結構化 Advice、Rule 配置、風控投影、Daily Decision Desk、Evidence Capture 與 Paper snapshot 路徑已可日常檢查；券商送單不存在，Paper 成本 ledger 目前仍 missing。ML 已改為「全欄位 PIT feature packs → base experts → OOF Meta Allocator → 整數 bp 權重提案 → Rule/ML 同單位混合 → deterministic risk projection」的 shadow co-pilot。`0 / 2000 / 3500 / 5000 bp` 四條 lane、逐 horizon frozen calibration/PSI reference、unsigned Evidence Builder、獨立 DPAPI Authority 與每日 consumer 重驗均已接通；reference hash=`sha256:8ee81ae9c5691c6e10d95f14eac293b2ecd121a53877f0d0de73e20b514dd5b0`，outcome contract hash=`sha256:95172f7d8678fd6ecde83c1c166b56878b0d3b769750290acb5b0b3753c96a11`。現況 Formal inputs=`0/3`、`production_blend_alpha_bp=0`、`formal_oos_allowed=false`，ECE／兩種 Brier／PSI 與成本後 lane 結果均為 **`NOT EVALUATED`**，不得填 0 或人工硬改。
 
 > **全欄位治理現況（2026-07-30 08:30 Asia/Taipei freeze）**：正式 SQLite 共 22 tables／408 columns，所有欄位均有 disposition；11 張 ML source tables 的 `unreviewed=0`，其餘 operational/evidence 欄位 fail closed。檔案型 raw/sidecar inventory 掃描 34,970 個候選檔、去重為 313 sources／9,619 fields，disposition coverage `10,000 bp`、未處置 0。全市場 immutable raw PIT publication=`pit-4a860a5fa18add4e0e15f2aa`，共 34,447,843 raw rows／28 年度 shards；`all_field_enriched` 有 15,876,434 rows、52 formal features、214,058,770 feature values（manifest `sha256:e6fcfa6c19e5ab2c453096e1db165744972100eec29d2321e2715b77ecebae37`），另有 2,694,975 rows／32 features 的 research-shadow publication。prediction、model、replay、outcome、backtest、pickle 與無公告時間快照均隔離；新增欄位不得 wildcard 進模型。
 
@@ -567,7 +666,10 @@
 
 > **最終 QA 與 registry（2026-07-30）**：完整 pytest 為 `2,969 passed / 1 skipped / 0 failed / 32 warnings`（2,970 collected，513.51 秒）；Update Workbench `38 passed`、Update Tab QA `23 passed / 0 failed / 4 skipped`、指定 mypy scope `472 source files / 0 issues`、UI py_compile、金融 float guard 與 look-ahead guard 全數通過。Test Inventory 為 571 filesystem files／571 entries／2,970 tests，0 machine blockers。append-only registry 現有 33 rows，`ml:revalidation` 最新為 revision 6；該 revision 明記 Formal semantic replay 與 Shadow day-credit blockers，並維持 alpha 0。
 
-> 下方 2026-07-27 以前內容是歷史稽核紀錄；若與上述 V4.0 區塊衝突，以本區塊及 append-only registry 的最新 revision 為準。
+> 下方 2026-07-27 以前內容是歷史稽核紀錄；若與目前狀態衝突，以本文件頂部
+> `2026-08-29 Canonical Current Status`、[Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)
+> 與對應具時間戳的 source artifact 為準。Append-only registry revision 只證明其當時紀錄，
+> 不單獨取代 current SSOT。
 
 > **MOPS 季報秒級 PIT availability（2026-07-27）**：新增 MOPS 公告快易查 F26–F29 唯讀 adapter 與 TEMP-only CLI；live capture 取得上市 12、上櫃 24，共 36 個官方秒級事件，36 個 event hash／projection keys 均唯一，statement availability validator accepted 36、diagnostics 0。M31 因混合「預計召開董事會」與「已通過財報」語意而排除。owner=`archi` 已 limited 核准 `mops.ezsearch.statement_publication` 供內部 research PIT availability 與 development shadow projection；`candidate_artifact_not_supplied`、`mops_candidate_artifact_not_supplied` 與季報 blanket publication-time blocker 已解除。正式 mapping／DB／scheduler 未寫入，歷史 coverage、correction/revision evidence 與 formal lane 尚未核准；`formal_oos_allowed=false`、`formal_credit_authorized=false`、`production_blend_alpha_bp=0`。
 
@@ -584,7 +686,9 @@
 > **工程終態**：`V3.3 Engineering Complete`，進入 `V4.0 Evidence Accumulation Track`；15 capability、lineage 與 operations 入口見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。正式 V4.0 與投資有效性尚未成立。
 
 > **開場 30 秒內讀完** - 只放今天可驗證的狀態與入口，不放完整歷史細節
-> **最後稽核**：2026-07-12；證據矩陣見 `docs/06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md`。
+> **此歷史段落最後稽核**：2026-07-12；當時證據矩陣見
+> `docs/06_qa/PROJECT_SNAPSHOT_AUDIT_2026_07_12.md`。Current status 以本文件頂部
+> 2026-08-29 canonical section 為準。
 
 > 2026-07-11 安全重構續作：`UpdateService` normalization import 已改為明確 submodule dependency，並由 fresh-interpreter package re-export oracle 保護；`BacktestService` 已透過 `WalkForwardResultContract` 移除對 `walkforward_service` 的反向型別依賴。Walk-forward T-1 fold 邊界、degradation／summary golden 數值契約與 overfitting regression 均已納入 focused tests；金融公式與公開 runtime entrypoint 未變。
 >
@@ -770,13 +874,16 @@ Historical Evidence Replay v1 新增 `HistoricalEvidenceReplayService` 與 `scri
 
 ## 本週優先事項（只列 3 個）
 
-1. **Gate 2 真實 Evidence Operating Loop**：累積 weekly history、manual review note 與 action-item rhythm；Week 1 已完成，目前 weekly history 為 `1/3 waiting_for_time`，不可用 replay、fixture 或人工改表補足 Week 2 / Week 3。
-2. **Gate 3 P0 Data Acceptance**：依 source-by-source diagnostics / shadow / acceptance 處理資料可信度；candidate source 不得接入 `ScoringEngine` 或 formal Advice。
-3. **Gate 4 Portfolio Coach 與後續 effectiveness**：以 Gate 1 已完成的 read-only Advice 為契約基礎，先建立可驗證的 paper / evidence 流程；不串 broker、不宣稱投資有效或自動交易。
+1. **Gate 3 P0 Data Acceptance**：13/13 已有 machine evidence，但 accepted／limited 仍為 0；優先完成 publication、coverage、license、decision-time PIT 與具名 owner/reviewer 決議，不再重複增加同型 contract／parser。
+2. **Gate 2 Evidence Review / Credit**：owner-approved UI projection 已為 `3/3`，sidecar 有 10 期 pending；現在要做的是逐期具名 review、formal credit 與 scheduler approval／recovery，不是用 replay 或改表補週期。
+3. **Gate 4 Paper + Formal handoff**：接上真實 Paper fill producer／Decimal 成本帳，並發布 Formal 3 份 owner-controlled inputs；容量已恢復後再安排 Registry／technical guarded production canary。所有工作仍不串 broker order、不宣稱投資有效。
 
 ## 歷史優先事項（不作目前狀態依據）
 
-> 此節內的 `1/3` 是當日歷史觀察，已由目前 multi-day `3/3 ready` 取代；weekly history 目前仍為 `0/3 waiting_for_time`，兩者均不構成 scheduler approval。
+> 此節內的 `0/3`、`1/3` 與 `3/3` 都是不同日期或不同證據層的歷史觀察。
+> 現況固定回到本文件頂部 Canonical Current Status：formal/canonical credit 未授予、
+> historical working-copy=`1/3`、owner-approved UI projection=`3/3`、pending sidecar=`10`、
+> `formal_credit_authorized=false`；任一數字都不單獨構成 scheduler approval。
 
 1. **V1 release baseline 已完成**：四個產品閉環、Month 6 Strategy Lifecycle / Portfolio Feedback v1、Full App Healthcheck / MainWindow UI smoke / clean clone gate 已形成可交付基準。下一步不是宣稱投資有效，而是進入 evidence-driven 驗證。
 2. **下一階段主線：Evidence-Driven baldr + V1.1 / V1.2 / V1.3 / V1.4 / V1.5 / V1.6 / V1.7 / V1.8 / V1.9 v1 已完成**：Evidence Event Store v1 / Forward Outcome Calculator v1 / Evidence Importers v1 / E2E smoke / Forward Performance Read Model v1 / Daily Decision Desk durable snapshot source / source coverage inspection v1 / Forward Performance Dashboard read-only UI v1 / Evidence Pipeline Runner dry-run v1 / working-copy DB smoke v1 / scheduler approval checklist v1 / Live vs Research Gap linkage v1 / Signal Decay Monitor v1 / Decision Quality Review v1 / Evidence Review Dashboards read-only UI pack v1 / Evidence Review UI smoke checklist / multi-day dry-run record scaffold / safe scheduled CMD wrappers / V1.3 weekly evidence operations package / V1.4 weekly review history / V1.5 data credibility gate / V1.6 cross-sectional factor pipeline / V1.7 screening matrix negative evidence / V1.8 portfolio construction sandbox / V1.9 read-only Agent MCP evidence access / Pre-V2 非排程 readiness inspector / Phase 2 Workbench MVP 已建立；每日 05:30 Codex read-only 摘要、Evidence Review UI smoke 與 multi-day dry-run evidence 可開始背景累積。V1.1 已補推薦 Profile 可見性、推薦回放語意與 Profile replay comparison service；V1.2 已補 replay 訓練 / 驗證分離、rolling risk、microstructure preflight 與 relative attribution；V1.3 已補 manual approval summary、weekly review CLI、signal decay manual lifecycle candidate 與 action item planning；V1.4 已補 weekly review history repository、CLI save/list 與 Research Lab `覆盤歷史` 唯讀子頁；V1.5 已補 Data Source Capability Registry、corporate action / adjusted price policy、governed microstructure source metadata 與 centralized Evidence Source Coverage Service；V1.6 已補 daily factor snapshot DTO / repository / pipeline、concept basket available-date gate、integer factor rank / quantile 與 read-only attribution summary CLI；V1.7 已補 `RecommendationResultDTO.screening_matrix_json`、pass / fail / degraded / skipped / missing matrix、Why Not / Liquidity payload 保存、screening matrix evidence events 與 source coverage `screening_matrix_missing` warning；V1.8 已補 research-only portfolio construction service、整數 bp / Decimal / lot sizing allocation result、virtual order lifecycle trace 與 sample inspection CLI；V1.9 已補 read-only evidence access service 與 `twstock-evidence-access` MCP server；Pre-V2 檢查器已補 weekly history / multi-day record / source gaps / read-only Agent report sample 的唯讀彙總；Workbench 已在 Qt 呈現中文優先 status strip、今日待判讀、background evidence feed、read-only Action Items、read-only Operating Loop、Evidence mode / data quality、Daily Checklist、warnings / degraded source 與舊 Daily Decision / Evidence Review / Portfolio read-only drill-down。若預設 `_reference_fix` replay JSON summary 存在，Workbench 會自動以 summary 揭露 replay-derived source gap coverage、benchmark coverage 與 industry benchmark coverage；時間型 gate 仍會維持 `waiting_for_time`。Action Items 僅顯示人工待處理事項，Operating Loop 只顯示 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate；兩者都不建立 repository、不寫 DB、不標記完成、不套用 lifecycle。舊 recommendation 缺 matrix / payload 時仍只診斷、不回補、不重算；watchlist / portfolio 仍需真實 workflow 與樣本累積。Phase 2 UI / read-only operating loop 可收口；Phase 0 weekly history `0/3`、multi-day dry-run `1/3` 不能用 replay、fixture 或手動改表取代。V2.2 真實 evidence operating loop 與 production scheduler implementation 仍需 durable source coverage、人工 approval 與明確設計後才可進行。
@@ -785,7 +892,7 @@ Historical Evidence Replay v1 新增 `HistoricalEvidenceReplayService` 與 `scri
 
 ## 高風險區（改動需謹慎）
 
-本節先列目前仍適用的高風險邊界；其後以日期開頭的里程碑段落均為歷史證據，不作目前 Gate 或時間型比例的權威。遇到 `1/3` 等舊觀察值，一律以本文件「Evidence 時間型 Gate 狀態校正」的目前值為準。
+本節先列目前仍適用的高風險邊界；其後以日期開頭的里程碑段落均為歷史證據，不作目前 Gate 或時間型比例的權威。遇到 `0/3`、`1/3`、`3/3` 等觀察值，一律回到本文件頂部 `2026-08-29 Canonical Current Status` 的 Evidence 五層判讀；下方「Evidence 時間型 Gate 狀態校正（2026-07-12）」只作歷史來源。
 
 Month 6 v1 狀態（2026-06-17）：策略生命週期判斷只讀 Research Run Registry metadata、benchmark results、factor snapshot / contribution、regime breakdown 與 Portfolio 來源追溯。Promotion 不能只靠單次正報酬；run 必須通過交易次數、總報酬、Sharpe、回撤、勝率、benchmark excess return、factor quality 與 regime compatibility gate。Lifecycle evidence 採 append-only SQLite table 保存 decision snapshot / gate reasons / version id，可投影 latest state；demote / retire 會先形成 proposed evidence，不會自動刪除策略版本。Portfolio feedback 只輸出 post-trade attribution / live-vs-research gap，不會自動下單、平倉、改寫持倉或刪除歷史策略證據。
 

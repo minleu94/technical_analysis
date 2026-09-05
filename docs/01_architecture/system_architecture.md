@@ -1,8 +1,14 @@
 ﻿# 系統架構
 
-> **最後更新：2026-08-14｜V4.0 Operational Production**。Current architecture 現已包含全欄位治理、年度 PIT shards、配置型 ML Production Co-pilot、Rule/ML 整數 bp 混合、deterministic risk projection、confirmed Decision/Evidence capture 與 strict T-1 Paper ledger。ML 非零權重仍由 machine promotion gate 控制；目前 alpha 0。Live broker execution 不在系統範圍。
+> **最後更新：2026-08-30｜V3.3 Engineering Complete / V4 Evidence Accumulation**。
+> `release_v4` 是 storage／engineering namespace，不代表正式 V4.0 product closeout。Current
+> architecture 已包含全欄位治理、年度 PIT shards、配置型 ML shadow co-pilot、Rule/ML 整數
+> bp 混合契約、deterministic risk projection、Decision／Evidence capture 與 T-1 Paper ledger
+> contract；目前 Formal inputs=`0/3`、Formal OOS=false、alpha=0、production scheduler／broker
+> orders 關閉，Paper ledger 實體仍 missing。Readiness UI 對明確 reference path 會標記較舊
+> artifact，但不自動替換或掃描未知檔案。Live broker execution 不在系統範圍。
 
-## V4.0 配置決策資料流
+## release_v4 配置決策工程資料流（非正式 V4.0 closeout）
 
 ```text
 SQLite + raw files + governed sidecars
@@ -205,7 +211,7 @@ V2.1 / Phase 2 Workbench MVP shell 新增 `ui_qt/views/workbench_view.py` 與 `u
 
 T3 Research Console 將 Workbench `Evidence` placeholder 替換為 `ui_qt/views/research_console_view.py`。`app_module/research_console_dtos.py` 固定 fail-closed safety boundary；`app_module/research_console_source_service.py` 只讀 injected mapping 或顯式 `ResearchConsoleProjection.json`，只接受 exact development scope、literal false 的四個 canonical `apply_to_*` flags、formal OOS false、promotion false 與真正整數 alpha 0。File-path provider 以實際 projection bytes 計算 E2E artifact SHA-256；injected mapping 沒有實體檔時 hash 維持 Unknown，不再拿 dataset manifest hash冒充 projection hash。MainWindow 只從 `RESEARCH_CONSOLE_PROJECTION` 取得顯式 path 並注入 service，不掃描 development／正式資料目錄。Qt view 只複製 DTO，固定呈現 Safety Boundary、Development Pipeline、EV1–EV5／P0-13／獨立 Broker lane／Artifact Inspector，也呈現 `P0SourceControlCenterDTO` 的 13 項來源治理狀態。新增的 `app_module/p0_source_control_center.py` 只組合 versioned P0 contract、候選／證據稽核與外部注入的 decision revision；沒有稽核時仍輸出 13 列 `contract_only`，不建立 decision registry、不授予 eligibility。UI 不 import data / ML / development domain、不連 SQLite、不建立 registry、不重算 feature / label / Rule / ML / Score / Recommendation / Portfolio / performance，也沒有 apply / promote / retrain / blend / source acceptance / trading 控制。
 
-Phase 2C / 2D closeout 另在 DTO/composer/view 邊界內新增 `WorkbenchOperatingLoopStep` 與 `WorkbenchOperatingLoopTableModel`，把 Evidence Feed、Action Items、Daily Checklist、weekly review history、multi-day dry-run、manual review note 與 scheduler gate 串成每天打開 Workbench 時可掃描的 read-only 操作節奏。Composer 只從 `WorkbenchDashboardDTO` 內既有 payload 推導 `daily_start`、`manual_queue`、`weekly_review_history`、`multi_day_dry_run`、`manual_review_note` 與 `scheduler_gate`；每個 step 保留 `source_trace`、`linked_item_ids`、`drilldown_target`、`guidance` 與 `write_intent=false`。Qt view 只顯示操作節奏 rows 與「今天要看 / 人工處理 / 等待真實時間累積」摘要，不標記完成、不寫 DB、不套用 lifecycle。Evidence Feed、Action Items 與 Operating Loop 的空狀態 / 降級狀態文案由 view 依 DTO rows 派生，空狀態不代表 gate 通過，降級狀態不補值、不重跑 pipeline。若 DTO 帶 replay summary，data quality 區塊揭露 `simulated_scheduler`、source gap / coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark 與 pending future-data；`ui_qt/main.py` 只會在預設 `_reference_fix` replay JSON summary 存在時把 JSON path 交給 `WorkbenchSourceService`，不讀 replay DB、不執行 replay。Phase 2 UI / read-only operating loop 可 closeout；Week 1 已完成，Phase 0 weekly history 目前為 `1/3 waiting_for_time`，multi-day dry-run 已為 `3/3 ready`。Week 2 / Week 3 只能由真實時間累積，replay 不得替代；multi-day ready 不構成 production scheduler approval，該 gate 仍尚未完成。
+Phase 2C / 2D closeout 另在 DTO/composer/view 邊界內新增 `WorkbenchOperatingLoopStep` 與 `WorkbenchOperatingLoopTableModel`，把 Evidence Feed、Action Items、Daily Checklist、weekly review history、multi-day dry-run、manual review note 與 scheduler gate 串成每天打開 Workbench 時可掃描的 read-only 操作節奏。Composer 只從 `WorkbenchDashboardDTO` 內既有 payload 推導 `daily_start`、`manual_queue`、`weekly_review_history`、`multi_day_dry_run`、`manual_review_note` 與 `scheduler_gate`；每個 step 保留 `source_trace`、`linked_item_ids`、`drilldown_target`、`guidance` 與 `write_intent=false`。Qt view 只顯示操作節奏 rows 與「今天要看 / 人工處理 / 等待真實時間累積」摘要，不標記完成、不寫 DB、不套用 lifecycle。Evidence Feed、Action Items 與 Operating Loop 的空狀態 / 降級狀態文案由 view 依 DTO rows 派生，空狀態不代表 gate 通過，降級狀態不補值、不重跑 pipeline。若 DTO 帶 replay summary，data quality 區塊揭露 `simulated_scheduler`、source gap / coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark 與 pending future-data；`ui_qt/main.py` 只會在預設 `_reference_fix` replay JSON summary 存在時把 JSON path 交給 `WorkbenchSourceService`，不讀 replay DB、不執行 replay。Phase 2 UI / read-only operating loop 可 closeout；可變 Evidence 計數不屬於架構事實，必須回到 Snapshot 同時區分 formal/canonical credit、歷史 working-copy、owner-approved projection、pending sidecar 與 Formal credit。Replay 不得替代任一 official Gate；multi-day ready 也不構成 production scheduler approval。
 
 Healthcheck Batch 4 新增 `research_result_presentation.py` 作為 Research Lab 結果頁呈現邊界。它只把已產生的推薦回放 summary、Train-Test report、Walk-forward fold summary 轉成 UI 文案與可靠度提示，不重跑回測、不重新抓取目前資料、不改變交易或績效計算。Train-Test / Walk-forward 樣本可靠度提示只讀交易數、Fold 數、OOS 與 consistency 等已存在結果 metadata；Registry 比較仍只讀已保存 metadata、equity curve 與 benchmark_results。Qt UI 可使用這些 helper 顯示「樣本不足，不宜作正式策略判斷」、資金使用與 Monte Carlo 語意，但不得把提示升級成交易建議、自動下單或持倉調整。
 
@@ -318,6 +324,7 @@ Research Run metadata 可透過 `data_manifest.factor_snapshot` 與 `data_manife
 - Backtest presenter 已承接完整績效摘要組裝（含 Phase 3.5 SOP、fixed/quantile diagnostics、baseline、overfitting 與詳細統計）；Recommendation presenter 已承接 profile advanced summary chain，數字字串以 `Decimal` 解析後再顯示。兩個 view 的舊 helper 名稱仍是相容 delegate。
 - Update orchestration：`ui_qt/views/update/update_all_coordinator.py` 擁有 quick/safe step graph、progress、completed steps、TPEX soft failure 與其他步驟 fail-fast 規則；`UpdateView._run_update_all()` 僅取得日期並注入 service operations。實際更新／合併仍由 `UpdateService` 執行，順序與公開 result payload 不變。
 - UpdateView presentation shell 使用可垂直捲動的 content widget；小於 720px 時只調整導覽方向、狀態卡欄數與操作按鈕排列，不改變 worker／coordinator／service 呼叫或 SQLite 寫入契約。
+- UpdateView 的月營收與 Phase 3C 子分頁另提供受控候選入口：`UpdateService.fetch_mops_monthly_revenue_snapshot_candidate()` 只保存 MOPS snapshot／raw HTML 候選，`UpdateService.update_phase3c_candidate_range()` 只寫入明確的隔離 Candidate DB；兩者都不掛入 `update_all_coordinator`、不寫正式 SQLite，也不授予下游策略／交易資格。來源詳情查詢對 status manifest 寫入採 fail-soft，正式根目錄唯讀時仍回傳實際 read-only 狀態並保留 warning。
 - 單一資料源更新由 `ui_qt/views/update/source_update_coordinator.py::SourceUpdateRequest` 負責：daily 固定 TWSE→TPEX→SQLite→indicator 與 warnings/result aggregation，market/industry/broker 只映射既有 service call。View 只管理 radio/date widgets 與 worker signals。
 - Workbench presenter 已承接 review queue、background evidence feed、action items 與 operating loop 的 DTO 狀態文字及 degraded 判讀；不讀 DB、不補值、不執行 replay。MainWindow 的八個 workspace key/label/icon 與 registration 順序由 `WORKSPACE_DEFINITIONS` 單一 immutable plan 供應，視窗仍擁有 QWidget 與 signal lifecycle。
 - Smart Money composition 由 `app_module/decision_desk_composition.py::build_smart_money_composition()` 建立 semantic service 與 price provider，並沿用 Decision Desk 的 market-frame loader；失敗回傳 `service=None` 供 UI 降級。Runtime Observatory 的 composition 位於 `ui_qt/runtime_composition.py`；MainWindow 將 repo `runtime/` 與 `OUTPUT_ROOT/scheduled` 兩個唯讀 root 注入 RuntimeController，並保存 controller／bridge／view／timer 四個 Qt lifecycle references。controller 只發佈治理 DTO 與排程營運 DTO，不呼叫 task、資料更新或模型流程。
@@ -527,7 +534,6 @@ Smart Money 語意層沿用上述資料品質契約：observed / estimated 可�
 - core artifact 的 missing／unreadable／stale 必須 fail-closed 為 attention；非 core 不能被默認為成功。ML rule-only／promotion gate 等預期安全狀態以 guarded 顯示，不能被當成 promotion。
 - Runtime event UI 只保留本次 session 開啟後的最近 500 筆新事件；底層 JSONL 仍 append-only，不因 UI 裁切而刪除。
 - RuntimeView 的內容容器使用 query-only `QScrollArea`；小於 720px 時將治理 Splitter 切為垂直單欄，且所有長路徑／狀態文字允許收縮或換行。這只改 presentation，不改 DTO、事件流或任何寫入邊界。
-- RuntimeView 的內容容器使用 query-only `QScrollArea`；小於 720px 時將治理 Splitter 切為垂直單欄，且所有長路徑／狀態文字允許收縮或換行。這只改 presentation，不改 DTO、事件流或任何寫入邊界。
 
 ### 禁止依賴
 
@@ -551,6 +557,35 @@ Smart Money 語意層沿用上述資料品質契約：observed / estimated 可�
 - Portfolio trade / journal
 
 Research Run Registry 由 `ResearchRunService` 統一負責保存 owner，metadata 寫入 SQLite，equity curve 與 trades 寫入 Parquet。保存流程採 staging → files_ready → committed 狀態轉移，並以 payload / file hash 做完整性檢查；失敗或中斷時可透過 reconciliation 標記不完整 run，不把部分資料冒充為成功結果。
+
+### 11.1 Immutable ML publication retention
+
+`OUTPUT_ROOT/release_v4` 下的 PIT、Direct 與 OOC 是可重建但具 custody 的 immutable
+publication，不是 raw source，也不是一般 rolling backup：
+
+- PIT root：`ml_pit_year_shards`
+- Direct root：`portfolio_ml_direct_numeric_production_v4_v2`
+- OOC root：`portfolio_ml_direct_ooc_training_production_v4_v5`
+
+每層以 `runs/<id>/manifest.json` 保存 immutable identity，root
+`latest_manifest.json` 只指向 current publication。Pointer、manifest hash 與 OOC → Direct →
+PIT dependency closure 必須一起驗證；不能只依修改時間或目錄大小判斷可刪。
+
+Scheduled PIT／Direct wrapper 在啟動 worker 前做唯讀 filesystem headroom preflight；低於
+預設 20 GiB 時 fail closed，不建立 partial publication。`inspect_ml_storage_retention.py`
+只做 untruncated metadata inventory，固定 `automatic_delete_allowed=false`，沒有 archive／
+delete／pointer mutation 權限。
+
+人工 retention 只能在具名 owner 看過 exact scope 後進行，至少保留 current pointer 與完整
+依賴鏈；resume／partial 被刪除代表放棄續跑、改由重算。完整歷史 run 若被 runbook／release／
+QA 引用，刪除前應冷 archive，或至少建立 durable tombstone；不可改寫 append-only runbook
+的舊 ID／hash。所有刪除使用 exact literal target，禁止對 `release_v4` root 或 wildcard
+遞迴清除。2026-08-29 的一次性 cleanup custody 與 current pointer 基線見
+[ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
+
+容量通過只解除 worker 啟動前置，不代表 Formal input、OOS、promotion、alpha、scheduler、
+technical production canary 或 broker order 通過。舊 status artifact 應保留作歷史，不能手改；
+新的 current status 必須由下一個受控 preflight／run 產生。
 
 Post-V1 evidence layer 由 `EvidenceEventService` / `EvidenceEventRepository` 保存 append-only `evidence_events`，並由 `ForwardPerformanceService` 計算 `evidence_outcomes`。v1 outcome 使用 SQLite `daily_prices` 的 close-to-close forward return，並嘗試從 `market_indices` / `industry_indices` 產生 benchmark / industry excess；缺資料時保留 NULL 與 warnings，不中斷整批。reference return 分為三層契約：raw forward return、market benchmark excess、industry excess；market benchmark 可在 missing event benchmark 時 fallback 到 TAIEX，industry excess 必須有 event industry id 或 sector payload 才能填入。`EvidenceSourceCoverageService` 統一檢查 persisted recommendation、durable Daily Decision Desk snapshot sections 與 optional exclusion payload 的 coverage，避免 CLI、runner、readiness evaluator 各自分級。V1.6 cross-sectional factor snapshot 以 `CrossSectionalFactorRepository` 保存每日 factor rank / quantile 與 diagnostics，供 attribution 與後續 negative evidence 使用。此層只輸出 research evidence、factor attribution 與 source diagnostics，不改 `ScoringEngine`、推薦權重、策略版本或 portfolio position。
 
@@ -675,6 +710,8 @@ UI 修改：
 
 ## 16. 更新記錄
 
+- 2026-09-04：Data Update 增加月營收／Phase 3C 候選更新 service wrapper 與子分頁操作入口；所有候選寫入仍隔離於正式 SQLite，來源狀態查詢在 production 根目錄唯讀時採 fail-soft manifest warning。全部資料頁操作列與狀態卡採 status-first responsive layout。
+- 2026-08-29：將 `release_v4` 明確定位為 engineering／storage namespace，不再稱 `V4.0 Operational Production`；補入 immutable PIT／Direct／OOC pointer、dependency closure、人工 retention、resume abandonment、tombstone 與 stale status 邊界。Runtime environment／clone proof 與 production transaction proof 維持分層；Formal 0/3、alpha 0、scheduler／broker disabled 不因容量清理改變。
 - 2026-08-26：補強 Data Update trust UX；UpdateView 狀態卡改為明確 status token／freshness 判定並清除部分 payload 的舊卡片，quick/safe 與各寫入型 worker 增加互斥、子流程進度區間映射與 final-status 100% gate。SQLite Inspector 與 UpdateService 狀態讀取共用 `mode=ro`／`query_only` adapter，缺 DB 時以 unavailable fail-soft，不建立空資料庫；TWSE 明確失敗時每日來源流程在 TPEX／SQLite／技術指標前停止；同步補上 UI、每日更新與 SQLite 操作手冊及回歸測試邊界。
 
 - 2026-07-15：同步 corporate-action availability history staging-only CLI 邊界；JSON root deterministic fail-closed、既有 target 拒絕覆寫、staging publish／cleanup 與環境 `DATA_ROOT` forbidden-root guard 均不接正式資料或 Formal lifecycle。

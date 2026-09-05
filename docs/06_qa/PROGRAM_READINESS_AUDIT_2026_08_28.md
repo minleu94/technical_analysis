@@ -1,5 +1,16 @@
 # Program Readiness Audit — 2026-08-28
 
+> **2026-08-29 supersession**：本文件保存 cleanup 前的完整盤點流水帳；其中
+> `6.11/6.56 GiB`、`594.21 GiB`、`blocked_insufficient_storage` 與「未刪除／未搬移」
+> 均是當時正確、現在已過期的容量觀察。使用者明確授權清除 4 個 resume／partial、
+> 35 個平衡歷史 run 及第一批 duplicate／empty 目標後，D 槽可用約 `410.31 GiB`，
+> post-cleanup inventory=`headroom_ok`。目前整體仍為 `action_required`，但 performance
+> 的真實剩餘 blocker 是 technical production single-writer canary；P0／Evidence／Paper／
+> Formal 與 Runtime production canary 狀態不因清理自動改變。最新 canonical 判讀見
+> [Program Status Rebaseline](PROGRAM_STATUS_REBASELINE_2026_08_29.md)，完整刪除／保留／
+> pointer／tombstone 證據見
+> [ML Release v4 Storage Retention Cleanup](ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)。
+
 ## 結論
 
 程式可以持續推進，而且多個原先看起來像「功能沒做」的項目已被補成可觀測、可驗證的工程路徑：P0 已取得 `13/13` 候選來源矩陣與 27 條 acquisition route、Evidence projection 已能顯示 `3/3` 但仍待正式 credit、Paper Equal Weight benchmark 已建立、technical process-pool／recovery／single-writer staging 與 scheduler wiring 已完成、Data Update 也能顯示 fallback 與排程註冊狀態。
@@ -555,7 +566,7 @@ readiness 當成正式 ACL 缺口；最新 host-context readiness artifact 為
 - Host-context Scheduler recheck：`available=13/13`、`configuration_ready=true`、`all_actions_observed=true`、`all_actions_match=true`；13 個 task 均為 `Enabled`／`Ready`，`Logon Mode=Interactive only`，最近 query 顯示 `baldr-ml-direct-chain-maintainer` 的 `Last Result=1`，其餘 task 為 `0`。這只證明註冊／action wiring 與互動式帳號下的執行觀測，不解除 `production_scheduler_allowed=false` 或 Formal／Evidence gate。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\scheduled_task_status_host_20260828.json`（SHA-256=`14C1F4C59611231961F62105C4608AE3FDBA4A8BE2D48ABA3A5E70281E8C9845`）。
 - Direct/OOC 維護失敗的 host evidence：`latest_status.json` 的 `returncode=1` 對應 maintainer log 的 `OSError: [Errno 28] No space left on device`；當時 D 槽可用約 `6.11 GiB`，而現行 62-feature raw shard 估算的 Direct annual peak 約 `14.97 GiB`（尚未計 rollback／其他輸出）。`release_v4` 目前約 `594.21 GiB`，其中 `ml_pit_year_shards` 約 `334.29 GiB`、Direct numeric runs 約 `154.06 GiB`、OOC training runs 約 `99.84 GiB`。這是容量／保留策略 blocker，不是 SQLite source write 或 Formal input 成功；已新增 scheduled wrapper 的唯讀 20 GiB headroom preflight，低於門檻會 `blocked_insufficient_storage` 並停止本次啟動。
 - Host preflight 實測（2026-08-28 18:55 UTC）在正式 D 槽讀取 `free_bytes=6,564,593,664`、門檻 `21,474,836,480`，結果為 `blocked_insufficient_storage`；status 只寫入 TEMP，沒有啟動 Direct/OOC 或改寫正式 SQLite。artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_direct_storage_preflight_host_20260828.json`，SHA-256=`1566E68C38B2947F22A88A29235D55E0C8998C4E685273A6DD47BD54786CD18E`。
-- 新增唯讀 `scripts/inspect_ml_storage_retention.py` 後，以明確三個 Direct/OOC 根目錄做 metadata inventory：`ml_pit_year_shards` 掃描 `358,945,569,578` bytes／562 files、Direct numeric 掃描 `165,423,387,694` bytes／4,902 files；OOC 深度 scan 完整讀取 `107,201,796,027` bytes／192,005 files，沒有刪除／搬移／修改 lock 或 pointer。combined artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_storage_retention_inventory_host_20260828_v3.json`，status=`capacity_blocked`、SHA-256=`0C6169053B482296A51F441AF21847158A7DB146C59875516445B00C756CC8CD`。
+- 新增唯讀 `scripts/inspect_ml_storage_retention.py` 後，以明確三個 Direct/OOC 根目錄做 metadata inventory：`ml_pit_year_shards` 掃描 `358,945,569,578` bytes／562 files、Direct numeric 掃描 `165,423,387,694` bytes／4,902 files；combined artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_storage_retention_inventory_host_20260828_v3.json`，status=`capacity_blocked`、SHA-256=`0C6169053B482296A51F441AF21847158A7DB146C59875516445B00C756CC8CD`，但其中 OOC root 因 file limit 截斷，不作 OOC 容量來源。OOC `107,201,796,027` bytes／192,005 files 取自另一次完整 deep scan `ml_storage_retention_inventory_ooc_host_20260828_v3.json`（SHA-256=`5950784709288C7361F654ABB50BD3AC0B2851F0EFB52666CB4F93163814628D`、`scan_truncated=false`）；兩個 inspector run 都沒有刪除／搬移／修改 lock 或 pointer。
 - OOC inventory 另辨識到 18 個 manifest `status=complete` 的 `allocation-ooc-*` run，合計約 `98,779,188,672` bytes；這只是 owner retention review 候選，工具固定輸出 `automatic_delete_allowed=false`。深度 artifact=`C:\Users\archi\AppData\Local\Temp\technical_analysis_program_readiness\ml_storage_retention_inventory_ooc_host_20260828_v3.json`，SHA-256=`5950784709288C7361F654ABB50BD3AC0B2851F0EFB52666CB4F93163814628D`。
 - Broker real HTTP canary：`C:\Users\archi\AppData\Local\Temp\technical_analysis_performance\broker_real_http_canary_20260828.json`（SHA-256=`5532F53BDE0C86B4A8983B766DA46AF45D5DF53D893EAEE0F70797F22A48E83C`）；`1030_1030`／`2026-08-28`／`lots` 單一 GET 解析 100 rows，Selenium 未啟動，正式 writer／SQLite 均未寫入。這只證明當次來源可讀與 parser 可用，不代表長期 rate-limit、授權、Selenium fallback 或 production pool。
 

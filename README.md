@@ -4,6 +4,10 @@ baldr 是一套台股研究與投資決策工作台。它把資料更新、市�
 
 目前 `main` 提供可穩定使用的**唯讀研究版**：可以進行資料更新、研究、回測、人工覆盤與證據檢視；不會自動下單、修改策略生命週期或啟用 production evidence scheduler。
 
+目前開發狀態是 `V3.3 Engineering Complete / V4 Evidence Accumulation`，整體 readiness
+仍為 `action_required`，不是正式 V4.0 Production。七個 lane 的完成／缺口與推進順序見
+[2026-08-29 程式現況重估](docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)。
+
 > baldr 不提供獲利保證，也不把回測或歷史重播視為實盤績效。所有推薦、風險提示與研究結果都必須連同資料品質、可得日、交易成本、成交限制與樣本量一併判讀。
 
 ## 這套工具能做什麼
@@ -87,13 +91,15 @@ $env:OUTPUT_ROOT = "D:\your\baldr-data\output"
 
 - Production evidence scheduler 目前維持關閉。
 - 不提供自動下單、券商串接、AI 自動升降級策略或自動修改投資組合。
-- V3.0 工程候選已完成並可供研究使用；人工驗證與長期 evidence 累積仍在進行中，因此不代表投資有效性或 V4.0 成熟度。
+- V3.3 工程底座已完成並可供研究使用；P0 接受、Evidence formal credit、Paper 真實 fills／成本、Formal inputs 與 production canary 仍未 closeout，因此不代表投資有效性或 V4.0 成熟度。
 - 請先備份你的資料根目錄，再進行任何明確會寫入資料庫的更新或維護操作。
 
 ## 需要更完整的操作說明？
 
 - [完整應用手冊](docs/07_guides/APPLICATION_MANUAL.md)：每個工作區的入口、步驟、參數、結果判讀、安全限制與排錯。
 - [目前狀態](docs/00_core/PROJECT_SNAPSHOT.md)：現有能力與已知限制。
+- [完整程式盤點](docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)：七個 readiness lane、真正缺口與下一步。
+- [ML 儲存清理紀錄](docs/06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)：2026-08-29 retention 行為、保留鏈與不可逆邊界。
 - [V2.1–V4.0 版本路線](docs/00_core/VERSION_ROADMAP_V2_1_TO_V4_0.md)：長期成熟度與 gate 說明。
 - [疑難排解與資料治理](docs/07_guides/APPLICATION_MANUAL.md)：資料位置、診斷訊息與安全限制。
 

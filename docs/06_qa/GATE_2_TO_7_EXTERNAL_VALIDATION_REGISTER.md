@@ -1,12 +1,12 @@
 # Gate 2–7 External Validation Register
 
-> **Current-state notice（2026-08-27）**：本文件下方的 V4.0 revision／table 是 2026-07-30 的 append-only 歷史投影，保留供追溯，**不是目前 readiness 的 SSOT**。目前狀態請以 [Program Readiness Audit 2026-08-27](PROGRAM_READINESS_AUDIT_2026_08_27.md)、對應的唯讀 inspectors 與實際 registry revision 重新判讀；不得從本頁歷史的 `complete`／`4/3`／`13/13` 敘述推定今日 Gate 已解除。2026-08-27 現況 audit 實測 P0 為 `13 contract_only / accepted 0`；若載入目前 owner-approved weekly projection，UI／Pre-V2 只揭露 weekly `3/3`，未載入時正式 DB legacy path 為 `0/3`。Paper Portfolio 仍 `partial`／weekly `not_computable`，formal／ML 仍 fail-closed。既有歷史列不在本次文件修訂中回填或改寫。
+> **Current-state notice（2026-08-30）**：本文件下方的 V4.0 revision／table 是 2026-07-30 的 append-only 歷史投影，保留供追溯，**不是目前 readiness 的 SSOT**。目前狀態請以 [Program Status Rebaseline 2026-08-29](PROGRAM_STATUS_REBASELINE_2026_08_29.md)、[Project Snapshot](../00_core/PROJECT_SNAPSHOT.md) 頂部、對應唯讀 inspectors 與具時間戳 source artifacts 重新判讀；不得從本頁歷史的 `complete`／`4/3`／`13/13` 敘述推定今日 Gate 已解除。Current P0 為 13/13 machine evidence，其中 `1 verified / 9 degraded / 3 official_no_data`，accepted／limited 仍 0；Evidence formal credit 未授予、歷史 working-copy 1/3、UI projection 3/3、sidecar pending 10、multi-day 3/3；Paper 21/21 但 fills／cost 0；Formal inputs 0/3。既有歷史列不回填或改寫。最新 P0 與 Evidence handoff 分別見 [P0 Evidence Refresh 2026-08-30](P0_EVIDENCE_REFRESH_2026_08_30.md) 與 [Evidence Weekly Approval Refresh 2026-08-30](EVIDENCE_WEEKLY_APPROVAL_REFRESH_2026_08_30.md)。
 
 ## V4.0 歷史 revision 投影（2026-07-30；非目前狀態）
 
-> 本節與下方 revision／table 是 append-only 歷史資料，只供追溯。`Rule/Advice/Paper operational production` 等文字描述的是當時 revision 的宣告，不代表目前環境已啟用；目前狀態以本頁上方 Current-state notice、Program Readiness Audit 與實際 inspectors 為準。
+> 本節與下方 revision／table 是 append-only 歷史資料，只供追溯。`Rule/Advice/Paper operational production` 等文字描述的是當時 revision 的宣告，不代表目前環境已啟用；目前狀態以本頁上方 Current-state notice、Program Status Rebaseline 與實際 inspectors 為準。
 
-## V4.0 最新 revision 投影
+## 2026-07-30 V4.0 revision 投影（historical）
 
 | Item | 最新狀態 | 機器／政策決議 |
 |---|---|---|

@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
 **版本**：v1.4.10
-**最後更新**：2026-07-13
+**最後更新**：2026-08-30
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -15,6 +15,14 @@
 產品北極星見 `docs/01_architecture/system_vision_specification.md`。Daily Decision Desk 的唯一實例位於「市場探索 > 市場總覽」；Workbench「決策來源」只導向同一畫面。現行開發仍以 `docs/01_architecture/system_architecture.md` 的模組邊界為準。
 
 Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsal_complete`；它可重跑 replay / source shadow / ML shadow / lineage 的 coverage、quality、missingness 與 blocker 揭露，Workbench 只讀顯示、沒有 apply / promote。它不是 forward evidence，也不會把 External Validation Register 自動標為 complete；接手時先讀 `docs/06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md`，再依 register 的 owner 與 completion rule 累積真實資料、授權、時間與人工 Gate。
+
+2026-08-30 current rebaseline 入口為
+`docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md`：目前是 V3.3 engineering foundation
+完成、V4 evidence accumulation 中，整體仍 `action_required`，不是正式 V4.0。ML
+release_v4 cleanup 的 exact scope／retained chain／pointer／tombstone 則看
+`docs/06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md`；舊 6.11 GiB
+storage blocker 已被 8/30 fresh `headroom_ok`（約 338.9 GiB）觀察取代；Direct/OOC
+只完成 `preflight-only`，不代表長任務或 production writer 已啟動。
 
 2026-07-13 跨工作流工程整合入口為 `app_module/system_execution_blueprint_adapters.py`，純 JSON 驗證入口為 `scripts/verify_system_execution_blueprint.py`。兩者只組合／驗證 Evidence、PIT／source、ML shadow、dashboard 與 latency 的既有輸出，不改 Recommendation、Score、Advice、Portfolio 或 Exit。任一契約失敗時回到原 owner 修正；禁止在整合層補值、放寬 Gate 或把 `degraded` 改成 ready。
 
@@ -139,7 +147,7 @@ Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsa
 
 **如果我要改 Historical Evidence Replay**：先看 `HistoricalEvidenceReplayService`、`EvidencePipelineRunner`、`EvidenceCaptureService` 與 `ForwardPerformanceService`；replay DB 必須與 source DB 分離，recommendation result 必須受 `created_at <= decision_date` 限制，outcome price search 必須受 `data_as_of_date` 限制，replay metadata 必須保留 `historical_replay` / `simulated_scheduler`，且 replay 不得計入 production scheduler approval。
 
-**如果我要改 V2.0 / V2.1 Workbench read-only source adapter、background evidence feed、Action Items 或 Operating Loop**：先看 `WorkbenchSourceService`、`WorkbenchReadOnlyComposer`、`WorkbenchDashboardDTO`、`PreV2ReadinessService` 與 `AgentEvidenceAccessService`；adapter 只能讀受控 DB path / replay JSON summary，missing DB / table 要變成 diagnostics。背景證據流只能彙整既有 DTO / service payload；Action Items 只能顯示人工待處理事項，必須保留 severity / queue group / source label / source trace / degraded reason / sort rank / drill-down target。Operating Loop 只能從 DTO payload 串接 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，必須保留 source trace / linked item ids / drill-down target / `write_intent=false`。首頁「今日行動中心」也只能讀這些既有 DTO，並只透過既有 drill-down callback 導向數據更新、Daily Decision、推薦分析或持倉管理；不得自行推導投資結論、寫 DB、更新資料或觸發任何 domain action。`AdaptiveWorkspaceStack` 只處理目前可見 workspace 的尺寸提示，不能改變 workspace registration、widget ownership 或資料載入。Week 1 已完成，目前 weekly history 為 `1/3 waiting_for_time`，multi-day dry-run 已為 `3/3 ready`；不得用 fixture、手動改表或 replay 補 Week 2 / Week 3，且 multi-day ready 不構成 scheduler approval。Drill-down target 必須對齊 Daily Decision、Evidence Review、Portfolio 舊頁導向，空狀態與 degraded 狀態文案不得暗示 gate passed、補值或建議，且不得建立 repository、寫 DB、讀 UI state、重算 scoring / portfolio / backtest、啟用 scheduler、套用 lifecycle 或產生交易建議。
+**如果我要改 V2.0 / V2.1 Workbench read-only source adapter、background evidence feed、Action Items 或 Operating Loop**：先看 `WorkbenchSourceService`、`WorkbenchReadOnlyComposer`、`WorkbenchDashboardDTO`、`PreV2ReadinessService` 與 `AgentEvidenceAccessService`；adapter 只能讀受控 DB path / replay JSON summary，missing DB / table 要變成 diagnostics。背景證據流只能彙整既有 DTO / service payload；Action Items 只能顯示人工待處理事項，必須保留 severity / queue group / source label / source trace / degraded reason / sort rank / drill-down target。Operating Loop 只能從 DTO payload 串接 daily first-look、manual queue、weekly history、multi-day dry-run、manual review note 與 scheduler gate，必須保留 source trace / linked item ids / drill-down target / `write_intent=false`。首頁「今日行動中心」也只能讀這些既有 DTO，並只透過既有 drill-down callback 導向數據更新、Daily Decision、推薦分析或持倉管理；不得自行推導投資結論、寫 DB、更新資料或觸發任何 domain action。`AdaptiveWorkspaceStack` 只處理目前可見 workspace 的尺寸提示，不能改變 workspace registration、widget ownership 或資料載入。Evidence current 顯示必須同時區分 formal/canonical credit 未授予、歷史 working-copy 1/3、owner-approved UI projection 3/3、pending sidecar 10 與 multi-day 3/3；`formal_credit_authorized=false`、multi-day ready 不構成 scheduler approval，fixture／手動改表／replay 也不得補 official Gate。Drill-down target 必須對齊 Daily Decision、Evidence Review、Portfolio 舊頁導向，空狀態與 degraded 狀態文案不得暗示 gate passed、補值或建議，且不得建立 repository、寫 DB、讀 UI state、重算 scoring / portfolio / backtest、啟用 scheduler、套用 lifecycle 或產生交易建議。
 
 **如果我要改 Workbench > Evidence / Research Console**：先看 `app_module/research_console_dtos.py`、`app_module/research_console_source_service.py`、`ui_qt/views/research_console_view.py` 與三個 `tests/test_*research_console*`。Source service 只可讀 injected sanitized mapping 或顯式 projection path；MainWindow 以 `RESEARCH_CONSOLE_PROJECTION` 注入，不可自動掃描 development／正式資料目錄。View 只能複製 DTO，必須維持 formal OOS false、production alpha 0、Rule-only formal path、P0-13 與 Broker lane 分離，以及所有 apply / promote / retrain / trade 控制不存在。
 
