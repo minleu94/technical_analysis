@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import subprocess
 import sys
@@ -21,14 +22,17 @@ def _config(tmp_path: Path) -> TWStockConfig:
 
 def _approval_artifact(tmp_path: Path) -> Path:
     path = tmp_path / "evidence-scheduler-approval.json"
+    now = datetime.now(timezone.utc)
+    approved_at = (now - timedelta(minutes=1)).replace(microsecond=0)
+    expires_at = (now + timedelta(hours=1)).replace(microsecond=0)
     path.write_text(
         json.dumps(
             {
                 "schema_version": "evidence-production-scheduler-approval.v1",
                 "approval_id": "approval-test-001",
                 "owner": "test-owner",
-                "approved_at": "2026-08-28T08:00:00+00:00",
-                "expires_at": "2026-08-29T08:00:00+00:00",
+                "approved_at": approved_at.isoformat(),
+                "expires_at": expires_at.isoformat(),
                 "scope": "evidence_capture_scheduler",
                 "approved": True,
                 "production_scheduler_allowed": True,
