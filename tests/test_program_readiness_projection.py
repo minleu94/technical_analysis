@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from app_module.program_readiness_projection import (
@@ -81,6 +82,27 @@ def test_unsupported_program_readiness_schema_is_invalid(tmp_path: Path):
     assert projected["status"] == "invalid"
     assert "program_readiness_schema_unsupported" in projected["diagnostics"][0]
     assert projected["writes_allowed"] is False
+
+
+def test_older_explicit_readiness_artifact_is_marked_without_replacement(tmp_path: Path):
+    readiness_path = tmp_path / "program-readiness.json"
+    reference_path = tmp_path / "data-update-status.json"
+    readiness_path.write_text(json.dumps(_payload()), encoding="utf-8")
+    reference_path.write_text(json.dumps({"status": "passed"}), encoding="utf-8")
+    os.utime(readiness_path, (100.0, 100.0))
+    os.utime(reference_path, (200.0, 200.0))
+
+    projected = load_program_readiness(
+        readiness_path,
+        freshness_reference_paths=(reference_path,),
+    )
+
+    assert projected["path"] == str(readiness_path.resolve())
+    assert projected["status"] == "action_required"
+    assert any(
+        item == "program_readiness_artifact_older_than_reference:data-update-status.json"
+        for item in projected["diagnostics"]
+    )
 
 
 def test_program_readiness_summary_keeps_status_and_boundary_visible(tmp_path: Path):

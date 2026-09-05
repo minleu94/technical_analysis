@@ -815,6 +815,16 @@ class PaperPortfolioReadinessService:
         if reported_state and str(Path(reported_state).resolve()) != expected_state:
             blockers.append("paper_daily_status_state_db_path_mismatch")
             diagnostics.append("paper_daily_status_state_db_path_not_opened")
+        # A non-trading-day run intentionally does not append a snapshot.  Its
+        # decision_date identifies the skipped calendar day, while the latest
+        # snapshot remains the last trading day.  Comparing those two dates
+        # would turn a valid weekend/holiday status into a false mismatch and
+        # make the UI report a degraded paper portfolio.  Keep the state-db
+        # path check above, but reconcile snapshot fields only for a run that
+        # actually produced a snapshot.
+        if str(status_payload.get("status", "")) == "skipped_non_trading_day":
+            diagnostics.append("paper_daily_status_non_trading_day_no_snapshot_expected")
+            return
         for payload_key, snapshot_key, blocker in (
             ("snapshot_id", "snapshot_id", "paper_daily_status_snapshot_mismatch"),
             ("decision_date", "decision_date", "paper_daily_status_date_mismatch"),

@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 import json
 from pathlib import Path
 from typing import Any, cast
@@ -64,6 +64,7 @@ def load_program_readiness(
     path: Path | None,
     *,
     max_bytes: int = MAX_ARTIFACT_BYTES,
+    freshness_reference_paths: Sequence[Path] | None = None,
 ) -> dict[str, Any]:
     """Load and safely project one explicit readiness artifact.
 
@@ -109,7 +110,47 @@ def load_program_readiness(
             f"program_readiness_schema_unsupported:{raw.get('schema_version')}",
             path=resolved_path,
         )
-    return _project_payload(raw, resolved_path)
+    projected = _project_payload(raw, resolved_path)
+    projected["diagnostics"] = _append_staleness_diagnostics(
+        projected.get("diagnostics"),
+        readiness_path=resolved_path,
+        freshness_reference_paths=freshness_reference_paths,
+    )
+    return projected
+
+
+def _append_staleness_diagnostics(
+    diagnostics: object,
+    *,
+    readiness_path: Path,
+    freshness_reference_paths: Sequence[Path] | None,
+) -> list[str]:
+    """Expose an older explicit readiness artifact without auto-selecting another.
+
+    The Data Update UI can supply only the status artifacts it already reads.
+    A newer reference mtime is a bounded hint that the readiness projection may
+    be historical; it never changes lane status and never triggers discovery or
+    replacement of the configured artifact.
+    """
+
+    result = [str(item).strip() for item in diagnostics if str(item).strip()] if isinstance(diagnostics, list) else []
+    if not freshness_reference_paths:
+        return result[:8]
+    try:
+        readiness_mtime = readiness_path.stat().st_mtime
+    except OSError:
+        return result[:8]
+    for raw_reference in freshness_reference_paths:
+        try:
+            reference_path = Path(raw_reference).expanduser().resolve()
+            if not reference_path.is_file():
+                continue
+            if reference_path.stat().st_mtime > readiness_mtime + 1.0:
+                label = reference_path.name or str(reference_path)
+                result.append(f"program_readiness_artifact_older_than_reference:{label}")
+        except (OSError, TypeError, ValueError):
+            continue
+    return list(dict.fromkeys(result))[:8]
 
 
 def _empty_payload(

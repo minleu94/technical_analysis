@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict ,Any ,Optional ,List ,Callable
-from datetime import datetime ,timedelta
+from datetime import date, datetime ,timedelta
 
 import app_module.update_data_normalization as update_data_normalization
 from app_module.update_service_status_support import compose_sqlite_status_read_model
@@ -31,8 +31,34 @@ from data_module.monthly_revenue_availability_candidate import (
 
 
 def _monthly_revenue_status_today() -> str:
-    """回傳月營收可得性狀態使用的本機日期。"""
-    return datetime.now().date().isoformat()
+    """回傳月營收可得性狀態使用的台灣市場日期。
+
+    更新頁可能在北美時區執行；使用台灣市場日可避免台灣已進入下一日、
+    但 host 仍停留前一日（或反過來）時，把 availability 判定錯一天。
+    """
+    try:
+        from app_module.paper_portfolio_time import taiwan_market_today
+
+        return taiwan_market_today().isoformat()
+    except Exception:
+        return datetime.now().date().isoformat()
+
+
+def _expected_latest_monthly_revenue_period(reference_date: str) -> str | None:
+    """依 MOPS 通常每月 10 日前後公告節奏推算應檢查的最新期別。
+
+    這只是一個 UI／資料新鮮度提示，不會把推算期別當成官方公告證據，也
+    不會讓正式回填跳過 availability mapping。月初（1--9 日）預期前兩個
+    月，10 日起預期前一個月；例如 2026-09-03 對應 2026-07。
+    """
+    try:
+        current = date.fromisoformat(str(reference_date).strip()[:10])
+    except (TypeError, ValueError):
+        return None
+    months_back = 2 if current.day < 10 else 1
+    month_index = current.year * 12 + (current.month - 1) - months_back
+    year, month_zero = divmod(month_index, 12)
+    return f"{year:04d}-{month_zero + 1:02d}"
 
 
 def _emit_update_progress(
@@ -203,6 +229,158 @@ class UpdateService :
         if selected is None:
             raise FileNotFoundError (f"找不到 MOPS 月營收 snapshot CSV: {snapshot_dir}")
         return selected
+
+    def fetch_mops_monthly_revenue_snapshot_candidate(
+        self,
+        *,
+        start_period: str,
+        end_period: str,
+        markets: tuple[str, ...] = ("twse", "tpex"),
+        fetch_date: str | None = None,
+        sleep_seconds: float = 0.5,
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+    ) -> Dict[str, Any]:
+        """抓取 MOPS 月營收候選 snapshot；只寫候選輸出，不寫 SQLite。
+
+        這個 wrapper 讓桌面更新頁能使用和 CLI 相同的受控命名與來源版本，
+        避免使用者只看到舊 snapshot 卻沒有可追蹤的更新入口。正式月營收與
+        availability mapping 仍須另行 dry-run／人工確認。
+        """
+        try:
+            from data_module.monthly_revenue_snapshot_harvester import (
+                build_mops_monthly_revenue_snapshot,
+                write_mops_snapshot_csv,
+            )
+
+            target_date = date.fromisoformat(fetch_date) if fetch_date else date.today()
+            normalized_markets = tuple(
+                str(market).strip().lower()
+                for market in markets
+                if str(market).strip()
+            )
+            if not normalized_markets:
+                raise ValueError("markets 不得為空")
+            if progress_callback is not None:
+                progress_callback(
+                    f"抓取 MOPS 月營收候選（{start_period} ~ {end_period}）…",
+                    10,
+                )
+            output_dir = Path(self.config.output_root) / "monthly_revenue_mops_snapshots"
+            result = build_mops_monthly_revenue_snapshot(
+                start_period=start_period,
+                end_period=end_period,
+                markets=normalized_markets,
+                fetch_date=target_date,
+                save_html_dir=output_dir / "raw_html",
+                sleep_seconds=max(0.0, float(sleep_seconds)),
+            )
+            output_csv = output_dir / (
+                f"mops_monthly_revenue_snapshot_{start_period}_{end_period}_"
+                f"{target_date.isoformat()}.csv"
+            )
+            if result.rows:
+                write_mops_snapshot_csv(output_csv, result.rows)
+            if progress_callback is not None:
+                progress_callback(
+                    f"MOPS 候選完成：{len(result.rows):,} 筆",
+                    100,
+                )
+            diagnostics = [
+                {
+                    "code": diagnostic.code,
+                    "message": diagnostic.message,
+                }
+                for diagnostic in result.diagnostics
+            ]
+            success = bool(result.rows) and result.valid_candidate
+            return {
+                "success": success,
+                "candidate_only": True,
+                "output_csv": str(output_csv) if result.rows else None,
+                "raw_html_dir": str(output_dir / "raw_html"),
+                "start_period": start_period,
+                "end_period": end_period,
+                "fetch_date": target_date.isoformat(),
+                "markets": list(normalized_markets),
+                "fetched_periods": list(result.fetched_periods),
+                "row_count": len(result.rows),
+                "diagnostics": diagnostics,
+                "message": (
+                    f"MOPS 月營收候選完成：{len(result.rows):,} 筆；"
+                    f"期別 {start_period} ~ {end_period}"
+                    if success
+                    else "MOPS 月營收候選未產生可用列；請查看 diagnostics"
+                ),
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "candidate_only": True,
+                "output_csv": None,
+                "row_count": 0,
+                "diagnostics": [
+                    {
+                        "code": "monthly_revenue.candidate_fetch_error",
+                        "message": str(exc),
+                    }
+                ],
+                "message": f"MOPS 月營收候選抓取失敗：{exc}",
+            }
+
+    def update_phase3c_candidate_range(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        sources: tuple[str, ...] = ("institutional", "credit"),
+        include_latest_tdcc_snapshot: bool = False,
+        allow_online_calendar_probe: bool = True,
+        rate_limit_seconds: float = 3.0,
+        progress_callback: Optional[Callable[[str, int], None]] = None,
+    ) -> Dict[str, Any]:
+        """更新 Phase 3C 候選資料；明確限制為隔離 Candidate DB。
+
+        正式 `twstock.db` 不會被此方法寫入；runner 仍會再次驗證 candidate
+        path 與 confirm token。UI 只在使用者確認後呼叫 apply 模式。
+        """
+        try:
+            candidate_path = configured_candidate_db_path()
+            if candidate_path is None:
+                raise ValueError(
+                    "尚未設定 PHASE3C_CANDIDATE_DB_PATH；為避免猜測路徑，未執行候選寫入"
+                )
+            from scripts.update_phase3c_candidates import (
+                update_phase3c_candidates_range,
+            )
+            from data_module.phase3c_backfill_runner import APPLY_CONFIRM_TOKEN
+
+            result = update_phase3c_candidates_range(
+                start_date=start_date,
+                end_date=end_date,
+                dry_run=False,
+                db_path=str(candidate_path),
+                sources=sources,
+                rate_limit_seconds=max(0.0, float(rate_limit_seconds)),
+                allow_online_calendar_probe=allow_online_calendar_probe,
+                include_latest_tdcc_snapshot=include_latest_tdcc_snapshot,
+                progress_callback=progress_callback,
+                confirm_token=APPLY_CONFIRM_TOKEN,
+            )
+            summary = result.get("summary")
+            return {
+                "success": bool(result.get("success")),
+                "candidate_only": True,
+                "candidate_db_path": str(candidate_path),
+                "summary": summary,
+                "message": str(result.get("message") or "Phase 3C 候選更新完成"),
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "candidate_only": True,
+                "message": f"Phase 3C 候選更新失敗：{exc}",
+                "candidate_db_path": None,
+            }
 
     def sync_source_to_sqlite (
     self ,
@@ -2061,6 +2239,9 @@ class UpdateService :
             'pending_period_count':int (row ['pending_period_count']or 0 ),
             'status':'ok'if count >0 else 'empty',
             }
+            expected_period = _expected_latest_monthly_revenue_period(today)
+            if expected_period:
+                payload['expected_latest_period'] = expected_period
             # Snapshot 是數值候選，不是正式 availability 證據；只在唯讀狀態
             # 中揭露較新的候選期別，避免使用者把「已抓到」誤認成「已套用」。
             candidate_path = (
@@ -2167,6 +2348,23 @@ class UpdateService :
                     payload['warnings'] = list(
                         dict.fromkeys(str(item) for item in warnings if str(item).strip())
                     )
+            imported_period = str(payload.get('latest_period') or '').strip()
+            expected_period = str(payload.get('expected_latest_period') or '').strip()
+            if (
+                expected_period
+                and imported_period
+                and imported_period < expected_period
+                and payload.get('status') != 'candidate_available'
+            ):
+                payload['freshness_status'] = 'lagging'
+                raw_warnings = payload.get('warnings')
+                warnings = list(raw_warnings) if isinstance(raw_warnings, list) else []
+                warnings.append(
+                    f'正式月營收落後通常公告節奏：目前 {imported_period}，預期至少 {expected_period}'
+                )
+                payload['warnings'] = list(
+                    dict.fromkeys(str(item) for item in warnings if str(item).strip())
+                )
             return self._annotate_sqlite_read_mode(payload, db)
         except Exception as e :
             import logging
@@ -2772,7 +2970,25 @@ class UpdateService :
                         {"daily_data": reference, normalized: detail},
                         apply_freshness=True,
                     ).get(normalized, detail)
-                self ._update_data_status_manifest (normalized ,detail )
+                # 狀態查詢本身是唯讀；manifest 只是可選的快取。正式資料根目錄
+                # 可能被掛成唯讀（例如 production desktop 權限），此時不能讓
+                # 子分頁把已成功取得的 SQLite 狀態誤報成查詢失敗。
+                try:
+                    self ._update_data_status_manifest (normalized ,detail )
+                except Exception as manifest_err:
+                    import logging
+
+                    logging .getLogger (__name__ ).warning(
+                        f"[UpdateService] 狀態 manifest 更新略過：{manifest_err}"
+                    )
+                    warnings = detail.get("warnings")
+                    warning_items = list(warnings) if isinstance(warnings, list) else []
+                    warning_items.append(
+                        f"status_manifest_write_skipped:{type(manifest_err).__name__}"
+                    )
+                    detail["warnings"] = list(
+                        dict.fromkeys(str(item) for item in warning_items if str(item).strip())
+                    )
                 return detail
             except Exception as sql_err :
                 import logging
@@ -2791,7 +3007,22 @@ class UpdateService :
         else :
             detail ={'latest_date':None ,'total_records':0 ,'status':'sqlite only'}
 
-        self ._update_data_status_manifest (normalized ,detail )
+        try:
+            self ._update_data_status_manifest (normalized ,detail )
+        except Exception as manifest_err:
+            import logging
+
+            logging .getLogger (__name__ ).warning(
+                f"[UpdateService] 狀態 manifest 更新略過：{manifest_err}"
+            )
+            warnings = detail.get("warnings")
+            warning_items = list(warnings) if isinstance(warnings, list) else []
+            warning_items.append(
+                f"status_manifest_write_skipped:{type(manifest_err).__name__}"
+            )
+            detail["warnings"] = list(
+                dict.fromkeys(str(item) for item in warning_items if str(item).strip())
+            )
         return detail
 
     def _read_data_status_manifest (self )->Dict [str ,Any ]:
@@ -4513,6 +4744,15 @@ class UpdateService :
     def check_decision_data_status(self) -> Dict[str, Any]:
         """讀取明確設定的 candidate DB 狀態；不將正式 DB 偽裝為候選資料。"""
         candidate_db = configured_candidate_db_path()
+        formal_reference_date: str | None = None
+        if getattr(self.config, "use_sqlite", False):
+            try:
+                formal_reference_date = self._status_from_sqlite("daily_prices").get(
+                    "latest_date"
+                )
+            except Exception:
+                # Candidate status 仍可讀取；正式日價 reference 只是新鮮度提示。
+                formal_reference_date = None
         tables = {
             "institutional_flow": ("institutional_flows", "institutional"),
             "credit_transaction": ("credit_transactions", "credit"),
@@ -4591,4 +4831,18 @@ class UpdateService :
                 "formal_records": 0,
                 "candidate_records": info["total_records"],
             }
+            if formal_reference_date:
+                result[key]["freshness_reference_date"] = formal_reference_date
+                if (
+                    source in {"institutional", "credit"}
+                    and info["latest_date"] not in {None, "無"}
+                    and str(info["latest_date"]) < str(formal_reference_date)
+                ):
+                    result[key]["freshness_status"] = "lagging"
+                    result[key]["warnings"] = [
+                        (
+                            f"候選資料落後正式日價基準日：候選 {info['latest_date']}；"
+                            f"日價 {formal_reference_date}"
+                        )
+                    ]
         return result

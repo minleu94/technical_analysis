@@ -938,18 +938,36 @@ class DataLoader:
                 if self.config.industry_index_file.exists():
                     existing_df = pd.read_csv(self.config.industry_index_file, encoding='utf-8-sig')
                     
-                    # 檢查新數據是否包含所有指數（避免部分指數數據丟失）
-                    new_indices = set(result_df['指數名稱'].unique())
-                    existing_indices = set(existing_df['指數名稱'].unique())
+                    # 只用請求日前最近一個有效交易日的指數集合比對。
+                    # 全歷史集合會把已停用或改名的舊指數誤判成今日缺漏，
+                    # 造成每日固定的 false-positive warning。
+                    new_indices = {
+                        str(value).strip()
+                        for value in result_df['指數名稱'].dropna().unique()
+                        if str(value).strip()
+                    }
+                    existing_dates = pd.to_datetime(existing_df['日期'], errors='coerce')
+                    requested_date = pd.to_datetime(date, errors='coerce')
+                    reference_dates = existing_dates[existing_dates <= requested_date]
+                    reference_date = reference_dates.max() if not reference_dates.empty else existing_dates.max()
+                    existing_indices = {
+                        str(value).strip()
+                        for value in existing_df.loc[
+                            existing_dates == reference_date,
+                            '指數名稱',
+                        ].dropna().unique()
+                        if str(value).strip()
+                    }
                     
                     # 如果新數據缺少某些指數，記錄警告但不刪除（保留舊數據）
                     missing_indices = existing_indices - new_indices
                     if missing_indices:
                         self.logger.warning(f"新數據缺少 {len(missing_indices)} 個指數的數據，將保留這些指數的舊數據")
                         # 保留缺失指數的當天數據
+                        existing_date_keys = existing_dates.dt.strftime('%Y-%m-%d')
                         missing_data = existing_df[
-                            (existing_df['日期'] == date) & 
-                            (existing_df['指數名稱'].isin(missing_indices))
+                            (existing_date_keys == date)
+                            & (existing_df['指數名稱'].isin(missing_indices))
                         ]
                         if len(missing_data) > 0:
                             result_df = pd.concat([result_df, missing_data], ignore_index=True)

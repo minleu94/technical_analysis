@@ -1,6 +1,7 @@
 from ui_qt.views.update.update_formatters import (
     format_data_freshness_preview,
     format_freshness_gap,
+    format_monthly_revenue_freshness_gap,
     format_manual_update_summary,
     format_p0_license_capture_status,
     format_p0_route_probe_statuses,
@@ -283,6 +284,20 @@ def test_format_source_detail_summary_exposes_newer_monthly_candidate() -> None:
     summary = format_source_detail_summary("monthly_revenue", detail)
     assert "候選待套用期別：2026-07" in summary
     assert "狀態：候選可用" in summary
+
+
+def test_format_monthly_revenue_freshness_gap_explains_expected_period() -> None:
+    detail = {
+        "latest_period": "2026-06",
+        "expected_latest_period": "2026-07",
+        "status": "ok",
+    }
+
+    gap = format_monthly_revenue_freshness_gap(detail)
+    assert "預期最新期別：2026-07" in gap
+    assert "目前正式資料：2026-06" in gap
+    assert "抓取候選快照" in gap
+    assert "待更新" in format_source_detail_summary("monthly_revenue", detail)
 
 
 def test_format_source_detail_summary_exposes_same_period_snapshot_fetch_date() -> None:

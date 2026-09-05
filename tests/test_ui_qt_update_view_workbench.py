@@ -7,7 +7,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QDate, Qt
-from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox, QDateEdit, QTextEdit
+from PySide6.QtWidgets import QApplication, QLabel, QListWidget, QPushButton, QStackedWidget, QMessageBox, QDateEdit, QTextEdit, QGroupBox
 import pandas as pd
 
 from ui_qt.views.update_view import StatusCard, UpdateView
@@ -537,7 +537,9 @@ def test_update_view_projects_explicit_data_update_timeline_and_steps(tmp_path):
     status = view._get_data_update_timeline()
     view._render_data_update_timeline(status)
 
-    assert status["status"] == "current"
+    # 這個固定日期 fixture 在真實執行日超過 7 天後，時間軸會依法投影為
+    # stale；兩種狀態都不影響本測試要驗證的欄位／步驟呈現。
+    assert status["status"] in {"current", "stale"}
     assert "最後成功完成：2026-08-28T09:00:00+08:00" in view.data_update_timeline_summary_label.text()
     assert "目標資料日：2026-08-28" in view.data_update_timeline_summary_label.text()
     assert "明確路徑" in view.data_update_timeline_summary_label.text()
@@ -673,7 +675,9 @@ def test_update_view_explains_missing_history_without_backfilling_latest(tmp_pat
     status = view._get_data_update_timeline()
     view._render_data_update_timeline(status)
 
-    assert status["status"] == "current"
+    # 時間軸 freshness 以執行當下的 7 天窗口判定；固定的 2026-08-28
+    # fixture 可能在後續日期自然變成 stale，仍應保留缺 history 說明。
+    assert status["status"] in {"current", "stale"}
     assert status["history"]["status"] == "missing"
     summary = view.data_update_timeline_summary_label.text()
     assert "新版 runner 尚未產生" in summary
@@ -983,7 +987,7 @@ def test_update_view_reflows_for_narrow_viewport_without_changing_navigation():
     assert view.nav_list.maximumHeight() > 190
     assert view._actions_layout.direction().name == "LeftToRight"
     assert view._cards_layout.getItemPosition(0)[:2] == (0, 0)
-    assert view._cards_layout.getItemPosition(5)[:2] == (0, 5)
+    assert view._cards_layout.getItemPosition(5)[:2] == (1, 2)
     assert view._candidate_layout.getItemPosition(2)[:2] == (0, 2)
 
 
@@ -1004,6 +1008,46 @@ def test_all_data_view_has_safe_update_primary_button():
     assert view.quick_update_all_btn.text() == "快速更新 (跳過大型合併)"
     assert isinstance(view.safe_update_all_btn, QPushButton)
     assert view.safe_update_all_btn.text() == "安全更新 (完整 CSV + SQLite)"
+
+
+def test_all_data_actions_are_before_long_status_sections():
+    view = make_view()
+    action_group = view.findChild(QGroupBox, "updateImmediateActions")
+    assert action_group is not None
+    all_layout = view.all_page.layout()
+    assert all_layout is not None
+    timeline_group = view.data_update_timeline_table.parentWidget()
+    assert all_layout.indexOf(action_group) < all_layout.indexOf(timeline_group)
+    assert all_layout.indexOf(action_group) < all_layout.indexOf(view.p0_source_control_table.parentWidget())
+    assert view._cards_layout.getItemPosition(5)[:2] == (1, 2)
+
+
+def test_candidate_and_monthly_pages_expose_update_controls_near_top():
+    view = make_view()
+
+    monthly_page = view.content_stack.widget(6)
+    monthly_fetch = monthly_page.findChild(QPushButton, "monthly_revenue_fetch_btn")
+    assert monthly_fetch is not None
+    assert monthly_fetch.text() == "抓取最新候選快照"
+    assert any("預期" in label.text() for label in monthly_page.findChildren(QLabel))
+
+    for row, source, expected_text in (
+        (7, "institutional_flow", "更新至最新候選"),
+        (8, "credit_transaction", "更新至最新候選"),
+        (9, "tdcc_shareholding", "抓取最新週候選"),
+    ):
+        page = view.content_stack.widget(row)
+        button = page.findChild(QPushButton, f"{source}_update_btn")
+        assert button is not None
+        assert button.text() == expected_text
+        groups = page.findChildren(QGroupBox)
+        operation_group = next(group for group in groups if group.title() == "數據操作")
+        info_group = next(
+            group for group in groups if group.title() == "資料域狀態與治理說明"
+        )
+        page_layout = page.layout()
+        assert page_layout is not None
+        assert page_layout.indexOf(operation_group) < page_layout.indexOf(info_group)
 
 
 def test_all_data_view_has_monthly_revenue_status_card():

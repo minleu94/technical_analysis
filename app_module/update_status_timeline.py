@@ -60,9 +60,14 @@ def _freshness_consistency_diagnostics(
     if target_key is None:
         return []
     diagnostics: list[str] = []
+    # ``data_update_quick_checked_date`` is the calendar date on which the
+    # freshness probe observed the quick-run artifact.  It is not the latest
+    # trading/data date and therefore must not be compared for equality with
+    # the quick run's ``end_date`` (a weekend check of Friday's data would be
+    # falsely degraded).  It is checked separately against the expected date
+    # below; the data-bearing fields remain strict equality checks.
     comparisons = (
         ("data_update_quick_expected_date", "quick_expected_date"),
-        ("data_update_quick_checked_date", "quick_checked_date"),
         ("daily_prices_latest_date", "daily_prices_latest_date"),
         ("technical_indicators_latest_date", "technical_indicators_latest_date"),
     )
@@ -77,6 +82,15 @@ def _freshness_consistency_diagnostics(
             diagnostics.append(
                 f"freshness:{diagnostic_name}_mismatch:{value}:target={update.get('target_date')}"
             )
+
+    checked_key = _date_key(freshness.get("data_update_quick_checked_date"))
+    expected_key = _date_key(freshness.get("data_update_quick_expected_date"))
+    if checked_key is not None and expected_key is not None and checked_key < expected_key:
+        diagnostics.append(
+            "freshness:quick_checked_date_before_expected:"
+            f"{freshness.get('data_update_quick_checked_date')}:"
+            f"expected={freshness.get('data_update_quick_expected_date')}"
+        )
 
     quick_status = _normalise_status(freshness.get("data_update_quick_status"))
     if quick_status not in {"unknown", "", *_SUCCESS_STATUSES}:

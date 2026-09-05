@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QDate
 from PySide6.QtGui import QFont, QColor
 from typing import Dict, Any, Optional, List, Callable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 import json
 import os
@@ -48,6 +48,7 @@ from ui_qt.views.update.update_formatters import (
     format_freshness_gap,
     format_manual_update_summary,
     format_monthly_revenue_candidate_lines,
+    format_monthly_revenue_freshness_gap,
     format_p0_license_capture_status,
     format_p0_route_probe_statuses,
     format_program_readiness_blockers,
@@ -537,6 +538,10 @@ class UpdateView(QWidget):
             "force_merge_btn": "強制重新合併所有每日股價",
             "merge_broker_branch_btn": "合併券商分點",
             "calculate_tech_btn": "計算技術指標",
+            "institutional_flow_update_btn": "更新至最新候選",
+            "credit_transaction_update_btn": "更新至最新候選",
+            "tdcc_shareholding_update_btn": "抓取最新週候選",
+            "monthly_revenue_fetch_btn": "抓取最新候選快照",
             "monthly_revenue_dry_run_btn": "先檢查，不寫入",
             "monthly_revenue_apply_btn": "確認後寫入月營收",
         }
@@ -934,6 +939,47 @@ class UpdateView(QWidget):
         desc_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         all_layout.addWidget(desc_label)
 
+        # 立即操作列固定在標題下方；狀態表與治理診斷再往下排列，避免
+        # 使用者必須捲到頁尾才能檢查或啟動更新。
+        action_group = QGroupBox("立即操作")
+        action_group.setObjectName("updateImmediateActions")
+        action_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #bfdbfe;
+                border-radius: 8px;
+                margin-top: 8px;
+                padding-top: 10px;
+                color: #1e3a8a;
+                font-weight: bold;
+                background-color: #eff6ff;
+            }
+        """)
+        actions_layout = QHBoxLayout(action_group)
+        actions_layout.setContentsMargins(10, 8, 10, 8)
+        actions_layout.setSpacing(10)
+        self._actions_layout = actions_layout
+        all_layout.addWidget(action_group)
+
+        self.data_update_action_summary_label = QLabel(
+            "本次手動更新：尚未執行。\n"
+            "排程時間軸與手動操作分開顯示，不會用舊結果代替本輪狀態。"
+        )
+        self.data_update_action_summary_label.setWordWrap(True)
+        self.data_update_action_summary_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+        )
+        self.data_update_action_summary_label.setStyleSheet(
+            "QLabel {"
+            " background-color: #f8fafc;"
+            " color: #475569;"
+            " border: 1px solid #cbd5e1;"
+            " border-radius: 6px;"
+            " padding: 6px 10px;"
+            " font-size: 11px;"
+            "}"
+        )
+        all_layout.addWidget(self.data_update_action_summary_label)
+
         # 數據狀態卡片網格（精美 StatusCard 呈現，取代原先 status_group 內多個 TextEdit）
         # 我們將它們宣告為 class member，使底層 _on_status_checked 能直接使用
         self.daily_status_text = StatusCard("每日股票數據", "", self)
@@ -958,7 +1004,7 @@ class UpdateView(QWidget):
         for card in self._status_cards:
             card.setMinimumWidth(0)
             card.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        self._reflow_grid(cards_layout, self._status_cards, columns=6)
+        self._reflow_grid(cards_layout, self._status_cards, columns=3)
         all_layout.addLayout(cards_layout)
 
         # 更新流程時間軸：只投影明確指定的 latest_status artifact，避免卡片
@@ -1191,10 +1237,7 @@ class UpdateView(QWidget):
         readiness_layout.addWidget(self.program_readiness_table)
         all_layout.addWidget(readiness_group)
 
-        # 一鍵更新與輔助按鈕
-        actions_layout = QHBoxLayout()
-        self._actions_layout = actions_layout
-
+        # 一鍵更新與輔助按鈕；容器已在標題下方建立，這裡只填入按鈕。
         self.quick_update_all_btn = QPushButton("快速更新 (跳過大型合併)")
         self.quick_update_all_btn.setMinimumHeight(45)
         self.quick_update_all_btn.setProperty("variant", "primary")
@@ -1303,27 +1346,6 @@ class UpdateView(QWidget):
         actions_layout.addWidget(self.quick_update_all_btn, stretch=2)
         actions_layout.addWidget(self.safe_update_all_btn, stretch=2)
         actions_layout.addWidget(self.check_status_btn, stretch=1)
-        all_layout.addLayout(actions_layout)
-
-        self.data_update_action_summary_label = QLabel(
-            "本次手動更新：尚未執行。\n"
-            "排程時間軸與手動操作分開顯示，不會用舊結果代替本輪狀態。"
-        )
-        self.data_update_action_summary_label.setWordWrap(True)
-        self.data_update_action_summary_label.setTextInteractionFlags(
-            Qt.TextSelectableByMouse
-        )
-        self.data_update_action_summary_label.setStyleSheet(
-            "QLabel {"
-            " background-color: #f8fafc;"
-            " color: #475569;"
-            " border: 1px solid #cbd5e1;"
-            " border-radius: 6px;"
-            " padding: 6px 10px;"
-            " font-size: 11px;"
-            "}"
-        )
-        all_layout.addWidget(self.data_update_action_summary_label)
         all_layout.addStretch()
 
         self.content_stack.addWidget(all_page)
@@ -1574,7 +1596,7 @@ class UpdateView(QWidget):
             self.nav_list.setMaximumHeight(16777215)
             self.nav_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
             self.content_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
-            self._reflow_grid(self._cards_layout, self._status_cards, columns=6)
+            self._reflow_grid(self._cards_layout, self._status_cards, columns=3)
             self._reflow_grid(self._candidate_layout, self._candidate_cards, columns=3)
             self._actions_layout.setDirection(QBoxLayout.LeftToRight)
 
@@ -1665,12 +1687,12 @@ class UpdateView(QWidget):
             status_desc = {
                 "institutional_flow": "『三大法人』屬 Phase 3C 候選研究資料 (Candidate Data)。\n"
                                       "安全邊界說明：目前獨立於正式資料庫外，嚴禁直接參與 ScoringEngine、Recommendation、Advice、Portfolio 或任何交易邏輯。\n"
-                                      "若要對 2024-07-22 至今日開展可續跑 Candidate DB 回補，請使用下方 CLI 命令。",
+                                      "可按上方按鈕抓取上次成功 checkpoint 之後至今日的官方交易日；如需完整歷史，再使用下方 CLI 命令。",
                 "credit_transaction": "『信用交易 (融資融券)』屬 Phase 3C 候選研究資料 (Candidate Data)。\n"
                                       "安全邊界說明：獨立於正式資料庫外，嚴禁將融資券餘額假裝為 0 股或填入正式資料庫。\n"
-                                      "若要開展兩年歷史可續跑 Candidate DB 回補，請使用下方 CLI 命令。",
+                                      "可按上方按鈕抓取上次成功 checkpoint 之後至今日的官方交易日；如需兩年歷史，再使用下方 CLI 命令。",
                 "tdcc_shareholding": "『集保股權』目前僅 OpenAPI `id=1-5` 提供最新單週公開資料，不支援歷史多日期輪詢回補 (BLOCKED_NO_HISTORICAL_ENDPOINT)。\n"
-                                    "可用下方受控命令把官方最新週 snapshot 寫入隔離 Candidate DB；資料日採官方 payload，不會冒充成執行日。",
+                                    "可按上方按鈕取得官方最新週 snapshot；資料日採官方 payload，不會冒充成執行日。",
                 "scheduler_status": "此頁只讀取明確的 scheduled artifacts 來觀測排程執行狀態；每日資料更新 task 的註冊／執行，與 Evidence／ML 的生產寫入授權是不同層次。\n"
                                     "目前 `production_scheduler_allowed=false` 仍固定不變；此頁不手動觸發、不修改 Windows Task Scheduler，也不把單一工作成功解讀成整體排程或正式治理已通過。"
             }
@@ -1694,13 +1716,18 @@ class UpdateView(QWidget):
                         "  --confirm apply-phase3c-candidate-ingestion"
                     )
                 else:
+                    source_arg = (
+                        "institutional"
+                        if key == "institutional_flow"
+                        else "credit"
+                    )
                     cmd_str = (
                         "$env:PHASE3C_CANDIDATE_DB_PATH = 'D:/Min/Python/Project/FA_Data_candidate/phase3c_candidate.db'\n"
                         "$startDate = (Get-Date).AddYears(-2).ToString('yyyy-MM-dd')\n"
                         "$endDate = (Get-Date).ToString('yyyy-MM-dd')\n"
                         "python scripts/update_phase3c_candidates.py `\n"
-                        "  --start-date $startDate --end-date $endDate `\n"
-                        "  --sources institutional,credit `\n"
+                        f"  --start-date $startDate --end-date $endDate `\n"
+                        f"  --sources {source_arg} `\n"
                         "  --db-path $env:PHASE3C_CANDIDATE_DB_PATH `\n"
                         "  --confirm apply-phase3c-candidate-ingestion"
                     )
@@ -1736,8 +1763,6 @@ class UpdateView(QWidget):
                 )
                 info_layout.addWidget(log_box)
 
-            layout.addWidget(info_group)
-
             op_group = QGroupBox("數據操作")
             op_group.setStyleSheet("""
                 QGroupBox {
@@ -1766,9 +1791,44 @@ class UpdateView(QWidget):
             """)
             check_btn.clicked.connect(lambda _checked=False, source=key: self._check_source_detail(source, force=True))
             button_layout.addWidget(check_btn)
-            button_layout.addStretch()
-            layout.addWidget(op_group)
 
+            if key in {
+                "institutional_flow",
+                "credit_transaction",
+                "tdcc_shareholding",
+            }:
+                update_btn = QPushButton(
+                    "抓取最新週候選" if key == "tdcc_shareholding" else "更新至最新候選"
+                )
+                update_btn.setObjectName(f"{key}_update_btn")
+                update_btn.setMinimumHeight(35)
+                update_btn.setProperty("variant", "primary")
+                update_btn.setToolTip(
+                    "只寫入 PHASE3C_CANDIDATE_DB_PATH 指定的隔離 Candidate DB；"
+                    "不會寫入正式 twstock.db，也不會接入評分／推薦／交易。"
+                )
+                update_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #2563eb;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 6px 12px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover { background-color: #1d4ed8; }
+                    QPushButton:disabled { background-color: #cbd5e1; color: #64748b; }
+                """)
+                update_btn.clicked.connect(
+                    lambda _checked=False, source=key: self._execute_phase3c_candidate_update(source)
+                )
+                setattr(self, f"{key}_update_btn", update_btn)
+                button_layout.addWidget(update_btn)
+            button_layout.addStretch()
+
+            # 操作列與狀態摘要優先，長篇治理說明／CLI 只放在後方，避免
+            # 使用者進入子頁仍必須捲到頁尾才能按下更新或檢查。
+            layout.addWidget(op_group)
             # 候選資料源與排程頁也要有自己的唯讀狀態摘要；只更新頂部
             # 卡片／載入一次 raw JSON，會讓使用者無法判斷檢查是否完成。
             if key in {
@@ -1778,6 +1838,8 @@ class UpdateView(QWidget):
                 "scheduler_status",
             }:
                 self._add_source_detail_status(layout, key, self)
+            # info_group 內含完整的來源／CLI 說明，保留在操作列之後。
+            layout.addWidget(info_group)
 
             layout.addStretch()
             return
@@ -1857,6 +1919,18 @@ class UpdateView(QWidget):
             form_layout.addRow("本次寫入版本名稱：", self.monthly_revenue_source_version_input)
             layout.addWidget(config_group)
 
+            expected_period = self._latest_expected_monthly_revenue_period()
+            self.monthly_revenue_candidate_hint_label = QLabel(
+                f"預期檢查期別：{expected_period}（依目前日期與公告節奏）；"
+                "下方抓取只建立候選快照，不會直接寫入正式資料庫。"
+            )
+            self.monthly_revenue_candidate_hint_label.setWordWrap(True)
+            self.monthly_revenue_candidate_hint_label.setStyleSheet(
+                "color: #92400e; background-color: #fffbeb; "
+                "border: 1px solid #fbbf24; border-radius: 6px; padding: 6px 10px;"
+            )
+            layout.addWidget(self.monthly_revenue_candidate_hint_label)
+
             op_group = QGroupBox("月營收資料操作")
             op_group.setStyleSheet("""
                 QGroupBox {
@@ -1870,6 +1944,31 @@ class UpdateView(QWidget):
             """)
             button_layout = QHBoxLayout(op_group)
             button_layout.setSpacing(10)
+
+            self.monthly_revenue_fetch_btn = QPushButton("抓取最新候選快照")
+            self.monthly_revenue_fetch_btn.setObjectName("monthly_revenue_fetch_btn")
+            self.monthly_revenue_fetch_btn.setMinimumHeight(35)
+            self.monthly_revenue_fetch_btn.setToolTip(
+                "向 MOPS 官方 static endpoint 取得通常應可用的最新月營收期別，"
+                "只寫入 output/monthly_revenue_mops_snapshots 候選檔與 raw HTML；"
+                "不寫入 SQLite，也不自動修改 availability mapping。"
+            )
+            self.monthly_revenue_fetch_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #d97706;
+                    color: white;
+                    border: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    padding: 6px 12px;
+                }
+                QPushButton:hover { background-color: #b45309; }
+                QPushButton:disabled { background-color: #cbd5e1; color: #64748b; }
+            """)
+            self.monthly_revenue_fetch_btn.clicked.connect(
+                self._execute_monthly_revenue_candidate_fetch
+            )
+            button_layout.addWidget(self.monthly_revenue_fetch_btn)
 
             self.monthly_revenue_dry_run_btn = QPushButton("先檢查，不寫入")
             self.monthly_revenue_dry_run_btn.setObjectName("monthly_revenue_dry_run_btn")
@@ -2307,10 +2406,347 @@ class UpdateView(QWidget):
         return getattr(config, "monthly_revenue_availability_file", Path(""))
 
     def _set_monthly_revenue_buttons_enabled(self, enabled: bool):
-        for attr in ("monthly_revenue_dry_run_btn", "monthly_revenue_apply_btn"):
+        for attr in (
+            "monthly_revenue_fetch_btn",
+            "monthly_revenue_dry_run_btn",
+            "monthly_revenue_apply_btn",
+        ):
             button = getattr(self, attr, None)
             if button:
                 button.setEnabled(enabled)
+
+    @staticmethod
+    def _safe_update_end_date() -> date:
+        """回傳不晚於 host 今日的台灣市場日期，避免查詢未來日期。"""
+
+        try:
+            market_date = taiwan_market_today()
+        except Exception:
+            market_date = date.today()
+        return min(market_date, date.today())
+
+    @classmethod
+    def _latest_expected_monthly_revenue_period(cls) -> str:
+        """依月初／月中公告節奏提示本次應抓的月營收期別。"""
+
+        current = cls._safe_update_end_date()
+        months_back = 2 if current.day < 10 else 1
+        month_index = current.year * 12 + (current.month - 1) - months_back
+        year, month_zero = divmod(month_index, 12)
+        return f"{year:04d}-{month_zero + 1:02d}"
+
+    def _candidate_update_window(self, source: str) -> tuple[str, str]:
+        """取得候選來源的增量窗口；沒有 checkpoint 時只抓近 30 日。"""
+
+        end_date = self._safe_update_end_date()
+        if source == "tdcc_shareholding":
+            return end_date.isoformat(), end_date.isoformat()
+
+        start_date = end_date - timedelta(days=30)
+        try:
+            source_status = self.update_service.check_decision_data_status().get(source, {})
+            latest = self._parse_status_date(source_status.get("latest_date"))
+            if latest is not None:
+                start_date = latest.date() + timedelta(days=1)
+        except Exception:
+            # 狀態查詢失敗時仍以 bounded 近 30 日窗口執行，真正的 runner
+            # 會保留失敗摘要；不猜測更久的歷史範圍。
+            pass
+        if start_date > end_date:
+            start_date = end_date
+        return start_date.isoformat(), end_date.isoformat()
+
+    def _execute_phase3c_candidate_update(self, source: str) -> None:
+        """確認後更新單一 Phase 3C 候選來源，不觸碰正式 SQLite。"""
+
+        if self._reject_busy_write("Phase 3C 候選資料"):
+            return
+        update_method = getattr(
+            self.update_service, "update_phase3c_candidate_range", None
+        )
+        if not callable(update_method):
+            QMessageBox.warning(
+                self,
+                "候選更新不可用",
+                "目前 UpdateService 沒有提供受控 Phase 3C 候選更新方法；未執行任何寫入。",
+            )
+            return
+
+        source_token = {
+            "institutional_flow": "institutional",
+            "credit_transaction": "credit",
+            "tdcc_shareholding": "tdcc",
+        }.get(source)
+        if source_token is None:
+            return
+        start_date, end_date = self._candidate_update_window(source)
+        source_label = {
+            "institutional_flow": "三大法人",
+            "credit_transaction": "信用交易",
+            "tdcc_shareholding": "集保股權",
+        }[source]
+        try:
+            decision_status = self.update_service.check_decision_data_status()
+        except Exception as exc:
+            # 確認視窗仍應能說明「未取得狀態」，不能因候選 DB 暫時不可讀
+            # 讓按鈕 callback 把整個 Qt event loop 弄成未處理例外。
+            self._log(f"{source_label}候選狀態讀取失敗，仍保留安全確認邊界：{exc}")
+            decision_status = {}
+        current_status = (
+            decision_status.get(source, {})
+            if isinstance(decision_status, dict)
+            else {}
+        )
+        candidate_path = str(current_status.get("candidate_db_path") or "未設定")
+        if candidate_path in {
+            "未設定",
+            "未設定 PHASE3C_CANDIDATE_DB_PATH",
+        }:
+            QMessageBox.warning(
+                self,
+                "候選更新不可用",
+                "尚未設定 PHASE3C_CANDIDATE_DB_PATH；為避免猜測或寫入正式資料，"
+                "本次未執行任何候選更新。",
+            )
+            return
+        reply = QMessageBox.question(
+            self,
+            f"確認更新{source_label}候選",
+            f"將抓取 {start_date} ~ {end_date} 的官方資料並寫入隔離 Candidate DB：\n"
+            f"{candidate_path}\n\n"
+            "此操作不會寫入正式 twstock.db，也不會接入評分、推薦或交易邏輯。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        button = getattr(self, f"{source}_update_btn", None)
+        if button is not None:
+            button.setEnabled(False)
+            button.setText("更新中...")
+        self._active_update_operation = f"{source_label}候選更新"
+        self._active_update_start_date = start_date
+        self._active_update_end_date = end_date
+        self._reset_progress()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_label.setVisible(True)
+        self.progress_label.setText(f"正在更新{source_label}候選資料...")
+        self._render_manual_update_summary(
+            "running",
+            message=f"正在更新{source_label}候選資料…",
+            progress=0,
+        )
+        self.log_text.clear()
+        self._log(
+            f"開始{source_label}候選更新：{start_date} ~ {end_date}；"
+            "只寫入隔離 Candidate DB"
+        )
+
+        def task(progress_callback=None):
+            return update_method(
+                start_date=start_date,
+                end_date=end_date,
+                sources=(source_token,),
+                include_latest_tdcc_snapshot=source_token == "tdcc",
+                allow_online_calendar_probe=True,
+                progress_callback=progress_callback,
+            )
+
+        worker = self._start_worker(
+            ProgressTaskWorker(task),
+            operation_kind="write",
+        )
+        worker.progress.connect(self._on_phase3c_candidate_progress)
+        worker.finished.connect(
+            lambda result, current_source=source: self._on_phase3c_candidate_finished(
+                current_source, result
+            )
+        )
+        worker.error.connect(
+            lambda error_msg, current_source=source: self._on_phase3c_candidate_error(
+                current_source, error_msg
+            )
+        )
+        self._attach_worker_cleanup(worker)
+        worker.start()
+
+    def _on_phase3c_candidate_progress(self, message: str, percentage: int) -> None:
+        displayed = self._set_progress(message, percentage)
+        self.progress_label.setText(message)
+        self._render_manual_update_summary(
+            "running",
+            message=message,
+            progress=displayed,
+        )
+        if displayed % 10 == 0 or displayed == 100:
+            self._log(f"[候選更新 {displayed}%] {message}")
+
+    def _on_phase3c_candidate_finished(
+        self,
+        source: str,
+        result: Dict[str, Any],
+    ) -> None:
+        self._invalidate_detail_cache()
+        button = getattr(self, f"{source}_update_btn", None)
+        if button is not None:
+            button.setEnabled(True)
+            button.setText(
+                "抓取最新週候選" if source == "tdcc_shareholding" else "更新至最新候選"
+            )
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        message = str(result.get("message") or "候選更新完成")
+        self._render_manual_update_summary(
+            "success" if result.get("success") is True else "failed",
+            result=result,
+        )
+        self._log(message)
+        if result.get("success") is True:
+            QMessageBox.information(self, "候選資料更新完成", message)
+            self._check_source_detail(source, force=True)
+        else:
+            QMessageBox.warning(self, "候選資料更新未完成", message)
+
+    def _on_phase3c_candidate_error(self, source: str, error_msg: str) -> None:
+        self._invalidate_detail_cache()
+        button = getattr(self, f"{source}_update_btn", None)
+        if button is not None:
+            button.setEnabled(True)
+            button.setText(
+                "抓取最新週候選" if source == "tdcc_shareholding" else "更新至最新候選"
+            )
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        self._render_manual_update_summary("error", message=error_msg)
+        self._log(f"候選資料更新失敗：{error_msg}")
+        QMessageBox.critical(self, "候選資料更新失敗", error_msg)
+
+    def _execute_monthly_revenue_candidate_fetch(self) -> None:
+        """抓取通常應可用月份的 MOPS snapshot 候選。"""
+
+        if self._reject_busy_write("月營收候選快照"):
+            return
+        fetch_method = getattr(
+            self.update_service,
+            "fetch_mops_monthly_revenue_snapshot_candidate",
+            None,
+        )
+        if not callable(fetch_method):
+            QMessageBox.warning(
+                self,
+                "月營收候選抓取不可用",
+                "目前 UpdateService 沒有提供受控 MOPS 候選抓取方法；未執行任何寫入。",
+            )
+            return
+
+        target_period = self._latest_expected_monthly_revenue_period()
+        fetch_date = self._safe_update_end_date().isoformat()
+        output_dir = Path(self.update_service.config.output_root) / "monthly_revenue_mops_snapshots"
+        reply = QMessageBox.question(
+            self,
+            "確認抓取月營收候選",
+            f"將向 MOPS 官方端點抓取 {target_period} 月營收（抓取日 {fetch_date}），"
+            f"並把候選檔寫入：\n{output_dir}\n\n"
+            "這只建立候選 snapshot／raw HTML，不會寫入正式 SQLite 或 availability mapping。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self._set_monthly_revenue_buttons_enabled(False)
+        self._active_update_operation = "月營收候選快照抓取"
+        self._active_update_start_date = target_period
+        self._active_update_end_date = target_period
+        self._reset_progress()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_label.setVisible(True)
+        self.progress_label.setText(f"正在抓取 {target_period} 月營收候選...")
+        self._render_manual_update_summary(
+            "running",
+            message=f"正在抓取 {target_period} 月營收候選…",
+            progress=0,
+        )
+        self.log_text.clear()
+        self._log(
+            f"開始抓取 MOPS 月營收候選：{target_period}；"
+            "只寫入候選 snapshot／raw HTML"
+        )
+
+        def task(progress_callback=None):
+            return fetch_method(
+                start_period=target_period,
+                end_period=target_period,
+                markets=("twse", "tpex"),
+                fetch_date=fetch_date,
+                sleep_seconds=0.5,
+                progress_callback=progress_callback,
+            )
+
+        worker = self._start_worker(
+            ProgressTaskWorker(task),
+            operation_kind="write",
+        )
+        worker.progress.connect(self._on_monthly_revenue_candidate_progress)
+        worker.finished.connect(self._on_monthly_revenue_candidate_finished)
+        worker.error.connect(self._on_monthly_revenue_candidate_error)
+        self._attach_worker_cleanup(worker)
+        worker.start()
+
+    def _on_monthly_revenue_candidate_progress(
+        self,
+        message: str,
+        percentage: int,
+    ) -> None:
+        displayed = self._set_progress(message, percentage)
+        self.progress_label.setText(message)
+        self._render_manual_update_summary(
+            "running",
+            message=message,
+            progress=displayed,
+        )
+        if displayed % 10 == 0 or displayed == 100:
+            self._log(f"[月營收候選 {displayed}%] {message}")
+
+    def _on_monthly_revenue_candidate_finished(self, result: Dict[str, Any]) -> None:
+        self._invalidate_detail_cache()
+        self._set_monthly_revenue_buttons_enabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        message = str(result.get("message") or "月營收候選抓取完成")
+        self._render_manual_update_summary(
+            "success" if result.get("success") is True else "failed",
+            result=result,
+        )
+        output_csv = str(result.get("output_csv") or "").strip()
+        if output_csv:
+            self.monthly_revenue_snapshot_input.setText(output_csv)
+        for diagnostic in result.get("diagnostics") or []:
+            if isinstance(diagnostic, dict):
+                self._log(
+                    f"{diagnostic.get('code', 'candidate.diagnostic')}: "
+                    f"{diagnostic.get('message', '')}"
+                )
+        self._log(message)
+        if result.get("success") is True:
+            QMessageBox.information(self, "月營收候選抓取完成", message)
+            self._check_source_detail("monthly_revenue", force=True)
+        else:
+            QMessageBox.warning(self, "月營收候選抓取未完成", message)
+
+    def _on_monthly_revenue_candidate_error(self, error_msg: str) -> None:
+        self._invalidate_detail_cache()
+        self._set_monthly_revenue_buttons_enabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        self._render_manual_update_summary("error", message=error_msg)
+        self._log(f"月營收候選抓取失敗：{error_msg}")
+        QMessageBox.critical(self, "月營收候選抓取失敗", error_msg)
 
     def _execute_monthly_revenue_backfill(self, apply: bool = False):
         """Run MOPS monthly revenue dry-run or controlled SQLite apply."""
@@ -2603,7 +3039,19 @@ class UpdateView(QWidget):
         """讀取明確指定的整體 readiness artifact；不掃描或重新計算。"""
 
         try:
-            return load_program_readiness(self.program_readiness_path)
+            return load_program_readiness(
+                self.program_readiness_path,
+                freshness_reference_paths=(
+                    tuple(
+                        path
+                        for path in (
+                            self.data_update_status_path,
+                            self.data_freshness_status_path,
+                        )
+                        if path is not None
+                    )
+                ),
+            )
         except Exception as exc:
             # loader 已將常見 malformed 狀態轉成 fail-closed payload；這層
             # 仍保留最後防線，避免一個狀態 artifact 讓資料頁整體消失。
@@ -3547,17 +3995,24 @@ class UpdateView(QWidget):
         earliest = value.get("earliest_date") or "無"
         latest = value.get("latest_date") or "無"
         coverage = value.get("coverage_pct") or "0.0%"
-        status = format_status_token(value.get("status") or "MISSING")
+        freshness_status = str(value.get("freshness_status") or "").strip().lower()
+        status = format_status_token(
+            "lagging" if freshness_status in {"lagging", "stale"} else value.get("status") or "MISSING"
+        )
         disclaimer = value.get("disclaimer") or "候選研究資料，不參與評分"
         if record_count > 0:
-            return (
+            lines = [
                 f"最新日期：{latest}\n"
                 f"總記錄數：{record_count:,}\n"
                 f"狀態：{status}\n"
                 f"區間：{earliest} ~ {latest}\n"
                 f"覆蓋率：{coverage}\n"
                 f"[{disclaimer}]"
-            )
+            ]
+            reference = value.get("freshness_reference_date")
+            if freshness_status in {"lagging", "stale"} and reference:
+                lines.append(f"新鮮度基準日：{reference}（候選最新日：{latest}）")
+            return "\n".join(lines)
         return (
             f"最新日期：{latest}\n"
             f"總記錄數：{record_count:,}\n"
@@ -3590,13 +4045,16 @@ class UpdateView(QWidget):
                 f"目前可用期別：{latest_available_period}",
             ]
             lines.extend(format_monthly_revenue_candidate_lines(value))
+            freshness_gap = format_monthly_revenue_freshness_gap(value)
+            if freshness_gap:
+                lines.append(freshness_gap)
             if pending_period_count and next_available_date:
                 lines.append(
                     f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"
                 )
             lines.extend([
                 f"總記錄數：{total_records:,}",
-                f"狀態：{format_status_token(status)}",
+                f"狀態：{format_status_token('lagging' if freshness_gap else status)}",
             ])
             UpdateView._append_status_diagnostics(lines, value)
             freshness_gap = format_freshness_gap(value)

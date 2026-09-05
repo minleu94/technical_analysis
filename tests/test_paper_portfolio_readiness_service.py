@@ -480,6 +480,39 @@ def test_status_boundary_or_snapshot_mismatch_degrades_readiness(tmp_path: Path)
     assert "paper_daily_status_boundary_violation:broker_execution" in result.blockers
 
 
+def test_skipped_non_trading_day_does_not_mismatch_last_trading_snapshot(tmp_path: Path) -> None:
+    output_root = tmp_path / "output"
+    state_db = output_root / "paper_portfolio" / "paper_portfolio.sqlite"
+    status_path = output_root / "scheduled" / "paper_portfolio_daily" / "latest_status.json"
+    repository = PaperPortfolioSnapshotRepository(state_db)
+    latest = _snapshot("paper-main-20260828", "2026-08-28", "1100.00")
+    repository.append(latest)
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    status_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "paper-portfolio-daily-status.v1",
+                "status": "skipped_non_trading_day",
+                "decision_date": "2026-08-30",
+                "state_db": str(state_db.resolve()),
+                "writes_market_db": False,
+                "auto_rebalance_allowed": False,
+                "changes_advice": False,
+                "broker_execution": False,
+                "trading_calendar_is_open": False,
+                "trading_calendar_reason": "weekend_closed",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = PaperPortfolioReadinessService(output_root=output_root).inspect()
+
+    assert "paper_daily_status_date_mismatch" not in result.blockers
+    assert result.latest_snapshot_date == "2026-08-28"
+    assert "paper_daily_status_non_trading_day_no_snapshot_expected" in result.diagnostics
+
+
 def test_invalid_status_json_is_fail_closed(tmp_path: Path) -> None:
     output_root = tmp_path / "output"
     status_path = output_root / "scheduled" / "paper_portfolio_daily" / "latest_status.json"

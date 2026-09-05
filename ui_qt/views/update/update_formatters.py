@@ -511,6 +511,29 @@ def format_monthly_revenue_candidate_lines(detail: Mapping[str, Any]) -> list[st
     return lines
 
 
+def format_monthly_revenue_freshness_gap(detail: Mapping[str, Any]) -> str:
+    """顯示月營收目前期別與通常公告節奏的差距。
+
+    `expected_latest_period` 只是一個操作提示，不能取代官方公告／可得日
+    證據；若已有更新的 snapshot／mapping 候選，候選行會另外說明，不重複
+    標成正式資料落後。
+    """
+
+    expected = str(detail.get("expected_latest_period") or "").strip()
+    imported = str(detail.get("latest_period") or "").strip()
+    candidate = str(
+        detail.get("candidate_latest_period")
+        or detail.get("availability_candidate_latest_period")
+        or ""
+    ).strip()
+    if not expected or not imported or imported >= expected or candidate >= expected:
+        return ""
+    return (
+        f"預期最新期別：{expected}（目前正式資料：{imported}；"
+        "請先抓取候選快照／可得日 mapping）"
+    )
+
+
 def format_freshness_gap(detail: Mapping[str, Any]) -> str:
     """把來源相對 daily reference 的落後日期轉成可讀提示。"""
 
@@ -533,20 +556,45 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
         latest_available_date = detail.get("latest_available_date") or "尚無"
         next_available_date = detail.get("next_available_date")
         pending_period_count = _safe_nonnegative_int(detail.get("pending_period_count"))
+        monthly_freshness_gap = format_monthly_revenue_freshness_gap(detail)
         lines = [
             f"最新可用日：{latest_available_date}",
             f"已匯入期別：{latest_period}",
             f"目前可用期別：{latest_available_period}",
         ]
         lines.extend(format_monthly_revenue_candidate_lines(detail))
+        if monthly_freshness_gap:
+            lines.append(monthly_freshness_gap)
         if pending_period_count and next_available_date:
             lines.append(
                 f"待生效：{pending_period_count} 個期別（{next_available_date} 起可用）"
             )
         lines.extend([
             f"SQLite 筆數：{total_records:,}",
-            f"狀態：{format_status_token(detail.get('status'))}",
+            "狀態："
+            + format_status_token(
+                "lagging" if monthly_freshness_gap else detail.get("status")
+            ),
         ])
+    elif source in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
+        earliest = str(detail.get("earliest_date") or "無")
+        latest_candidate = str(detail.get("latest_date") or "無")
+        coverage = str(detail.get("coverage_pct") or "無 checkpoint")
+        lines = [
+            f"最新日期：{latest_candidate}",
+            f"候選筆數：{total_records:,}",
+            f"區間：{earliest} ~ {latest_candidate}",
+            f"checkpoint 覆蓋率：{coverage}",
+            f"狀態：{format_status_token(detail.get('status'))}",
+        ]
+        freshness_status = str(detail.get("freshness_status") or "").strip().lower()
+        reference_date = str(detail.get("freshness_reference_date") or "").strip()
+        if freshness_status in {"lagging", "stale"}:
+            lines[-1] = "狀態：" + format_status_token("lagging")
+        if freshness_status in {"lagging", "stale"} and reference_date:
+            lines.append(
+                f"新鮮度基準日：{reference_date}（候選最新日：{latest_candidate}）"
+            )
     elif source == "scheduler_status":
         scheduler_state = str(
             detail.get("scheduler_state") or detail.get("status") or "unknown"
@@ -598,9 +646,10 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
     warnings = detail.get("warnings") or detail.get("quality_warnings") or []
     if warnings:
         lines.append("提醒：" + "；".join(str(item) for item in warnings[:3]))
-    freshness_gap = format_freshness_gap(detail)
-    if freshness_gap:
-        lines.append(freshness_gap)
+    if source not in {"institutional_flow", "credit_transaction", "tdcc_shareholding"}:
+        freshness_gap = format_freshness_gap(detail)
+        if freshness_gap:
+            lines.append(freshness_gap)
     return "\n".join(lines)
 
 
