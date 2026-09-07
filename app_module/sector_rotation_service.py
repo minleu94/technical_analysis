@@ -10,6 +10,7 @@ from typing import Any, Protocol, TypedDict
 import pandas as pd
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, SectorRotationSummary
+from app_module.dtos.market_loop_dtos import SectorRotationDTO
 
 
 class SectorRotationProvider(Protocol):
@@ -87,6 +88,12 @@ class SectorRotationService:
             rotation_intensity_bp=rotation_intensity_bp,
             meta={"sector_ranking": ranked, "source": self._resolve_source(data)},
         )
+
+    def build_snapshot_dto(self, as_of_date: date) -> SectorRotationDTO:
+        """建立含決策日與有效日的產業輪動 DTO。"""
+
+        summary = self.build_snapshot(as_of_date)
+        return SectorRotationDTO.from_summary(summary, decision_date=as_of_date)
 
     def _build_sector_ranking(
         self,

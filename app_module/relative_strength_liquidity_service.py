@@ -10,6 +10,7 @@ import pandas as pd
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, RelativeStrengthLiquiditySummary
 from app_module.decision_market_frame import DecisionMarketFrameLoader
+from app_module.dtos.market_loop_dtos import RelativeStrengthLiquidityDTO
 
 
 class RelativeStrengthLiquidityProvider(Protocol):
@@ -51,6 +52,12 @@ class RelativeStrengthLiquidityService:
 
         result = self._build_from_frame(frame, as_of_date)
         return result
+
+    def build_snapshot_dto(self, as_of_date: date) -> RelativeStrengthLiquidityDTO:
+        """建立含決策日與有效日的相對強弱 DTO。"""
+
+        summary = self.build_snapshot(as_of_date)
+        return RelativeStrengthLiquidityDTO.from_summary(summary, decision_date=as_of_date)
 
     def _build_from_frame(self, frame: pd.DataFrame, as_of_date: date) -> RelativeStrengthLiquiditySummary:
         required = {"日期", "證券代號", "收盤價", "成交股數"}

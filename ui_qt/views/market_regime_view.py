@@ -322,7 +322,11 @@ class MarketRegimeView(QWidget):
     def _detect_regime(self):
         """檢測市場狀態"""
         try:
-            regime_result: RegimeResultDTO = self.regime_service.detect_regime()
+            dto_method = getattr(self.regime_service, "detect_regime_dto", None)
+            if callable(dto_method):
+                regime_result: RegimeResultDTO = dto_method().to_legacy()
+            else:
+                regime_result = self.regime_service.detect_regime()
             
             # 更新三層資訊
             self._update_layer1(regime_result)

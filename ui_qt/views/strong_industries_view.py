@@ -186,7 +186,12 @@ class StrongIndustriesView(QWidget):
                 return
             
             # 調用服務（重新計算）
-            df = self.screening_service.get_strong_industries(period=period, top_n=50)
+            dto_method = getattr(self.screening_service, "get_strong_industries_dto", None)
+            df = (
+                dto_method(period=period, top_n=50).to_legacy()
+                if callable(dto_method)
+                else self.screening_service.get_strong_industries(period=period, top_n=50)
+            )
             
             if not isinstance(df, pd.DataFrame):
                 raise TypeError("強勢產業服務未回傳 DataFrame")

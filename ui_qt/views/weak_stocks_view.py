@@ -251,7 +251,12 @@ class WeakStocksView(QWidget):
                 return
             
             # 調用服務（重新計算）
-            result = self.screening_service.get_weak_stocks(period=period, top_n=50)
+            dto_method = getattr(self.screening_service, "get_weak_stocks_dto", None)
+            result = (
+                dto_method(period=period, top_n=50).to_legacy()
+                if callable(dto_method)
+                else self.screening_service.get_weak_stocks(period=period, top_n=50)
+            )
             
             # 處理新的返回格式（元組：DataFrame, universe_count）
             if isinstance(result, tuple):

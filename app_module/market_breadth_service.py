@@ -11,6 +11,7 @@ import pandas as pd
 
 from app_module.decision_desk_dtos import DecisionDeskQuality, MarketBreadthSummary
 from app_module.decision_market_frame import DecisionMarketFrameLoader
+from app_module.dtos.market_loop_dtos import MarketBreadthDTO
 
 
 class MarketBreadthProvider(Protocol):
@@ -60,13 +61,19 @@ class MarketBreadthService:
         row_dict = dict(zip(row.index, row.values))
         snapshot_date = self._parse_snapshot_date(row_dict, as_of_date)
         quality = self._parse_quality(row_dict)
-        warnings = self._parse_warnings(row_dict)
+        warnings = list(self._parse_warnings(row_dict))
+        if snapshot_date != as_of_date:
+            fallback_warning = f"market_breadth_as_of_fallback:{snapshot_date.isoformat()}"
+            if fallback_warning not in warnings:
+                warnings.append(fallback_warning)
+            if quality is DecisionDeskQuality.OBSERVED:
+                quality = DecisionDeskQuality.DEGRADED
         parsed = self._parse_counts(row_dict)
         if parsed is None:
             return MarketBreadthSummary(
                 as_of_date=snapshot_date,
                 quality=DecisionDeskQuality.DEGRADED,
-                warnings=warnings + ("market_breadth_invalid_counts",),
+                warnings=tuple(warnings) + ("market_breadth_invalid_counts",),
                 advancing=None,
                 declining=None,
                 unchanged=None,
@@ -77,7 +84,7 @@ class MarketBreadthService:
         return MarketBreadthSummary(
             as_of_date=snapshot_date,
             quality=quality,
-            warnings=warnings,
+            warnings=tuple(warnings),
             breadth_ratio_bp=breadth_ratio_bp,
             advancing=advancing,
             declining=declining,
@@ -98,8 +105,21 @@ class MarketBreadthService:
                 continue
             return data.loc[matched].iloc[0]
         if len(data) == 1:
-            return data.iloc[0]
+            row = data.iloc[0]
+            row_dict = dict(zip(row.index, row.values))
+            for column in candidate_columns:
+                if column not in row_dict:
+                    continue
+                row_date = self._parse_date_value(row_dict[column])
+                if row_date is not None and row_date <= target_date:
+                    return row
         return None
+
+    def build_snapshot_dto(self, as_of_date: date) -> MarketBreadthDTO:
+        """建立含決策日與有效日的跨頁 DTO。"""
+
+        summary = self.build_snapshot(as_of_date)
+        return MarketBreadthDTO.from_summary(summary, decision_date=as_of_date)
 
     def _parse_date_series(self, values: pd.Series) -> pd.Series | None:
         parsed: list[date | None] = []
