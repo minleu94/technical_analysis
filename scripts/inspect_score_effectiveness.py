@@ -95,15 +95,15 @@ def render_score_effectiveness_markdown(
         "",
         "此報告僅為分數有效性研究證據，不是交易建議，也不代表任何策略已被證明有效。",
         "",
-        "| 分數區間 | 樣本數 | 已成熟結果 | 等待中結果 | 缺失結果 | 前瞻報酬 bp | 大盤超額 bp | 產業超額 bp | 勝率 bp | 限制 |",
-        "|---|---:|---:|---:|---:|---|---|---|---|---|",
+        "| 分數區間 | 樣本數 | 已成熟結果 | 等待中結果 | 缺失結果 | 前瞻報酬 bp | 大盤超額 bp | 成本後超額 bp | 95% 區間 | 勝率 bp | 限制 |",
+        "|---|---:|---:|---:|---:|---|---|---|---|---|---|",
     ]
     for bucket in payload["buckets"]:
         lines.append(
             "| {bucket} | {sample_count} | {ready_outcome_count} | {pending_outcome_count} | "
             "{missing_outcome_count} | {forward_return_bp_by_horizon} | "
-            "{benchmark_excess_bp_by_horizon} | {industry_excess_bp_by_horizon} | "
-            "{win_rate_bp_by_horizon} | {limitations} |".format(
+            "{benchmark_excess_bp_by_horizon} | {cost_adjusted_excess_bp_by_horizon} | "
+            "{benchmark_excess_ci95_bp_by_horizon} | {win_rate_bp_by_horizon} | {limitations} |".format(
                 bucket=bucket["bucket"],
                 sample_count=bucket["sample_count"],
                 ready_outcome_count=bucket["ready_outcome_count"],
@@ -111,7 +111,8 @@ def render_score_effectiveness_markdown(
                 missing_outcome_count=bucket["missing_outcome_count"],
                 forward_return_bp_by_horizon=_format_horizon_map(bucket["forward_return_bp_by_horizon"]),
                 benchmark_excess_bp_by_horizon=_format_horizon_map(bucket["benchmark_excess_bp_by_horizon"]),
-                industry_excess_bp_by_horizon=_format_horizon_map(bucket["industry_excess_bp_by_horizon"]),
+                cost_adjusted_excess_bp_by_horizon=_format_horizon_map(bucket["cost_adjusted_excess_bp_by_horizon"]),
+                benchmark_excess_ci95_bp_by_horizon=_format_ci_map(bucket["benchmark_excess_ci95_bp_by_horizon"]),
                 win_rate_bp_by_horizon=_format_horizon_map(bucket["win_rate_bp_by_horizon"]),
                 limitations="；".join(bucket["limitations"]) if bucket["limitations"] else "",
             )
@@ -144,6 +145,15 @@ def _format_horizon_map(values: dict[str, int]) -> str:
     if not values:
         return ""
     return "；".join(f"{horizon}日={value}" for horizon, value in values.items())
+
+
+def _format_ci_map(values: dict[str, dict[str, int]]) -> str:
+    if not values:
+        return ""
+    return "；".join(
+        f"{horizon}日=[{item['lower_bp']},{item['upper_bp']}] (n={item['sample_count']})"
+        for horizon, item in values.items()
+    )
 
 
 def _load_rows_from_db(db_path: Path) -> tuple[tuple[EvidenceEvent, ...], tuple[EvidenceOutcome, ...]]:

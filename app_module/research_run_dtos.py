@@ -10,6 +10,23 @@ from typing import Any
 JsonObject = dict[str, Any]
 
 
+@dataclass(frozen=True)
+class EvidenceReviewProposalDTO:
+    """人工覆盤接點；內容為研究提案，不是 lifecycle 決議。"""
+
+    run_id: str
+    payload_hash: str
+    execution_contract: str
+    evidence: tuple[JsonObject, ...] = ()
+    missing_requirements: tuple[str, ...] = ()
+    reviewer: str = ""
+    review_notes: str = ""
+    next_research_question: str = ""
+    formal_credit_granted: bool = False
+    promotion_allowed: bool = False
+    proposal_only: bool = True
+
+
 def canonical_json(value: Any) -> str:
     """產生穩定 JSON 字串，供 SQLite round-trip 與 hash 前置序列化使用。"""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -76,6 +93,14 @@ class ResearchRunMetadataDTO:
     promoted_version_id: str | None = None
     promotion_reconciliation_status: str = "none"
     created_at: str = ""
+
+    @property
+    def execution_contract(self) -> str:
+        """舊 next_open/close 不推測為新契約，歷史快照不原地升級。"""
+        declared = self.data_manifest.get("execution_contract")
+        if declared:
+            return str(declared)
+        return self.execution_price if ".v" in self.execution_price else "unversioned"
 
     @property
     def factor_snapshot(self) -> JsonObject:

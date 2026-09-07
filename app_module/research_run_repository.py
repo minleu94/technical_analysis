@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from contextlib import closing, contextmanager
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from app_module.research_run_dtos import (
     ResearchRunMetadataDTO,
@@ -26,8 +27,8 @@ class ResearchRunConflictError(ResearchRunRepositoryError):
 class ResearchRunRepository:
     """統一研究 run metadata 的 SQLite repository。
 
-    B1 只負責 schema 與 metadata round-trip。Parquet 寫入、crash recovery 與
-    integrity verification 由 M2-B 後續 task 接續。
+    schema 僅由明確寫入入口遷移，查詢使用 query_only connection。
+    Parquet 寫入、crash recovery 與 integrity verification 由 service 擁有。
     """
 
     SCHEMA_NAME = "research_runs"
@@ -47,12 +48,33 @@ class ResearchRunRepository:
     def __init__(self, config: Any):
         self.config = config
         self.db_path = Path(config.research_run_db_file)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ensure_schema()
+
+    @contextmanager
+    def _read_connection(self) -> Iterator[sqlite3.Connection]:
+        conn = sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)
+        conn.execute("PRAGMA query_only = ON")
+        try:
+            row = conn.execute(
+                "SELECT version FROM schema_version WHERE name = ?", (self.SCHEMA_NAME,)
+            ).fetchone()
+            if row is None or int(row[0]) != self.SCHEMA_VERSION:
+                raise ResearchRunRepositoryError("Registry schema version 不相容；需由寫入 owner 明確遷移")
+            yield conn
+        except sqlite3.Error as exc:
+            raise ResearchRunRepositoryError(f"Registry schema 無法唯讀載入: {exc}") from exc
+        finally:
+            conn.close()
+
+    @contextmanager
+    def _write_connection(self) -> Iterator[sqlite3.Connection]:
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            with conn:
+                yield conn
 
     def ensure_schema(self) -> None:
         """執行可重入 schema migration。"""
-        with sqlite3.connect(self.db_path) as conn:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._write_connection() as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS schema_version (
@@ -67,6 +89,10 @@ class ResearchRunRepository:
                 (self.SCHEMA_NAME,),
             ).fetchone()
             current_version = int(current[0]) if current else 0
+            if current_version > self.SCHEMA_VERSION:
+                raise ResearchRunRepositoryError("拒絕降版未知 Registry schema")
+            if current_version == self.SCHEMA_VERSION:
+                return
 
             if current_version < 1:
                 self._migrate_v1(conn)
@@ -169,9 +195,14 @@ class ResearchRunRepository:
         if column_name not in columns:
             conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
-    def insert_metadata(self, metadata: ResearchRunMetadataDTO) -> ResearchRunMetadataDTO:
+    def insert_metadata(
+        self, metadata: ResearchRunMetadataDTO, *, staging: bool = False
+    ) -> ResearchRunMetadataDTO:
+        self.ensure_schema()
         existing = self.get_metadata(metadata.run_id)
         if existing:
+            if staging:
+                raise ResearchRunConflictError("另一個保存 owner 已保留此 run_id")
             if existing.payload_hash != metadata.payload_hash:
                 raise ResearchRunConflictError(
                     f"run_id 已存在但 payload_hash 不一致: {metadata.run_id}"
@@ -179,11 +210,13 @@ class ResearchRunRepository:
             return existing
 
         row = self._dto_to_row(metadata)
+        if staging:
+            row.update(storage_state="staging", integrity_status="pending")
         columns = list(row.keys())
         placeholders = ", ".join("?" for _ in columns)
         column_sql = ", ".join(columns)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_connection() as conn:
             conn.execute(
                 f"INSERT INTO research_runs ({column_sql}) VALUES ({placeholders})",
                 tuple(row[column] for column in columns),
@@ -197,7 +230,9 @@ class ResearchRunRepository:
         return self._row_to_dto(row)
 
     def get_raw_metadata_row(self, run_id: str) -> dict[str, Any] | None:
-        with sqlite3.connect(self.db_path) as conn:
+        if not self.db_path.exists():
+            return None
+        with self._read_connection() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
                 "SELECT * FROM research_runs WHERE run_id = ?",
@@ -218,6 +253,7 @@ class ResearchRunRepository:
         storage_state: str | None = None,
         integrity_status: str | None = None,
     ) -> None:
+        self.ensure_schema()
         updates: dict[str, Any] = {}
         if equity_path is not None:
             updates["equity_path"] = equity_path
@@ -236,14 +272,16 @@ class ResearchRunRepository:
 
         set_sql = ", ".join(f"{column} = ?" for column in updates)
         params = [*updates.values(), run_id]
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_connection() as conn:
             conn.execute(
                 f"UPDATE research_runs SET {set_sql} WHERE run_id = ?",
                 params,
             )
 
     def list_uncommitted_rows(self) -> list[dict[str, Any]]:
-        with sqlite3.connect(self.db_path) as conn:
+        if not self.db_path.exists():
+            return []
+        with self._read_connection() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
@@ -254,8 +292,10 @@ class ResearchRunRepository:
         return [dict(row) for row in rows]
 
     def list_metadata(self, *, include_archived: bool = False) -> list[ResearchRunMetadataDTO]:
+        if not self.db_path.exists():
+            return []
         where = "" if include_archived else "WHERE is_archived = 0"
-        with sqlite3.connect(self.db_path) as conn:
+        with self._read_connection() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 f"""
@@ -267,14 +307,14 @@ class ResearchRunRepository:
         return [self._row_to_dto(dict(row)) for row in rows]
 
     def archive_run(self, run_id: str) -> None:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_connection() as conn:
             conn.execute(
                 "UPDATE research_runs SET is_archived = 1 WHERE run_id = ?",
                 (run_id,),
             )
 
     def mark_promoted(self, run_id: str, version_id: str) -> bool:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_connection() as conn:
             cursor = conn.execute(
                 """
                 UPDATE research_runs
@@ -287,7 +327,7 @@ class ResearchRunRepository:
             return cursor.rowcount > 0
 
     def mark_promotion_reconciliation_required(self, run_id: str, version_id: str) -> bool:
-        with sqlite3.connect(self.db_path) as conn:
+        with self._write_connection() as conn:
             cursor = conn.execute(
                 """
                 UPDATE research_runs

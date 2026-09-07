@@ -6,7 +6,8 @@ import pytest
 from data_module.config import TWStockConfig
 
 
-def test_config_exposes_research_run_storage_paths(tmp_path):
+def test_config_exposes_research_run_storage_paths(tmp_path, monkeypatch):
+    monkeypatch.delenv("PROFILE", raising=False)
     config = TWStockConfig(data_root=tmp_path / "data", output_root=tmp_path / "output")
 
     assert config.research_run_db_file == tmp_path / "output" / "research_runs" / "research_runs.db"

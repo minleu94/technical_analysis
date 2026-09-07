@@ -49,6 +49,13 @@ class ResearchRunComparisonService:
     def evaluate_comparability(
         self, runs: list[ResearchRunMetadataDTO]
     ) -> ComparabilityResult:
+        if any(run.execution_contract not in {
+            "next-session-open.v2", "legacy-same-day-close.v1", "unversioned"
+        } for run in runs):
+            return ComparabilityResult(ComparabilityStatus.INCOMPATIBLE, ["執行契約版本不支援"])
+        if any(run.data_manifest.get("run_status", "completed") != "completed"
+               or run.metrics.get("status", "completed") != "completed" for run in runs):
+            return ComparabilityResult(ComparabilityStatus.INCOMPATIBLE, ["研究未完整完成；不可排名"])
         if len(runs) < 2:
             return ComparabilityResult(ComparabilityStatus.COMPARABLE, [])
 
@@ -118,7 +125,8 @@ class ResearchRunComparisonService:
             ),
             (
                 "execution price differs",
-                lambda run: run.execution_price != baseline.execution_price,
+                lambda run: run.execution_price != baseline.execution_price
+                or run.execution_contract != baseline.execution_contract,
             ),
             (
                 "sizing mode differs",
@@ -139,6 +147,7 @@ class ResearchRunComparisonService:
             baseline.slippage_bp_x100,
             baseline.stop_loss_bp,
             baseline.take_profit_bp,
+            baseline.data_manifest.get("execution_assumptions", {}),
         )
         checks = [
             (
@@ -159,6 +168,7 @@ class ResearchRunComparisonService:
                     run.slippage_bp_x100,
                     run.stop_loss_bp,
                     run.take_profit_bp,
+                    run.data_manifest.get("execution_assumptions", {}),
                 )
                 != baseline_cost,
             ),

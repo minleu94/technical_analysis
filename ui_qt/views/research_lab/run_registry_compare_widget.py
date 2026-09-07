@@ -32,6 +32,7 @@ from app_module.research_run_comparison_service import (
     ResearchRunComparisonService,
 )
 from app_module.research_run_dtos import ResearchRunMetadataDTO
+from app_module.research_run_service import ResearchRunRepositoryError, ResearchRunServiceError
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.models.pandas_table_model import PandasTableModel
 from ui_qt.widgets.table_style import apply_financial_table_style
@@ -267,12 +268,37 @@ class RunRegistryCompareWidget(QWidget):
             QMessageBox.warning(self, "提示", "請選擇 2 至 5 個 research run")
             return
 
-        run_data = [self.research_run_service.load_run_data(run_id) for run_id in run_ids]
+        try:
+            run_data = [self.research_run_service.load_run_data(run_id) for run_id in run_ids]
+        except (ResearchRunServiceError, ResearchRunRepositoryError, OSError, ValueError) as exc:
+            self._render_comparability_badge(ComparabilityStatus.INCOMPATIBLE, [str(exc)])
+            for table in (self.params_diff_table, self.metrics_table, self.regime_table,
+                          self.benchmark_table, self.normalized_equity_table):
+                self._set_table_model(table, pd.DataFrame())
+            self._render_metrics_summary_table(pd.DataFrame())
+            self.params_summary_label.setText("研究載入失敗")
+            self.regime_summary_label.setText("比較已阻擋")
+            self.benchmark_summary_label.setText("比較已阻擋")
+            self.normalized_equity_empty_label.setText(f"研究載入失敗；未進行修復或重算：{exc}")
+            self.normalized_equity_table.hide()
+            return
         metadata = [item.metadata for item in run_data]
         self._prepare_run_aliases(metadata)
         self.selected_runs_label.setText(self._selected_runs_summary(metadata))
         comparability = self.comparison_service.evaluate_comparability(metadata)
         self._render_comparability_badge(comparability.status, comparability.reasons)
+
+        if comparability.status == ComparabilityStatus.INCOMPATIBLE:
+            for table in (self.metrics_table, self.regime_table, self.benchmark_table,
+                          self.normalized_equity_table):
+                self._set_table_model(table, pd.DataFrame())
+            self._render_metrics_summary_table(pd.DataFrame())
+            self._set_table_model(self.params_diff_table, self._build_params_diff(metadata))
+            self.normalized_equity_empty_label.setText("研究契約不相容或未完整完成，已停止績效混排與權益標準化。")
+            self.normalized_equity_table.hide()
+            self.regime_summary_label.setText("比較已阻擋")
+            self.benchmark_summary_label.setText("比較已阻擋")
+            return
 
         params_diff = self._build_params_diff(metadata)
         metrics = self._flatten_run_dicts(metadata, "metrics")

@@ -195,3 +195,35 @@ def test_registry_compare_widget_refreshes_on_first_show(qt_app):
     widget.showEvent(None)
 
     assert widget.refresh_runs.call_count == 1
+
+
+def test_registry_compare_blocks_mixed_versions_and_clears_previous_results(qt_app):
+    from dataclasses import replace
+
+    service = FakeResearchRunService()
+    widget = RunRegistryCompareWidget(service, page_size=10)
+    widget.refresh_runs()
+    widget.run_list.item(0).setSelected(True)
+    widget.run_list.item(1).setSelected(True)
+    widget.compare_selected_runs()
+    assert widget.metrics_table.model().rowCount() == 2
+    service.runs[0] = replace(service.runs[0], execution_price="next-session-open.v2")
+    service.runs[1] = replace(service.runs[1], execution_price="legacy-same-day-close.v1")
+    widget.compare_selected_runs()
+    assert widget.metrics_table.model().rowCount() == 0
+    assert widget.normalized_equity_table.model().rowCount() == 0
+    assert "停止績效混排" in widget.normalized_equity_empty_label.text()
+
+
+def test_registry_compare_reports_corruption_without_implicit_repair(qt_app):
+    from app_module.research_run_service import ResearchRunIntegrityError
+
+    service = FakeResearchRunService()
+    service.load_run_data = MagicMock(side_effect=ResearchRunIntegrityError("hash 不一致"))
+    widget = RunRegistryCompareWidget(service, page_size=10)
+    widget.refresh_runs()
+    widget.run_list.item(0).setSelected(True)
+    widget.run_list.item(1).setSelected(True)
+    widget.compare_selected_runs()
+    assert "未進行修復或重算" in widget.normalized_equity_empty_label.text()
+    assert widget.metrics_table.model().rowCount() == 0

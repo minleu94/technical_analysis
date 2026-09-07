@@ -63,6 +63,7 @@ def _outcome(
     benchmark_excess_bp: int | None = None,
     industry_excess_bp: int | None = None,
     max_adverse_excursion_bp: int | None = None,
+    liquidity_cost_bp: int | None = None,
 ) -> EvidenceOutcome:
     return EvidenceOutcome(
         outcome_id=f"out-{event_id}-{window_days}",
@@ -72,6 +73,7 @@ def _outcome(
         benchmark_excess_bp=benchmark_excess_bp,
         industry_excess_bp=industry_excess_bp,
         max_adverse_excursion_bp=max_adverse_excursion_bp,
+        liquidity_cost_bp=liquidity_cost_bp,
         outcome_status=status,
         data_quality=EvidenceDataQuality.OBSERVED,
     )
@@ -151,6 +153,36 @@ def test_report_does_not_diagnose_missing_score_when_metric_is_not_applicable() 
     ).build_report()
 
     assert report.diagnostics == ()
+
+
+def test_report_exposes_cost_adjusted_excess_and_descriptive_ci() -> None:
+    report = ScoreEffectivenessReadModel(
+        events=(_event("evt-a", 8200), _event("evt-b", 8200), _event("evt-c", 8200)),
+        outcomes=(
+            _outcome("evt-a", 5, EvidenceOutcomeStatus.READY, benchmark_excess_bp=100, liquidity_cost_bp=20),
+            _outcome("evt-b", 5, EvidenceOutcomeStatus.READY, benchmark_excess_bp=200, liquidity_cost_bp=40),
+            _outcome("evt-c", 5, EvidenceOutcomeStatus.READY, benchmark_excess_bp=-50, liquidity_cost_bp=10),
+        ),
+    ).build_report()
+
+    high = next(row for row in report.buckets if row.bucket == "80-100")
+    assert high.liquidity_cost_bp_by_horizon == {"5": 23}
+    assert high.cost_adjusted_excess_bp_by_horizon == {"5": 60}
+    assert high.benchmark_excess_ci95_bp_by_horizon["5"]["sample_count"] == 3
+    assert high.benchmark_excess_ci95_bp_by_horizon["5"]["lower_bp"] < 83
+    assert high.benchmark_excess_ci95_bp_by_horizon["5"]["upper_bp"] > 83
+    assert "完整 turnover、手續費與稅費" in high.limitations[-1]
+
+
+def test_report_marks_missing_liquidity_cost_without_fabricating_net_result() -> None:
+    report = ScoreEffectivenessReadModel(
+        events=(_event("evt-a", 8200),),
+        outcomes=(_outcome("evt-a", 5, EvidenceOutcomeStatus.READY, benchmark_excess_bp=100),),
+    ).build_report()
+
+    high = next(row for row in report.buckets if row.bucket == "80-100")
+    assert "missing_liquidity_cost" in high.warnings
+    assert high.cost_adjusted_excess_bp_by_horizon == {}
 
 
 def test_sample_cli_outputs_traditional_chinese_json_and_markdown(tmp_path, capsys) -> None:

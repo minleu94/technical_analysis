@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
+    QToolButton,
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
@@ -41,12 +42,60 @@ _STATUS_COLORS = {
     "unknown": "#ef4444",
     "contract_only": "#a78bfa",
     "blocked_provenance": "#ef4444",
+    "blocked": "#ef4444",
     "deferred": "#f59e0b",
     "disabled": "#ef4444",
     "limited": "#f59e0b",
     "accepted": "#22c55e",
     "not_supplied": "#94a3b8",
     "not_observed": "#94a3b8",
+}
+
+_STATUS_LABELS = {
+    "observed": "已觀測",
+    "research_baseline": "研究基準",
+    "development_challenger": "開發挑戰者",
+    "development_only": "僅開發",
+    "candidate": "候選",
+    "provisional": "暫定",
+    "fixture": "測試資料",
+    "replay": "回放",
+    "degraded": "降級",
+    "research_only_degraded": "研究限定／降級",
+    "missing": "缺漏",
+    "unknown": "未知",
+    "contract_only": "僅契約",
+    "blocked_provenance": "來源追溯受阻",
+    "blocked": "受阻",
+    "deferred": "延後",
+    "disabled": "停用",
+    "limited": "受限",
+    "accepted": "已接受",
+    "not_supplied": "未提供",
+    "not_observed": "未觀測",
+    "research_shadow": "研究影子",
+    "waiting_for_formal_inputs": "等待正式輸入",
+    "formal_input_missing": "缺正式輸入",
+    "formal_inputs_missing": "缺正式輸入",
+    "not_ready": "尚未就緒",
+    "unavailable": "不可用",
+    "failed": "失敗",
+    "read_only": "唯讀",
+    "source_acceptance_pending": "等待來源接受",
+}
+
+_BLOCKER_LABELS = {
+    "projection_stale": "研究投影已過期",
+    "projection_missing": "缺少研究投影",
+    "projection_read_failed": "研究投影讀取失敗",
+    "projection_schema_invalid": "研究投影格式無效",
+    "projection_boundary_violation": "研究投影安全邊界違反",
+    "projection_generated_at_missing": "缺少投影產生時間",
+    "projection_generated_at_invalid": "投影產生時間無效",
+    "formal_oos_input_missing": "缺少正式 OOS 輸入",
+    "pit_sector_evidence_missing": "缺少 PIT 產業證據",
+    "causal_non_cash_features_missing": "缺少因果非現金特徵",
+    "rule_champion_artifact_missing": "缺少 Rule champion artifact",
 }
 
 
@@ -86,12 +135,12 @@ class ResearchConsoleView(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        title = QLabel("Research Console / Development Evidence")
+        title = QLabel("研究控制台（Research Console）／開發證據")
         title.setStyleSheet(
             f"color: {MIDNIGHT_ANALYST.text_primary}; font-size: 18px; font-weight: 700;"
         )
         subtitle = QLabel(
-            "唯讀呈現 sanitized frozen projection；Development／candidate／replay 不等於 formal evidence。"
+            "唯讀呈現已清理的 frozen projection；開發、候選與回放資料不等於正式證據。"
         )
         subtitle.setWordWrap(True)
         subtitle.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
@@ -103,17 +152,48 @@ class ResearchConsoleView(QWidget):
         self.refresh_button.clicked.connect(self.refresh_console)
         layout.addWidget(self.refresh_button)
 
+        self.conclusion_banner = QLabel()
+        self.conclusion_banner.setObjectName("ResearchConsoleConclusion")
+        self.conclusion_banner.setAccessibleName("Research Console 中文結論")
+        self.conclusion_banner.setWordWrap(True)
+        self.conclusion_banner.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.conclusion_banner.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_primary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; border-radius: 6px; padding: 10px;"
+        )
+        layout.addWidget(self.conclusion_banner)
+
+        # 技術識別碼與原始狀態預設收合，讓一般使用者先看到可採取的結論。
+        self.diagnostics_toggle = QToolButton()
+        self.diagnostics_toggle.setText("顯示技術診斷")
+        self.diagnostics_toggle.setAccessibleName("展開或收合 Research Console 技術診斷")
+        self.diagnostics_toggle.setCheckable(True)
+        self.diagnostics_toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.diagnostics_toggle.toggled.connect(self._toggle_diagnostics)
+        layout.addWidget(self.diagnostics_toggle)
+        self.diagnostics_panel = QLabel()
+        self.diagnostics_panel.setObjectName("ResearchConsoleDiagnostics")
+        self.diagnostics_panel.setAccessibleName("Research Console 技術診斷內容")
+        self.diagnostics_panel.setWordWrap(True)
+        self.diagnostics_panel.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.diagnostics_panel.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_1}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; border-radius: 6px; padding: 8px;"
+        )
+        self.diagnostics_panel.setVisible(False)
+        layout.addWidget(self.diagnostics_panel)
+
         boundary_panel = SectionPanel("1. Safety Boundary")
         boundary_grid = QGridLayout()
         boundary_grid.setSpacing(8)
         self.boundary_labels: dict[str, QLabel] = {}
         for index, (key, label) in enumerate(
             (
-                ("formal_oos", "Formal OOS"),
-                ("alpha", "Production Blend Alpha"),
-                ("ml", "Production ML"),
-                ("formal_path", "Formal Recommendation / Portfolio"),
-                ("actions", "Promotion / Retrain / Scheduler / Trading"),
+                ("formal_oos", "正式 OOS"),
+                ("alpha", "正式混合權重"),
+                ("ml", "正式 ML"),
+                ("formal_path", "正式推薦／投組"),
+                ("actions", "升級／重訓／排程／交易"),
             )
         ):
             card = QLabel()
@@ -129,7 +209,7 @@ class ResearchConsoleView(QWidget):
         boundary_panel.layout.addLayout(boundary_grid)
         layout.addWidget(boundary_panel)
 
-        pipeline_panel = SectionPanel("2. Development Pipeline")
+        pipeline_panel = SectionPanel("2. 開發流程（Development Pipeline）")
         self.pipeline_state_label = QLabel()
         self.pipeline_state_label.setWordWrap(True)
         self.pipeline_state_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -140,7 +220,7 @@ class ResearchConsoleView(QWidget):
         pipeline_panel.layout.addWidget(self.pipeline_table)
         layout.addWidget(pipeline_panel)
 
-        gates_panel = SectionPanel("3. Evidence / Source Gates")
+        gates_panel = SectionPanel("3. 證據／來源閘門（Evidence / Source Gates）")
         self.gate_table = _table(("Gate", "狀態", "說明", "Artifact"))
         self.source_table = _table(("來源", "Lane", "狀態", "Allowed use", "Rows", "缺口 / Revision"))
         self.artifact_table = _table(("Artifact", "Identity", "狀態", "Citation"))
@@ -181,26 +261,34 @@ class ResearchConsoleView(QWidget):
     def refresh_console(self) -> None:
         self.render_console(self.source_service.inspect())
 
+    def _toggle_diagnostics(self, checked: bool) -> None:
+        self.diagnostics_panel.setVisible(bool(checked))
+        self.diagnostics_toggle.setText(
+            "收合技術診斷" if checked else "顯示技術診斷"
+        )
+
     def render_console(self, console: ResearchConsoleDTO) -> None:
         self._console = console
         boundary = console.boundary
         self.boundary_labels["formal_oos"].setText(
-            f"formal_oos_allowed = {boundary.formal_oos_allowed}\nDisabled"
+            "正式 OOS：停用\n不可用於正式決策"
         )
         self.boundary_labels["alpha"].setText(
-            f"production_blend_alpha_bp = {boundary.production_blend_alpha_bp}\nDisabled"
+            "正式混合權重：0 bp\n停用"
         )
-        self.boundary_labels["ml"].setText("Production ML: Disabled\nDevelopment Only")
+        self.boundary_labels["ml"].setText("正式 ML：未參與\n僅開發／影子研究")
         self.boundary_labels["formal_path"].setText(
-            "Formal path: Rule-only\nRecommendation / Portfolio unchanged"
+            "正式路徑：Rule（規則）\n推薦／投組沿用既有規則"
         )
         self.boundary_labels["actions"].setText(
-            "Promotion: Disabled｜Retrain: Disabled｜Scheduler: Disabled｜Trading: Disabled"
+            "升級：停用｜重訓：停用｜排程：停用｜交易：停用"
         )
+        self.conclusion_banner.setText(_build_conclusion(console))
         self.pipeline_state_label.setText(
-            f"狀態：{_display(console.overall_status)}｜來源：{console.source_reference}｜"
-            f"Blockers：{_join(console.blockers)}"
+            f"整體狀態：{_status_display(console.overall_status)}｜"
+            f"待處理：{_join_blockers(console.blockers)}"
         )
+        self.diagnostics_panel.setText(_build_diagnostics(console))
         _set_rows(
             self.pipeline_table,
             (
@@ -210,7 +298,7 @@ class ResearchConsoleView(QWidget):
                     row.status,
                     _join_optional(row.cutoff, row.feature_interval, row.label_maturity),
                     _counts(row.row_count, row.eligible_count, row.feature_count),
-                    _join_optional(row.artifact_path, row.artifact_hash, _join(row.blockers)),
+                    _join_optional(row.artifact_path, row.artifact_hash, _join_blockers(row.blockers)),
                 )
                 for row in console.pipeline
             ),
@@ -239,7 +327,7 @@ class ResearchConsoleView(QWidget):
         control_center = console.source_control_center
         if control_center is None:
             self.control_center_summary_label.setText(
-                "P0 Source Control Center：Not Available；未提供 13 項來源治理投影。"
+                    "P0 來源控制中心：未提供 13 項來源治理投影。"
             )
             self.control_center_table.setRowCount(0)
         else:
@@ -249,7 +337,7 @@ class ResearchConsoleView(QWidget):
                 "Downstream eligible：{eligible}\n"
                 "唯讀邊界：writes=false、formal_oos=false、scheduler=false、auto_accept=false\n"
                 "Global blockers：{blockers}".format(
-                    status=_display(
+                        status=_status_display(
                         _control_center_status(control_center)
                     ),
                     count=control_center.p0_source_count,
@@ -258,7 +346,7 @@ class ResearchConsoleView(QWidget):
                     accepted=control_center.accepted_count,
                     limited=control_center.limited_count,
                     eligible=control_center.downstream_eligible_count,
-                    blockers=_join(control_center.global_blockers),
+                    blockers=_join_blockers(control_center.global_blockers),
                 )
             )
             _set_rows(
@@ -273,7 +361,7 @@ class ResearchConsoleView(QWidget):
                     _control_pit_coverage(row),
                     _control_license(row),
                     f"{row.decision_status} / {row.downstream_eligibility}",
-                    _join(row.blockers),
+                    _join_blockers(row.blockers),
                 )
                     for row in control_center.rows
                 ),
@@ -320,7 +408,9 @@ def _set_rows(table: QTableWidget, rows, *, status_column: int) -> None:
     table.setRowCount(len(materialized))
     for row_index, values in enumerate(materialized):
         for column_index, value in enumerate(values):
-            item = QTableWidgetItem(_display(value))
+            item = QTableWidgetItem(
+                _status_display(value) if column_index == status_column else _display(value)
+            )
             item.setToolTip(item.text())
             if column_index == status_column:
                 item.setForeground(QColor(_STATUS_COLORS.get(str(value).lower(), "#94a3b8")))
@@ -332,8 +422,35 @@ def _display(value: object) -> str:
     return text.replace("missing", "Missing").replace("unknown", "Unknown")
 
 
+def _status_display(value: object) -> str:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return "缺漏／未知"
+    return _STATUS_LABELS.get(raw, _display(value))
+
+
 def _join(values: tuple[str, ...]) -> str:
     return "；".join(values) if values else "None"
+
+
+def _join_blockers(values) -> str:
+    return "；".join(_blocker_display(value) for value in values) if values else "無"
+
+
+def _blocker_display(value: object) -> str:
+    raw = str(value)
+    if raw in _BLOCKER_LABELS:
+        return _BLOCKER_LABELS[raw]
+    lowered = raw.lower()
+    if "stale" in lowered:
+        return "研究投影已過期"
+    if "formal" in lowered and any(
+        token in lowered for token in ("missing", "not_ready", "blocked", "absent")
+    ):
+        return "缺正式輸入"
+    if "missing" in lowered:
+        return "資料缺漏"
+    return raw
 
 
 def _join_optional(*values: str | None) -> str:
@@ -364,6 +481,79 @@ def _control_center_status(control_center: P0SourceControlCenterDTO) -> str:
     if control_center.accepted_count:
         return "accepted"
     return "unknown"
+
+
+def _build_conclusion(console: ResearchConsoleDTO) -> str:
+    """把投影狀態翻成使用者可先讀懂的決策結論。"""
+
+    blockers = tuple(str(item) for item in console.blockers)
+    blockers += tuple(
+        str(item)
+        for row in console.pipeline
+        for item in row.blockers
+    )
+    if console.source_control_center is not None:
+        blockers += tuple(str(item) for item in console.source_control_center.global_blockers)
+    unique_blockers = tuple(dict.fromkeys(blockers))
+    if "projection_stale" in unique_blockers:
+        return (
+            "結論：Rule 使用中（規則路徑）；ML 未參與正式決策。\n"
+            "研究投影已過期（stale projection），請先重新產生並檢查來源後再解讀開發證據。"
+        )
+    missing_input = any(
+        item in unique_blockers
+        for item in (
+            "formal_oos_input_missing",
+            "formal_inputs_missing",
+            "pit_sector_evidence_missing",
+            "causal_non_cash_features_missing",
+            "rule_champion_artifact_missing",
+        )
+    )
+    missing_input = missing_input or any(
+        "formal" in item and ("missing" in item or "not_ready" in item or "blocked" in item)
+        for item in unique_blockers
+    )
+    if missing_input:
+        return (
+            "結論：Rule 使用中（規則路徑）；ML 未參與正式決策。\n"
+            "缺正式輸入：正式 ML 輸入仍缺漏，開發結果只能作為研究參考。"
+        )
+    if any(item.startswith("projection_") for item in unique_blockers):
+        return (
+            "結論：Rule 使用中（規則路徑）；ML 未參與正式決策。\n"
+            "研究投影尚未具備完整輸入，正式決策維持封閉。"
+        )
+    return (
+        "結論：Rule 使用中（規則路徑）；ML 未參與正式決策。\n"
+        "下方開發資料僅供研究與驗證，不能直接改變正式路徑。"
+    )
+
+
+def _build_diagnostics(console: ResearchConsoleDTO) -> str:
+    """收合區提供工程排查所需的原始 token 與來源識別。"""
+
+    boundary = console.boundary
+    pipeline_status = "；".join(
+        f"{row.component_id}={row.status}" for row in console.pipeline
+    ) or "None"
+    pipeline_blockers = "；".join(
+        f"{row.component_id}:{_join(row.blockers)}"
+        for row in console.pipeline
+        if row.blockers
+    ) or "None"
+    return (
+        f"原始投影狀態：{console.overall_status}\n"
+        f"來源識別：{console.source_reference}\n"
+        f"Pipeline raw status：{pipeline_status}\n"
+        f"Blockers raw：{_join(console.blockers)}\n"
+        f"Pipeline blockers raw：{pipeline_blockers}\n"
+        f"formal_oos_allowed = {boundary.formal_oos_allowed}\n"
+        f"production_blend_alpha_bp = {boundary.production_blend_alpha_bp}\n"
+        "Production ML: Disabled\n"
+        "Formal path: Rule-only\n"
+        "Promotion: Disabled｜Retrain: Disabled｜Scheduler: Disabled｜Trading: Disabled"
+    )
 
 
 def _control_route(row: Any) -> str:

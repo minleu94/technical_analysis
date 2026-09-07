@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from dataclasses import asdict, dataclass
+from contextlib import closing
+from dataclasses import asdict, dataclass, replace
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 import sqlite3
@@ -16,6 +17,7 @@ from app_module.evidence_event_dtos import (
     EvidenceOutcomeStatus,
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
+from app_module.evidence_event_service import EvidenceEventService
 from app_module.corporate_action_policy import CorporateActionProvider, CorporateActionPolicy
 from app_module.trading_restriction_policy import TradingRestrictionProvider, TradingRestrictionPolicy
 from app_module.event_price_resolver import (
@@ -87,6 +89,10 @@ class ForwardPerformanceService:
         limit: int | None = None,
         data_as_of_date: str | None = None,
     ) -> ForwardOutcomeSummary:
+        self._daily_price_cache.clear()
+        self._index_return_cache.clear()
+        self._index_table_columns_cache.clear()
+        windows = tuple(int(item) for item in windows)
         events = self.repository.list_events(
             symbol=symbol,
             event_type=event_type,
@@ -115,6 +121,11 @@ class ForwardPerformanceService:
             for window in tuple(int(item) for item in windows):
                 existing = self.repository.get_outcome(event.event_id, window)
                 outcome = self._build_outcome(event, window, data_as_of_date=data_as_of_date)
+                outcome = replace(outcome, metadata={
+                    **outcome.metadata,
+                    "evidence_lineage": EvidenceEventService.lineage_for(event),
+                    "is_execution_pnl": False,
+                })
                 counters["warnings_count"] += len(outcome.warnings)
                 if outcome.outcome_status == EvidenceOutcomeStatus.INSUFFICIENT_FUTURE_DATA:
                     counters["pending_insufficient_future_data"] += 1
@@ -326,7 +337,8 @@ class ForwardPerformanceService:
         cache_key = (table_name, str(index_name or ""), start_key, end_key)
         if cache_key in self._index_return_cache:
             return self._index_return_cache[cache_key]
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            conn.execute("PRAGMA query_only = ON")
             columns = self._index_table_columns(conn, table_name)
             date_column = self._first_existing_column(columns, INDEX_DATE_COLUMNS)
             close_columns = self._existing_columns(columns, INDEX_CLOSE_COLUMNS)
@@ -492,7 +504,8 @@ class ForwardPerformanceService:
         if symbol in self._daily_price_cache:
             return self._daily_price_cache[symbol]
         rows: list[tuple[str, Decimal]] = []
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            conn.execute("PRAGMA query_only = ON")
             fetched = conn.execute(
                 """
                 SELECT 日期, 收盤價

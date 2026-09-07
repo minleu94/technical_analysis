@@ -14,6 +14,8 @@ from app_module.evidence_event_dtos import (
 )
 from app_module.evidence_event_repository import EvidenceEventRepository
 from app_module.research_run_dtos import canonical_json as canonical_evidence_json
+from app_module.research_run_dtos import EvidenceReviewProposalDTO
+from app_module.research_run_service import ResearchRunService
 
 
 class EvidenceEventService:
@@ -57,6 +59,7 @@ class EvidenceEventService:
         benchmark_id: str | None = None,
         industry_benchmark_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        evidence_tier: str | None = None,
     ) -> EvidenceEvent:
         normalized_event_type = normalize_event_type(event_type)
         normalized_quality = normalize_data_quality(data_quality)
@@ -65,6 +68,14 @@ class EvidenceEventService:
         normalized_risks = self._normalize_sequence(risk_codes)
         normalized_warnings = self._normalize_sequence(warnings)
         normalized_metadata = self._normalize_metadata(metadata)
+        if evidence_tier is not None:
+            if evidence_tier not in {"replay", "forward", "paper", "live"}:
+                raise ValueError("evidence_tier 必須為 replay/forward/paper/live")
+            normalized_metadata["evidence_lineage"] = {
+                "contract": "evidence-lineage.v1", "declared_tier": evidence_tier,
+                "run_id": run_id, "source_snapshot_id": source_snapshot_id,
+                "formal_credit_granted": False, "requires_named_review": True,
+            }
 
         self.validate_event(
             event_date=event_date,
@@ -128,6 +139,63 @@ class EvidenceEventService:
             metadata=normalized_metadata,
         )
         return self.repository.insert_event(event)
+
+    @staticmethod
+    def lineage_for(event: EvidenceEvent) -> dict[str, Any]:
+        declared = event.metadata.get("evidence_lineage", {})
+        tier = declared.get("declared_tier", "unclassified") if isinstance(declared, dict) else "unclassified"
+        if tier not in {"replay", "forward", "paper", "live"}:
+            tier = "unclassified"
+        return {
+            "contract": "evidence-lineage.v1", "declared_tier": tier,
+            "event_id": event.event_id, "event_hash": event.event_hash,
+            "run_id": event.run_id, "source_id": event.source_id,
+            "source_snapshot_id": event.source_snapshot_id,
+            "strategy_version_id": event.strategy_version_id,
+            "as_of_date": event.as_of_date, "available_date": event.available_date,
+            "formal_credit_granted": False, "requires_named_review": True,
+        }
+
+    def build_review_proposal(
+        self, run_id: str, *, reviewer: str = "", review_notes: str = "",
+        next_research_question: str = "",
+    ) -> EvidenceReviewProposalDTO:
+        """只讀完整研究與事件／outcome，回傳待人工審閱提案，沒有保存或升級副作用。"""
+        run = ResearchRunService(self.repository.config).load_run_data(run_id).metadata
+        events = self.repository.list_events_for_run(run_id)
+        evidence: list[dict[str, Any]] = []
+        missing: set[str] = {"formal_evidence_acceptance_not_evaluated"}
+        if not reviewer.strip() or not review_notes.strip():
+            missing.add("named_review_required")
+        if not next_research_question.strip():
+            missing.add("next_research_question_required")
+        if not events:
+            missing.add("linked_evidence_required")
+        for event in events:
+            lineage = self.lineage_for(event)
+            outcomes = self.repository.list_outcomes(event_id=event.event_id)
+            if not event.source_snapshot_id:
+                missing.add("recommendation_snapshot_lineage_required")
+            if lineage["declared_tier"] == "unclassified":
+                missing.add("evidence_tier_unclassified")
+            if lineage["declared_tier"] != "replay":
+                missing.add("real_time_producer_acceptance_required")
+            if not outcomes or any(item.outcome_status != "ready" for item in outcomes):
+                missing.add("mature_outcomes_required")
+            evidence.append({**lineage, "outcomes": [
+                {"outcome_id": item.outcome_id, "event_id": item.event_id,
+                 "window_days": item.window_days, "status": item.outcome_status,
+                 "return_basis": item.return_basis, "data_as_of_date": item.data_as_of_date,
+                 "forward_return_bp": item.forward_return_bp,
+                 "is_execution_pnl": False}
+                for item in outcomes
+            ]})
+        return EvidenceReviewProposalDTO(
+            run_id=run_id, payload_hash=run.payload_hash, execution_contract=run.execution_contract,
+            evidence=tuple(evidence), missing_requirements=tuple(sorted(missing)),
+            reviewer=reviewer.strip(), review_notes=review_notes.strip(),
+            next_research_question=next_research_question.strip(),
+        )
 
     def validate_event(
         self,

@@ -139,6 +139,7 @@ def test_reconcile_recovers_or_marks_incomplete_save(tmp_path, fail_at):
         service.save_run(_metadata(run_id=f"run-{fail_at}"), _equity_frame(), _trades_frame(), fail_at=fail_at)
 
     recovered_service = ResearchRunService(config)
+    recovered_service.reconcile_incomplete_saves()
     raw = ResearchRunRepository(config).get_raw_metadata_row(f"run-{fail_at}")
 
     if fail_at == "before_temp_write":

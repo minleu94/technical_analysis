@@ -15,7 +15,6 @@ from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRep
 from app_module.decision_desk_snapshot_storage_dtos import (
     StoredDecisionDeskSnapshot,
     build_stored_decision_desk_snapshot,
-    section_is_ready,
 )
 from app_module.evidence_capture_service import EvidenceCaptureService
 from app_module.evidence_event_importer_dtos import EvidenceCaptureRequest
@@ -65,6 +64,15 @@ CAPTURE_SOURCE_ORDER = (
     "risk-prompt",
 )
 EXCLUSION_SOURCE_ALIASES = {"why-not", "liquidity-gate"}
+
+
+def _transient_capture_ready(payload: Mapping[str, Any]) -> bool:
+    """Whether a transient snapshot section is strong enough for capture."""
+
+    return (
+        str(payload.get("quality") or "missing") in {"observed", "estimated"}
+        and not list(payload.get("warnings") or [])
+    )
 
 
 class _Timer:
@@ -159,7 +167,17 @@ class EvidencePipelineRunner:
         advisory_counts = _combined_advisory_counts(step.advisory_counts for step in steps)
         advisories_count = _advisory_count(advisory_counts)
         errors_count = sum(step.errors_count for step in steps)
+        # Capture remains request-scoped, but scheduler readiness still needs
+        # the persisted recommendation as a common prerequisite.  Otherwise a
+        # transient watchlist section could make a run look ready while the
+        # evidence anchor itself is missing.  Other snapshot sections remain
+        # scoped to the requested sources below.
         blocking_gaps = self._blocking_gaps_for_request(source_coverage, request)
+        if (
+            not source_coverage.get("recommendation_persisted_available")
+            and "recommendation_persisted_missing" not in blocking_gaps
+        ):
+            blocking_gaps.insert(0, "recommendation_persisted_missing")
         readiness_before = str(source_coverage.get("scheduler_readiness") or READINESS_NOT_READY)
         readiness_after = scheduler_readiness_after_run(
             readiness_before,
@@ -338,9 +356,13 @@ class EvidencePipelineRunner:
             return coverage
 
         reconciled = dict(coverage)
-        watchlist_ready = section_is_ready(stored.watchlist_trigger_json)
-        portfolio_ready = section_is_ready(stored.portfolio_alert_json)
-        risk_ready = section_is_ready(stored.risk_prompt_json)
+        # A transient snapshot is usable for a dry-run only when the requested
+        # section is observed/estimated.  Treating ``degraded`` as ready here
+        # would turn an empty or failed provider into a durable-looking source
+        # and erase the caller's blocking gap.
+        watchlist_ready = _transient_capture_ready(stored.watchlist_trigger_json)
+        portfolio_ready = _transient_capture_ready(stored.portfolio_alert_json)
+        risk_ready = _transient_capture_ready(stored.risk_prompt_json)
         reconciled.update(
             {
                 "decision_desk_snapshots_count": max(int(reconciled.get("decision_desk_snapshots_count") or 0), 1),
@@ -592,11 +614,11 @@ class EvidencePipelineRunner:
         if stored is None:
             return False
         if section_name == "watchlist-trigger":
-            return section_is_ready(stored.watchlist_trigger_json)
+            return _transient_capture_ready(stored.watchlist_trigger_json)
         if section_name == "portfolio-alert":
-            return section_is_ready(stored.portfolio_alert_json)
+            return _transient_capture_ready(stored.portfolio_alert_json)
         if section_name == "risk-prompt":
-            return section_is_ready(stored.risk_prompt_json)
+            return _transient_capture_ready(stored.risk_prompt_json)
         return False
 
     def _clean_sources(self, sources: tuple[str, ...]) -> tuple[str, ...]:

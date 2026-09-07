@@ -11,7 +11,8 @@ from scripts.inspect_research_registry_transaction import (
 
 
 def _create_registry(path: Path) -> None:
-    ResearchRunRepository(SimpleNamespace(research_run_db_file=path))
+    repository = ResearchRunRepository(SimpleNamespace(research_run_db_file=path))
+    repository.ensure_schema()
 
 
 def test_snapshot_probe_requires_confirmation_without_touching_source(tmp_path: Path) -> None:

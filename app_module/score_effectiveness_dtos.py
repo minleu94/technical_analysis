@@ -16,6 +16,9 @@ class ScoreBucketAuditRow:
     industry_excess_bp_by_horizon: dict[str, int] = field(default_factory=dict)
     max_drawdown_bp_by_horizon: dict[str, int] = field(default_factory=dict)
     win_rate_bp_by_horizon: dict[str, int] = field(default_factory=dict)
+    liquidity_cost_bp_by_horizon: dict[str, int] = field(default_factory=dict)
+    cost_adjusted_excess_bp_by_horizon: dict[str, int] = field(default_factory=dict)
+    benchmark_excess_ci95_bp_by_horizon: dict[str, dict[str, int]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     limitations: list[str] = field(default_factory=list)
 

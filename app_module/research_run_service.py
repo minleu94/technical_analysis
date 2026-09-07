@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
+from copy import deepcopy
 import hashlib
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ from app_module.research_run_dtos import ResearchRunMetadataDTO
 from app_module.research_run_repository import (
     ResearchRunConflictError,
     ResearchRunRepository,
+    ResearchRunRepositoryError,
 )
 from decision_module.factors.factor_dtos import FactorRecord
 
@@ -48,7 +50,7 @@ class ResearchRunService:
     """Research Run Registry 唯一寫入 owner。
 
     SQLite 與 filesystem 沒有共同 transaction；本服務使用 staging 狀態與
-    啟動 reconciliation 來避免半成品被當成完整 run 載入。
+    顯式 reconciliation 來避免半成品被當成完整 run 載入。建構與查詢不寫入。
     """
 
     def __init__(self, config: Any):
@@ -56,9 +58,6 @@ class ResearchRunService:
         self.repository = ResearchRunRepository(config)
         self.parquet_dir = Path(config.research_run_parquet_dir)
         self.staging_dir = Path(config.research_run_staging_dir)
-        self.parquet_dir.mkdir(parents=True, exist_ok=True)
-        self.staging_dir.mkdir(parents=True, exist_ok=True)
-        self.reconcile_incomplete_saves()
 
     def save_run(
         self,
@@ -72,6 +71,9 @@ class ResearchRunService:
         factor_contributions: dict[str, Any] | None = None,
         fail_at: str | None = None,
     ) -> ResearchRunMetadataDTO:
+        metadata = deepcopy(metadata)
+        equity = equity.copy(deep=True)
+        trades = trades.copy(deep=True)
         metadata = self._metadata_with_factor_manifest(
             metadata,
             factor_records=factor_records,
@@ -79,6 +81,8 @@ class ResearchRunService:
             factor_snapshot=factor_snapshot,
             factor_contributions=factor_contributions,
         )
+        metadata = self._metadata_with_execution_contract(metadata)
+        self.repository.ensure_schema()
         existing_raw = self.repository.get_raw_metadata_row(metadata.run_id)
         if existing_raw:
             existing = self.repository.get_metadata(metadata.run_id)
@@ -87,17 +91,21 @@ class ResearchRunService:
                     f"run_id 已存在但 payload_hash 不一致: {metadata.run_id}"
                 )
             if existing_raw["storage_state"] == "committed":
-                return existing  # type: ignore[return-value]
+                saved = self.load_run_data(metadata.run_id)
+                if (
+                    self._immutable_metadata(saved.metadata) != self._immutable_metadata(metadata)
+                    or not saved.equity.equals(equity.reset_index(drop=True))
+                    or not saved.trades.equals(trades.reset_index(drop=True))
+                ):
+                    raise ResearchRunConflictError("宣告 hash 相同但實際保存內容不同")
+                return saved.metadata
             raise ResearchRunIntegrityError(f"run 尚未完整提交: {metadata.run_id}")
 
         self._fail_if_requested(fail_at, "before_temp_write")
 
-        self.repository.insert_metadata(metadata)
-        self.repository.update_storage_fields(
-            metadata.run_id,
-            storage_state="staging",
-            integrity_status="pending",
-        )
+        self.parquet_dir.mkdir(parents=True, exist_ok=True)
+        self.staging_dir.mkdir(parents=True, exist_ok=True)
+        self.repository.insert_metadata(metadata, staging=True)
         self._fail_if_requested(fail_at, "after_staging_row")
 
         paths = self._paths_for(metadata.run_id)
@@ -145,6 +153,7 @@ class ResearchRunService:
             raise ResearchRunIntegrityError(f"找不到 research run: {run_id}")
         if raw["storage_state"] != "committed" or raw["integrity_status"] != "valid":
             raise ResearchRunIntegrityError(f"run 尚未通過完整性檢查: {run_id}")
+        self._metadata_with_execution_contract(metadata)
 
         self._verify_hash(Path(metadata.equity_path), metadata.equity_parquet_hash)
         self._verify_hash(Path(metadata.trades_path), metadata.trades_parquet_hash)
@@ -155,7 +164,34 @@ class ResearchRunService:
         )
 
     def list_runs(self, *, include_archived: bool = False) -> list[ResearchRunMetadataDTO]:
-        return self.repository.list_metadata(include_archived=include_archived)
+        runs = self.repository.list_metadata(include_archived=include_archived)
+        return [
+            run for run in runs
+            if (row := self.repository.get_raw_metadata_row(run.run_id))
+            and row["storage_state"] == "committed" and row["integrity_status"] == "valid"
+        ]
+
+    @staticmethod
+    def _immutable_metadata(metadata: ResearchRunMetadataDTO) -> dict[str, Any]:
+        value = asdict(metadata)
+        for field in ("equity_path", "equity_parquet_hash", "trades_path", "trades_parquet_hash",
+                      "is_archived", "promoted_version_id", "promotion_reconciliation_status"):
+            value.pop(field, None)
+        return value
+
+    @staticmethod
+    def _metadata_with_execution_contract(metadata: ResearchRunMetadataDTO) -> ResearchRunMetadataDTO:
+        contract = metadata.execution_contract
+        if contract not in {"next-session-open.v2", "legacy-same-day-close.v1", "unversioned"}:
+            raise ResearchRunIntegrityError(f"不支援的執行契約: {contract}")
+        declared = metadata.data_manifest.get("execution_contract")
+        if declared and metadata.execution_price in {"next-session-open.v2", "legacy-same-day-close.v1"}:
+            if declared != metadata.execution_price:
+                raise ResearchRunIntegrityError("metadata 與 manifest 執行契約不一致")
+        if contract == "unversioned":
+            return metadata
+        return replace(metadata, execution_price=contract,
+                       data_manifest={**metadata.data_manifest, "execution_contract": contract})
 
     def archive_run(self, run_id: str) -> None:
         metadata = self.repository.get_metadata(run_id)

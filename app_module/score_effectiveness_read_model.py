@@ -149,10 +149,26 @@ class ScoreEffectivenessReadModel:
             warnings.append("missing_benchmark_excess")
         if any(outcome.industry_excess_bp is None for outcome in ready):
             warnings.append("missing_industry_excess")
+        if any(outcome.liquidity_cost_bp is None for outcome in ready):
+            warnings.append("missing_liquidity_cost")
+        if any(
+            outcome.benchmark_excess_bp is not None
+            and outcome.liquidity_cost_bp is not None
+            and outcome.liquidity_cost_bp < 0
+            for outcome in ready
+        ):
+            warnings.append("invalid_liquidity_cost")
         if pending:
             warnings.append("pending_forward_outcome")
         if missing:
             warnings.append("missing_forward_outcome")
+        if ready and not any(
+            outcome.benchmark_excess_bp is not None and outcome.liquidity_cost_bp is not None
+            for outcome in ready
+        ):
+            limitations.append("目前沒有可配對的 benchmark 超額與 liquidity cost，不能計算成本後超額。")
+        if ready:
+            limitations.append("成本後超額只扣除 liquidity_cost_bp；完整 turnover、手續費與稅費仍需成交帳本。")
 
         return ScoreBucketAuditRow(
             bucket=bucket,
@@ -177,6 +193,24 @@ class ScoreEffectivenessReadModel:
             ),
             max_drawdown_bp_by_horizon=self._worst_drawdown_by_horizon(ready),
             win_rate_bp_by_horizon=self._win_rate_by_horizon(ready),
+            liquidity_cost_bp_by_horizon=self._mean_by_horizon(
+                (outcome.window_days, outcome.liquidity_cost_bp)
+                for outcome in ready
+                if outcome.liquidity_cost_bp is not None
+            ),
+            cost_adjusted_excess_bp_by_horizon=self._mean_by_horizon(
+                (
+                    outcome.window_days,
+                    int(outcome.benchmark_excess_bp) - int(outcome.liquidity_cost_bp),
+                )
+                for outcome in ready
+                if outcome.benchmark_excess_bp is not None and outcome.liquidity_cost_bp is not None
+            ),
+            benchmark_excess_ci95_bp_by_horizon=self._ci95_by_horizon(
+                (outcome.window_days, outcome.benchmark_excess_bp)
+                for outcome in ready
+                if outcome.benchmark_excess_bp is not None
+            ),
             warnings=sorted(set(warnings)),
             limitations=limitations,
         )
@@ -213,7 +247,45 @@ class ScoreEffectivenessReadModel:
             if int(outcome.forward_return_bp) > 0:
                 success[horizon] += 1
         return {
-            str(horizon): int(round(success[horizon] * 10000 / denominator))
+            str(horizon): int(
+                (
+                    Decimal(success[horizon] * 10000) / Decimal(denominator)
+                ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            )
             for horizon, denominator in sorted(total.items())
             if denominator > 0
         }
+
+    @staticmethod
+    def _ci95_by_horizon(
+        pairs: Iterable[tuple[int, int | None]],
+    ) -> dict[str, dict[str, int]]:
+        """Return a conservative normal-approximation interval in basis points.
+
+        The interval is descriptive only.  It is deliberately not used to
+        promote a score threshold or to authorize a production decision.
+        With one observation the interval collapses to the observed value and
+        the caller can use the sample-size fields to judge its weakness.
+        """
+
+        values: dict[int, list[int]] = defaultdict(list)
+        for horizon, value in pairs:
+            if value is not None:
+                values[int(horizon)].append(int(value))
+        result: dict[str, dict[str, int]] = {}
+        for horizon, items in sorted(values.items()):
+            mean = Decimal(sum(items)) / Decimal(len(items))
+            if len(items) <= 1:
+                lower = upper = mean
+            else:
+                variance = sum((Decimal(item) - mean) ** 2 for item in items) / Decimal(len(items) - 1)
+                standard_error = variance.sqrt() / Decimal(len(items)).sqrt()
+                half_width = Decimal("1.96") * standard_error
+                lower = mean - half_width
+                upper = mean + half_width
+            result[str(horizon)] = {
+                "lower_bp": int(lower.quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+                "upper_bp": int(upper.quantize(Decimal("1"), rounding=ROUND_HALF_UP)),
+                "sample_count": len(items),
+            }
+        return result

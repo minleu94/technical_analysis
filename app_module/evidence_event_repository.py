@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -25,14 +26,24 @@ class EvidenceEventRepository:
     def __init__(self, config: Any, *, db_path: str | Path | None = None) -> None:
         self.config = config
         self.db_path = Path(db_path) if db_path is not None else Path(config.db_file)
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.ensure_schema()
+
+    def _read_rows(self, table: str, sql: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+        if not self.db_path.exists():
+            return []
+        with closing(sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            conn.execute("PRAGMA query_only = ON")
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone() is None:
+                return []
+            conn.row_factory = sqlite3.Row
+            return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
     def ensure_schema(self) -> None:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(self.db_path) as conn:
             apply_evidence_event_schema(conn)
 
     def insert_event(self, event: EvidenceEvent) -> EvidenceEvent:
+        self.ensure_schema()
         existing = self.get_event_by_hash(event.event_hash)
         if existing is not None:
             return existing
@@ -95,12 +106,15 @@ class EvidenceEventRepository:
             sql += " LIMIT ?"
             params.append(int(limit))
 
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(sql, tuple(params)).fetchall()
-        return [self._row_to_event(dict(row)) for row in rows]
+        return [self._row_to_event(row) for row in self._read_rows("evidence_events", sql, tuple(params))]
+
+    def list_events_for_run(self, run_id: str) -> list[EvidenceEvent]:
+        rows = self._read_rows("evidence_events",
+            "SELECT * FROM evidence_events WHERE run_id = ? ORDER BY decision_date, event_id", (run_id,))
+        return [self._row_to_event(row) for row in rows]
 
     def upsert_outcome(self, outcome: EvidenceOutcome) -> EvidenceOutcome:
+        self.ensure_schema()
         row = self._outcome_to_row(outcome)
         columns = list(row.keys())
         placeholders = ", ".join("?" for _ in columns)
@@ -128,16 +142,13 @@ class EvidenceEventRepository:
         window_days: int,
         return_basis: str = "close_to_close_event_date",
     ) -> EvidenceOutcome | None:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                """
+        rows = self._read_rows("evidence_outcomes", """
                 SELECT * FROM evidence_outcomes
                 WHERE event_id = ? AND window_days = ? AND return_basis = ?
                 """,
                 (event_id, int(window_days), return_basis),
-            ).fetchone()
-        return self._row_to_outcome(dict(row)) if row is not None else None
+        )
+        return self._row_to_outcome(rows[0]) if rows else None
 
     def list_outcomes(
         self,
@@ -157,16 +168,11 @@ class EvidenceEventRepository:
         if where:
             sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY event_id ASC, window_days ASC"
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(sql, tuple(params)).fetchall()
-        return [self._row_to_outcome(dict(row)) for row in rows]
+        return [self._row_to_outcome(row) for row in self._read_rows("evidence_outcomes", sql, tuple(params))]
 
     def _fetch_event(self, where: str, params: tuple[Any, ...]) -> EvidenceEvent | None:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(f"SELECT * FROM evidence_events WHERE {where}", params).fetchone()
-        return self._row_to_event(dict(row)) if row is not None else None
+        rows = self._read_rows("evidence_events", f"SELECT * FROM evidence_events WHERE {where}", params)
+        return self._row_to_event(rows[0]) if rows else None
 
     def _event_to_row(self, event: EvidenceEvent) -> dict[str, Any]:
         return {
