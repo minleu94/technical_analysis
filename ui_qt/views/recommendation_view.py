@@ -10,10 +10,11 @@ from PySide6.QtWidgets import (
     QComboBox, QMessageBox, QSplitter, QScrollArea,
     QMenu, QDialog, QInputDialog
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 import pandas as pd
 from copy import deepcopy
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pathlib import Path
@@ -59,6 +60,7 @@ from ui_qt.views.recommendation.execution_coordinator import (
     RecommendationExecutionRequest,
 )
 from app_module.recommendation_save_coordinator import RecommendationSaveRequest
+from app_module.research_session import ResearchStockContextDTO
 
 
 def build_recommendation_portfolio_backtest_config(
@@ -74,12 +76,50 @@ def build_recommendation_portfolio_backtest_config(
         "mode": "recommendation_portfolio",
         "profile_id": profile_id,
         "profile_name": profile_name,
-        "strategy_config": strategy_config,
+        "strategy_config": deepcopy(strategy_config),
         "regime": regime,
         "top_n": top_n,
         "holding_days": holding_days,
         "allocation_method": allocation_method,
     }
+
+
+def format_execution_elapsed(seconds: float | int | None) -> str:
+    """將背景工作耗時格式化為穩定、可讀的時分秒文字。"""
+
+    try:
+        total_seconds = max(0, int(seconds or 0))
+    except (TypeError, ValueError):
+        total_seconds = 0
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds_value = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds_value:02d}"
+
+
+def recommendation_execution_stage(
+    message: str,
+    percentage: int | float,
+) -> tuple[str, int, int]:
+    """把既有兩參數進度回呼映射為可量化的四階段顯示。
+
+    服務目前只保證回報百分比與訊息，因此這裡只做 UI 階段投影；不把
+    推薦分數或候選股票數量當成未經服務確認的進度證據。
+    """
+
+    try:
+        progress = max(0, min(100, int(percentage)))
+    except (TypeError, ValueError):
+        progress = 0
+    normalized_message = str(message or "")
+    if progress >= 100 or normalized_message == "分析完成":
+        return "完成", 4, 4
+    if progress >= 90 or "整理" in normalized_message:
+        return "整理推薦結果", 4, 4
+    if progress >= 35 or "規則" in normalized_message:
+        return "執行推薦規則", 3, 4
+    if progress > 10 or "範圍" in normalized_message:
+        return "建立分析範圍", 2, 4
+    return "讀取股票資料", 1, 4
 
 
 class RecommendationView(QWidget):
@@ -88,6 +128,7 @@ class RecommendationView(QWidget):
     # 自定義信號
     recommendationRequested = Signal(dict)  # 推薦請求（傳遞配置）
     sendToBacktestRequested = Signal(dict)  # 一鍵送回測請求（Phase 3.3）
+    stockResearchRequested = Signal(object)  # 單股研究上下文（唯讀下鑽）
 
     def __init__(
         self,
@@ -128,12 +169,27 @@ class RecommendationView(QWidget):
 
         # 數據模型
         self.recommendations_model: Optional[PandasTableModel] = None
+        self.current_result_id: str = ""
 
         # Worker
         self.worker: Optional[ProgressTaskWorker] = None
         from app_module.report_export_service import ReportExportService
         self.report_export_service = ReportExportService()
         self._report_export_workers = []
+
+        # 推薦背景工作的可見生命週期狀態。Timer 只更新耗時與最後活動，
+        # 不會碰觸推薦服務或改變既有結果契約。
+        self._execution_status_timer = QTimer(self)
+        self._execution_status_timer.setInterval(500)
+        self._execution_status_timer.timeout.connect(self._refresh_execution_status)
+        self._execution_started_monotonic: float | None = None
+        self._execution_last_activity_monotonic: float | None = None
+        self._execution_last_activity_at: datetime | None = None
+        self._execution_progress = 0
+        self._execution_phase = "尚未開始"
+        self._execution_phase_position = "0/4"
+        self._execution_state = "尚未執行"
+        self._execution_cancel_requested = False
 
         # 策略配置狀態
         self.strategy_config = self._get_default_config()
@@ -831,6 +887,15 @@ class RecommendationView(QWidget):
         self.execute_btn.clicked.connect(self._execute_recommendation)
         layout.addWidget(self.execute_btn)
 
+        # 合作式取消：只送出取消請求，讓背景工作自行收尾並釋放資源。
+        self.cancel_execution_btn = QPushButton("取消分析")
+        self.cancel_execution_btn.setVisible(False)
+        self.cancel_execution_btn.setEnabled(False)
+        self.cancel_execution_btn.setAccessibleName("取消推薦分析")
+        self.cancel_execution_btn.setToolTip("送出安全取消請求；背景工作完成收尾後才會結束。")
+        self.cancel_execution_btn.clicked.connect(self._cancel_recommendation)
+        layout.addWidget(self.cancel_execution_btn)
+
         # 進度條
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
@@ -841,7 +906,16 @@ class RecommendationView(QWidget):
         # 進度文本
         self.progress_label = QLabel("")
         self.progress_label.setVisible(False)
+        self.progress_label.setAccessibleName("推薦分析進度訊息")
         layout.addWidget(self.progress_label)
+
+        # 即使進度回呼暫停，也持續顯示可量化階段、耗時與最後活動時間。
+        self.execution_status_label = QLabel("狀態：尚未執行")
+        self.execution_status_label.setObjectName("recommendationExecutionStatus")
+        self.execution_status_label.setWordWrap(True)
+        self.execution_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.execution_status_label.setAccessibleName("推薦分析執行狀態")
+        layout.addWidget(self.execution_status_label)
 
         layout.addStretch()
 
@@ -879,6 +953,14 @@ class RecommendationView(QWidget):
         self.add_to_watchlist_btn.clicked.connect(self._add_selected_to_watchlist)
         if self.watchlist_service:
             title_layout.addWidget(self.add_to_watchlist_btn)
+
+        # 從已顯示的推薦列進入單股研究；只傳遞目前結果的 metadata，不重新執行推薦。
+        self.stock_research_btn = QPushButton("查看個股研究")
+        self.stock_research_btn.setVisible(False)
+        self.stock_research_btn.setEnabled(False)
+        self.stock_research_btn.setToolTip("選取一檔推薦股票後，帶著原決策／資料日期查看個股研究。")
+        self.stock_research_btn.clicked.connect(self._open_selected_stock_research)
+        title_layout.addWidget(self.stock_research_btn)
 
         # 送 Research Lab 批次回測按鈕（Phase 3.3）
         self.send_to_backtest_btn = QPushButton("送 Research Lab 批次回測")
@@ -1575,6 +1657,12 @@ class RecommendationView(QWidget):
         """執行推薦分析"""
         # 收集配置
         config = self._collect_config()
+        config = deepcopy(config)
+        active_profile = self.profile_combo.currentData() if self.is_beginner_mode else None
+        if active_profile:
+            profile_meta = self.profiles.get(active_profile, {})
+            config["profile_id"] = active_profile
+            config["profile_version"] = profile_meta.get("version", "1.0.0")
         request = RecommendationExecutionRequest(config)
 
         # 檢查配置有效性
@@ -1599,6 +1687,8 @@ class RecommendationView(QWidget):
         self.execute_btn.setEnabled(False)
         self.execute_btn.setText("分析中...")
 
+        self._begin_execution_status()
+
         # 顯示進度條
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
@@ -1614,29 +1704,181 @@ class RecommendationView(QWidget):
             self.save_result_btn.setVisible(False)
         self.export_report_btn.setVisible(False)
         self.current_recommendations = None
+        self.current_result_id = ""
+        if hasattr(self, "stock_research_btn"):
+            self.stock_research_btn.setVisible(False)
+            self.stock_research_btn.setEnabled(False)
 
         # 創建 Worker 包裝推薦服務調用
-        def recommendation_task(progress_callback=None):
-            """推薦分析任務（支持進度回調）"""
-            return request.execute(self.recommendation_service, progress_callback)
+        def recommendation_task(progress_callback=None, cancel_callback=None):
+            """推薦分析任務（支持詳細進度與合作式取消）。"""
+            return request.execute(
+                self.recommendation_service,
+                progress_callback,
+                cancellation_callback=cancel_callback,
+                detailed_progress=True,
+            )
 
         # 創建 Worker
         self.worker = ProgressTaskWorker(recommendation_task)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished.connect(self._on_recommendation_finished)
         self.worker.error.connect(self._on_recommendation_error)
+        self.worker.cancelled.connect(self._on_recommendation_cancelled)
         self.worker.start()
+
+    def _begin_execution_status(self) -> None:
+        """初始化推薦執行狀態並啟動純 UI 的心跳更新。"""
+
+        now = time.monotonic()
+        self._execution_started_monotonic = now
+        self._execution_last_activity_monotonic = now
+        self._execution_last_activity_at = datetime.now()
+        self._execution_progress = 0
+        self._execution_phase = "讀取股票資料"
+        self._execution_phase_position = "1/4"
+        self._execution_state = "執行中"
+        self._execution_cancel_requested = False
+        cancel_button = getattr(self, "cancel_execution_btn", None)
+        if cancel_button is not None:
+            cancel_button.setVisible(True)
+            cancel_button.setEnabled(True)
+            cancel_button.setText("取消分析")
+        timer = getattr(self, "_execution_status_timer", None)
+        if timer is not None:
+            timer.start()
+        self._refresh_execution_status()
+
+    def _execution_status_text(self) -> str:
+        now = time.monotonic()
+        started_monotonic = getattr(self, "_execution_started_monotonic", None)
+        if started_monotonic is None:
+            elapsed_seconds = 0
+        else:
+            elapsed_seconds = max(0.0, now - started_monotonic)
+
+        last_activity_monotonic = getattr(self, "_execution_last_activity_monotonic", None)
+        if last_activity_monotonic is None:
+            activity_age = "未收到回報"
+        else:
+            activity_age = format_execution_elapsed(
+                max(0.0, now - last_activity_monotonic)
+            )
+        last_activity_at = getattr(self, "_execution_last_activity_at", None)
+        if last_activity_at is None:
+            last_activity = "未記錄"
+        else:
+            last_activity = (
+                f"{last_activity_at.strftime('%H:%M:%S')}"
+                f"（{activity_age}前）"
+            )
+        return (
+            f"狀態：{getattr(self, '_execution_state', '尚未執行')}｜"
+            f"階段：{getattr(self, '_execution_phase', '尚未開始')}（"
+            f"{getattr(self, '_execution_phase_position', '0/4')}）｜"
+            f"進度：{getattr(self, '_execution_progress', 0)}%｜"
+            f"耗時：{format_execution_elapsed(elapsed_seconds)}｜"
+            f"最後活動：{last_activity}"
+        )
+
+    def _refresh_execution_status(self) -> None:
+        label = getattr(self, "execution_status_label", None)
+        if label is not None:
+            label.setText(self._execution_status_text())
+
+    def _record_execution_activity(self, message: str, percentage: int) -> None:
+        phase, phase_index, phase_total = recommendation_execution_stage(message, percentage)
+        self._execution_phase = phase
+        self._execution_phase_position = f"{phase_index}/{phase_total}"
+        self._execution_progress = max(0, min(100, int(percentage)))
+        self._execution_last_activity_monotonic = time.monotonic()
+        self._execution_last_activity_at = datetime.now()
+        self._refresh_execution_status()
+
+    def _finish_execution_status(
+        self,
+        state: str,
+        *,
+        message: str | None = None,
+        percentage: int | None = None,
+    ) -> None:
+        self._execution_state = state
+        if percentage is not None:
+            self._execution_progress = max(0, min(100, int(percentage)))
+        if message is not None:
+            phase, phase_index, phase_total = recommendation_execution_stage(
+                message, getattr(self, "_execution_progress", 0)
+            )
+            self._execution_phase = phase
+            self._execution_phase_position = f"{phase_index}/{phase_total}"
+        timer = getattr(self, "_execution_status_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._refresh_execution_status()
+
+    def _mark_execution_cancel_requested(self) -> None:
+        if self._execution_cancel_requested:
+            return
+        self._execution_cancel_requested = True
+        self._execution_state = "取消中"
+        self._execution_phase = "安全取消"
+        self._execution_phase_position = "—"
+        self._execution_last_activity_monotonic = time.monotonic()
+        self._execution_last_activity_at = datetime.now()
+        cancel_button = getattr(self, "cancel_execution_btn", None)
+        if cancel_button is not None:
+            cancel_button.setEnabled(False)
+            cancel_button.setText("取消中...")
+        progress_label = getattr(self, "progress_label", None)
+        if progress_label is not None:
+            progress_label.setVisible(True)
+            progress_label.setText("取消請求已送出；等待背景分析安全結束…")
+        self._refresh_execution_status()
+
+    def _cancel_recommendation(self) -> None:
+        """送出合作式取消，不強制終止仍可能持有資料資源的執行緒。"""
+
+        worker = self.worker
+        if worker is None or not worker.isRunning():
+            return
+        self._mark_execution_cancel_requested()
+        worker.cancel(cooperative=True, wait=False)
 
     def _on_progress(self, message: str, percentage: int):
         """進度更新"""
         self.progress_label.setText(message)
         self.progress_bar.setValue(percentage)
+        self._record_execution_activity(message, percentage)
+
+    def _on_recommendation_cancelled(self):
+        """背景工作已安全收尾，保留可追蹤的取消結果。"""
+
+        self._finish_execution_status("已取消")
+        self.execute_btn.setEnabled(True)
+        self.execute_btn.setText("執行推薦分析")
+        cancel_button = getattr(self, "cancel_execution_btn", None)
+        if cancel_button is not None:
+            cancel_button.setVisible(False)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(True)
+        self.progress_label.setText("分析已安全取消；未套用部分結果。")
 
     def _on_recommendation_finished(self, recommendations: List[RecommendationDTO]):
         """推薦分析完成"""
+        # 取消請求與 finished signal 可能在 Qt queued delivery 期間競速；
+        # 一旦使用者已要求取消，結果不得在畫面上套用。
+        if getattr(self, "_execution_cancel_requested", False):
+            self._on_recommendation_cancelled()
+            return
+        finish_status = getattr(self, "_finish_execution_status", None)
+        if callable(finish_status):
+            finish_status("已完成", message="分析完成", percentage=100)
         # 恢復按鈕
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("執行推薦分析")
+        cancel_button = getattr(self, "cancel_execution_btn", None)
+        if cancel_button is not None:
+            cancel_button.setVisible(False)
 
         # 隱藏進度條
         self.progress_bar.setVisible(False)
@@ -1644,9 +1886,13 @@ class RecommendationView(QWidget):
 
         # 保存當前推薦結果（用於保存功能）
         self.current_recommendations = recommendations
+        self.current_result_id = ""
 
         # 顯示結果
         if not recommendations:
+            if hasattr(self, "stock_research_btn"):
+                self.stock_research_btn.setVisible(False)
+                self.stock_research_btn.setEnabled(False)
             QMessageBox.information(self, "分析完成", "沒有找到符合條件的推薦股票")
             return
 
@@ -1685,12 +1931,20 @@ class RecommendationView(QWidget):
         self.send_to_backtest_btn.setVisible(True)
         self.send_profile_to_portfolio_backtest_btn.setVisible(True)
         self.export_report_btn.setVisible(True)
+        self.stock_research_btn.setVisible(True)
+        self.stock_research_btn.setEnabled(False)
 
     def _on_recommendation_error(self, error_msg: str):
         """推薦分析出錯"""
+        finish_status = getattr(self, "_finish_execution_status", None)
+        if callable(finish_status):
+            finish_status("失敗")
         # 恢復按鈕
         self.execute_btn.setEnabled(True)
         self.execute_btn.setText("執行推薦分析")
+        cancel_button = getattr(self, "cancel_execution_btn", None)
+        if cancel_button is not None:
+            cancel_button.setVisible(False)
 
         # 隱藏進度條
         self.progress_bar.setVisible(False)
@@ -1850,7 +2104,8 @@ class RecommendationView(QWidget):
                 if stock_code:
                     stocks.append({
                         'stock_code': str(stock_code),
-                        'stock_name': str(stock_name)
+                        'stock_name': str(stock_name),
+                        'source_id': getattr(self, "current_result_id", "") or ""
                     })
 
         if stocks:
@@ -1902,6 +2157,7 @@ class RecommendationView(QWidget):
             liquidity_gate_payload_json=list(getattr(self.recommendation_service, "last_liquidity_gate_payload_json", [])),
             exclusion_quality=str(getattr(self.recommendation_service, "last_exclusion_quality", "observed")),
             exclusion_warnings_json=list(getattr(self.recommendation_service, "last_exclusion_warnings_json", [])),
+            run_context=deepcopy(getattr(self.recommendation_service, "last_run_context", {})),
         )
 
     def _current_recommendation_source_created_at(self) -> str:
@@ -1948,7 +2204,10 @@ class RecommendationView(QWidget):
             )
             request = RecommendationSaveRequest(
                 result_name=result_name.strip(),
-                config=self.current_config,
+                config={
+                    **deepcopy(self.current_config),
+                    "_recommendation_run_context": deepcopy(getattr(self.recommendation_service, "last_run_context", {})),
+                },
                 recommendations=tuple(self.current_recommendations),
                 current_profile=self.current_profile,
                 profile_meta=profile_meta,
@@ -1960,6 +2219,7 @@ class RecommendationView(QWidget):
                 recommendation_service=self.recommendation_service,
                 regime_service=self.regime_service,
             )
+            self.current_result_id = outcome.result_id
             if outcome.watchlist_error:
                 print(
                     "[RecommendationView] 創建選股清單失敗: "
@@ -2002,14 +2262,127 @@ class RecommendationView(QWidget):
     def _on_selection_changed(self):
         """表格選擇改變（單擊時觸發）"""
         self._update_detail_text()
+        self._update_stock_research_button()
 
     def _on_row_clicked(self, index):
         """表格行單擊事件"""
         self._update_detail_text()
+        self._update_stock_research_button()
 
     def _on_row_double_clicked(self, index):
         """表格行雙擊事件"""
         self._update_detail_text()
+        self._emit_stock_research_context(index)
+
+    def _open_selected_stock_research(self) -> None:
+        """從選取列傳送單股上下文；不觸發新的推薦分析。"""
+
+        selection = self.results_table.selectionModel()
+        rows = selection.selectedRows() if selection else []
+        if len(rows) == 1:
+            self._emit_stock_research_context(rows[0])
+
+    def _emit_stock_research_context(self, index=None) -> None:
+        if self.recommendations_model is None:
+            return
+        if index is None or not index.isValid():
+            selection = self.results_table.selectionModel()
+            rows = selection.selectedRows() if selection else []
+            if len(rows) != 1:
+                return
+            index = rows[0]
+        frame = self.recommendations_model.getDataFrame()
+        row_number = index.row()
+        if row_number < 0 or row_number >= len(frame):
+            return
+        row = frame.iloc[row_number]
+        code = str(row.get("證券代號", "")).strip()
+        if not code:
+            return
+        recommendation = next(
+            (
+                item
+                for item in (self.current_recommendations or ())
+                if str(getattr(item, "stock_code", "")).strip() == code
+            ),
+            None,
+        )
+        stock_name = str(row.get("證券名稱", "") or "").strip()
+        if recommendation is not None and not stock_name:
+            stock_name = str(getattr(recommendation, "stock_name", "") or "").strip()
+        self.stockResearchRequested.emit(
+            self._build_stock_research_context(code, stock_name, recommendation)
+        )
+
+    def _build_stock_research_context(
+        self,
+        stock_code: str,
+        stock_name: str = "",
+        recommendation: RecommendationDTO | None = None,
+    ) -> ResearchStockContextDTO:
+        """由目前畫面結果建立唯讀 context；不補抓行情也不重算。"""
+
+        run_context = getattr(self.recommendation_service, "last_run_context", {}) or {}
+        if not isinstance(run_context, dict):
+            run_context = {}
+        config = self.current_config if isinstance(self.current_config, dict) else {}
+        profile_id = str(
+            run_context.get("profile_id")
+            or self.current_profile
+            or config.get("profile_id")
+            or ""
+        )
+        profile_version = str(
+            run_context.get("profile_version")
+            or config.get("profile_version")
+            or ""
+        )
+        result_id = str(getattr(self, "current_result_id", "") or "")
+        source_id = str(run_context.get("source_id") or result_id or "")
+        source_kind = str(run_context.get("source_kind") or "recommendation")
+        fallback_data_date = getattr(recommendation, "eligible_universe_date", "") or ""
+        return ResearchStockContextDTO(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            decision_date=str(run_context.get("as_of_date") or config.get("as_of_date") or ""),
+            data_date=str(
+                run_context.get("data_date")
+                or config.get("data_date")
+                or fallback_data_date
+                or ""
+            ),
+            result_id=result_id,
+            profile_id=profile_id,
+            profile_version=profile_version,
+            source_id=source_id,
+            source_kind=source_kind,
+            source_label=("已保存推薦結果" if result_id else "目前推薦結果"),
+            source_workspace="recommendation",
+        )
+
+    def _update_stock_research_button(self) -> None:
+        button = getattr(self, "stock_research_btn", None)
+        if button is None:
+            return
+        selection = self.results_table.selectionModel()
+        button.setEnabled(bool(self.recommendations_model and selection and selection.selectedRows()))
+
+    def select_stock(self, stock_code: str, result_id: str | None = None) -> bool:
+        """回到推薦頁時定位既有結果列，不執行新的推薦。"""
+
+        if self.recommendations_model is None:
+            return False
+        if result_id and self.current_result_id and result_id != self.current_result_id:
+            return False
+        code = str(stock_code).strip()
+        frame = self.recommendations_model.getDataFrame()
+        for row_number, value in enumerate(frame.get("證券代號", ())):
+            if str(value).strip() == code:
+                self.results_table.selectRow(row_number)
+                self._update_detail_text()
+                self._update_stock_research_button()
+                return True
+        return False
 
     def _generate_why_not(self, recommendation: RecommendationDTO, config: Dict[str, Any]) -> str:
         """生成 Why Not（相容入口，委派純 presenter）。"""
@@ -2315,6 +2688,8 @@ class RecommendationView(QWidget):
         workers = [self.worker, *self._report_export_workers]
         for worker in workers:
             if worker is not None and worker.isRunning():
+                if worker is self.worker:
+                    self._mark_execution_cancel_requested()
                 worker.cancel(cooperative=True, wait=False)
         return not any(
             worker is not None and worker.isRunning()

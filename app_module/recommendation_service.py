@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from copy import deepcopy
+from contextlib import closing
+import hashlib
+import json
+import sqlite3
 
 # 確保 pd.isna 可用（pandas 兼容性）
 if not hasattr(pd, 'isna'):
@@ -44,6 +49,7 @@ from app_module.recommendation_market_data_provider import (
     DefaultRecommendationMarketDataProvider,
 )
 from app_module.recommendation_market_frame import normalize_market_frame
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 from app_module.recommendation_ranking_pipeline import build_ranking_plan
 from app_module.application_ports import MarketFrameProvider
 from data_module.fundamental_sqlite_provider import FundamentalSQLiteProvider
@@ -84,6 +90,7 @@ class RecommendationService:
         self.last_liquidity_gate_payload_json: List[Dict[str, Any]] = []
         self.last_exclusion_quality: str = "observed"
         self.last_exclusion_warnings_json: List[str] = []
+        self.last_run_context: Dict[str, Any] = {}
         self._fundamental_sqlite_provider: FundamentalSQLiteProvider | None = None
         self._fundamental_provider_initialization_attempted = False
 
@@ -94,6 +101,7 @@ class RecommendationService:
         self.last_liquidity_gate_payload_json = []
         self.last_exclusion_quality = "observed"
         self.last_exclusion_warnings_json = []
+        self.last_run_context = {}
 
     def _matrix_row(
         self,
@@ -135,12 +143,23 @@ class RecommendationService:
         )
 
     def _finalize_negative_evidence_buffers(self) -> None:
+        if self.last_run_context:
+            self.last_run_context["data_fingerprint"] = hashlib.sha256(json.dumps(
+                {"market": self.last_run_context["market_data_fingerprint"], "fundamental": self.last_run_context["fundamental_inputs"]},
+                sort_keys=True, ensure_ascii=False, default=str,
+            ).encode("utf-8")).hexdigest()
+        for row in self.last_screening_matrix:
+            row["as_of_date"] = self.last_run_context.get("as_of_date", "")
+            row["data_fingerprint"] = self.last_run_context.get("data_fingerprint", "")
         buffers = build_negative_evidence_buffers(self.last_screening_matrix)
         self.last_excluded_candidates_json = buffers.excluded_candidates
         self.last_why_not_payload_json = buffers.why_not_payload
         self.last_liquidity_gate_payload_json = buffers.liquidity_gate_payload
         self.last_exclusion_quality = buffers.exclusion_quality
         self.last_exclusion_warnings_json = buffers.exclusion_warnings
+        if any(row.get("quality") in {"missing", "degraded"} for row in self.last_screening_matrix):
+            self.last_exclusion_quality = "degraded"
+            self.last_exclusion_warnings_json.append("screening_contains_unknown_evidence")
 
     @staticmethod
     def _configured_volume_change_min_percent(config: Dict[str, Any]) -> Decimal | None:
@@ -209,6 +228,8 @@ class RecommendationService:
             db_path = Path(cast(str, db_file))
         except (TypeError, ValueError):
             return None
+        if not db_path.is_file():
+            return None
 
         availability_file = getattr(
             self.config,
@@ -230,11 +251,63 @@ class RecommendationService:
         )
         return self._fundamental_sqlite_provider
 
+    def _load_historical_market_frame(self, cutoff: str | None) -> pd.DataFrame:
+        """歷史入口使用決策日窗口及唯讀連線，不初始化 DBManager。"""
+        if getattr(self.config, "use_sqlite", False):
+            db_path = Path(self.config.db_file).resolve()
+            with closing(sqlite3.connect(f"{db_path.as_uri()}?mode=ro", uri=True)) as conn:
+                conn.execute("PRAGMA query_only=ON")
+                tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if cutoff is None:
+                    latest = conn.execute("SELECT MAX(日期) FROM daily_prices").fetchone()[0]
+                    if latest is None:
+                        return pd.DataFrame(columns=["日期", "證券代號"])
+                    cutoff = self._normalize_decision_date(latest)
+                start = (pd.Timestamp(cutoff) - pd.Timedelta(days=60)).strftime("%Y%m%d")
+                end = cutoff.replace("-", "")
+                if "technical_indicators" in tables:
+                    query = (
+                        "SELECT p.*, t.* FROM daily_prices p LEFT JOIN technical_indicators t "
+                        "ON p.證券代號=t.證券代號 AND p.日期=t.日期 "
+                    )
+                else:
+                    query = "SELECT p.* FROM daily_prices p "
+                query += "WHERE replace(CAST(p.日期 AS TEXT), '-', '') BETWEEN ? AND ? ORDER BY p.日期, p.證券代號"
+                frame = pd.read_sql_query(query, conn, params=(start, end))
+                return frame.loc[:, ~frame.columns.duplicated()].copy()
+        paths = [getattr(self.config, "all_stocks_data_file", None), getattr(self.config, "stock_data_file", None)]
+        for candidate in paths:
+            if candidate is not None and candidate.is_file():
+                return pd.read_csv(candidate, encoding="utf-8-sig", dtype={"證券代號": str, "股票代號": str})
+        raise FileNotFoundError("歷史推薦缺少唯讀行情來源")
+
+    def _decision_frame(self, frame: pd.DataFrame, cutoff: str | None) -> tuple[pd.DataFrame, str, str]:
+        frame, stock_col = normalize_market_frame(frame)
+        if frame.empty:
+            return frame, stock_col, cutoff or ""
+        frame["日期"] = parse_stock_dates(frame["日期"])
+        frame = frame[frame["日期"].notna()].copy()
+        decision_date = cutoff or (frame["日期"].max().strftime("%Y-%m-%d") if not frame.empty else "")
+        if decision_date:
+            limit = pd.Timestamp(decision_date)
+            frame = frame[frame["日期"] <= limit].copy()
+            if "available_date" in frame:
+                available = parse_stock_dates(frame["available_date"])
+                frame = frame[available.notna() & (available <= limit)].copy()
+                frame["available_date"] = available.loc[frame.index]
+                # 已知修訂優先；未到可得日的修訂不影響歷史窗口。
+                frame = frame.sort_values("available_date", kind="stable").drop_duplicates([stock_col, "日期"], keep="last")
+        frame[stock_col] = frame[stock_col].astype(str)
+        return frame.reset_index(drop=True), stock_col, decision_date
+
     def run_recommendation(
         self,
         config: Dict[str, Any],
         max_stocks: int = 200,
-        top_n: int = 50
+        top_n: int = 50,
+        *,
+        as_of_date: str | date | None = None,
+        universe: Optional[List[str]] = None,
     ) -> List[RecommendationDTO]:
         """執行推薦分析
 
@@ -250,8 +323,13 @@ class RecommendationService:
         """
         import logging
         logger = logging.getLogger(__name__)
+        config = deepcopy(config)
+        if max_stocks < 1 or top_n < 0:
+            raise ValueError("max_stocks 必須為正數，top_n 不得為負數")
         ranking_config, threshold_mode = self._validate_ranking_config(config)
         self._reset_negative_evidence_buffers()
+        cutoff_input = as_of_date if as_of_date is not None else config.get("as_of_date")
+        cutoff = self._normalize_decision_date(cutoff_input) if cutoff_input is not None else None
 
         # ✅ 記錄輸入參數
         logger.info(
@@ -262,7 +340,33 @@ class RecommendationService:
             f"技術指標啟用={config.get('technical', {}).get('momentum', {}).get('enabled', False) or config.get('technical', {}).get('trend', {}).get('enabled', False)}"
         )
 
-        df, stock_col = normalize_market_frame(self.market_data_provider())
+        source = (
+            self._load_historical_market_frame(cutoff)
+            if isinstance(self.market_data_provider, DefaultRecommendationMarketDataProvider) and (cutoff or getattr(self.config, "use_sqlite", False))
+            else self.market_data_provider()
+        )
+        df, stock_col, decision_cutoff = self._decision_frame(source, cutoff)
+        if universe is not None and not df.empty:
+            df = df[df[stock_col].isin({str(code) for code in universe})].copy()
+        canonical = df.sort_values([stock_col, "日期"], kind="stable") if not df.empty else df
+        fingerprint_payload = canonical.reindex(sorted(canonical.columns), axis=1).astype(str).to_dict("records")
+        self.last_run_context = {
+            "schema_version": "recommendation-context.v1",
+            "as_of_date": decision_cutoff,
+            "strategy_config": deepcopy(config),
+            "profile_id": str(config.get("profile_id") or ""),
+            "profile_version": str(config.get("profile_version") or ""),
+            "universe_spec": {"codes": sorted({str(code) for code in universe}) if universe is not None else None, "max_stocks": max_stocks},
+            "source_id": type(self.market_data_provider).__name__,
+            "market_data_fingerprint": hashlib.sha256(json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest(),
+            "fundamental_inputs": [],
+            "data_date": canonical["日期"].max().strftime("%Y-%m-%d") if not canonical.empty else "",
+            "warnings": ["industry_membership_not_point_in_time"] if cutoff else [],
+        }
+        if df.empty:
+            self.last_run_context["eligible_universe_size"] = 0
+            self._finalize_negative_evidence_buffers()
+            return []
 
         # ✅ 記錄數據讀取結果
         import logging
@@ -277,6 +381,15 @@ class RecommendationService:
         # 應用產業篩選（先篩選產業，再限制數量）
         industry_filter = config.get('filters', {}).get('industry', '全部')
         all_stocks = df[stock_col].unique()
+
+        if cutoff and industry_filter and industry_filter != '全部':
+            self.last_screening_matrix = [self._matrix_row(
+                stock_code=str(code), status="missing", reason_codes=["industry_membership_pit_unavailable"],
+                quality="missing", stage="universe_gate", threshold_mode=threshold_mode,
+            ) for code in all_stocks]
+            self.last_run_context["eligible_universe_size"] = 0
+            self._finalize_negative_evidence_buffers()
+            return []
 
         if industry_filter and industry_filter != '全部':
             # 先從所有股票中篩選出屬於指定產業的股票
@@ -302,7 +415,7 @@ class RecommendationService:
                     if test_industries:
                         error_msg += f"\n範例：股票 {test_stock} 屬於：{', '.join(test_industries[:3])}"
                         break
-                raise ValueError(error_msg)
+                self.last_run_context["warnings"].append("industry_filter_empty")
 
             # 只保留屬於該產業的股票
             stocks = [s for s in all_stocks if str(s) in filtered_stocks]
@@ -373,7 +486,7 @@ class RecommendationService:
 
             try:
                 # 生成推薦（generate_recommendations 內部會處理篩選，這裡不需要額外篩選）
-                result_df = self.strategy_configurator.generate_recommendations(stock_df, config)
+                result_df = self.strategy_configurator.generate_recommendations(stock_df, deepcopy(config))
 
                 stats['processed'] += 1
 
@@ -425,7 +538,7 @@ class RecommendationService:
 
                     # 取得決策日期。基本面篩選只接受可標準化的日期，避免無效日期
                     # 造成 PIT 查詢意外納入未來資料。
-                    raw_date = stock_df.iloc[-1]['日期']
+                    raw_date = decision_cutoff
                     pe_ratio_max = to_decimal(config.get('filters', {}).get('pe_ratio_max', "999.0"))
                     revenue_yoy_min = to_decimal(config.get('filters', {}).get('monthly_revenue_yoy_min', "-100.0"))
                     fundamental_filters_enabled = (
@@ -457,20 +570,22 @@ class RecommendationService:
                     # 1. 本益比 PE 過濾
                     if pe_ratio_max < to_decimal("999.0"):
                         pe_val_dec = None
-                        import sqlite3
                         try:
-                            with sqlite3.connect(self.config.db_file) as conn:
+                            db_uri = Path(self.config.db_file).resolve().as_uri() + "?mode=ro"
+                            with closing(sqlite3.connect(db_uri, uri=True)) as conn:
+                                conn.execute("PRAGMA query_only=ON")
                                 conn.row_factory = sqlite3.Row
                                 cursor = conn.cursor()
                                 cursor.execute(
-                                    "SELECT value FROM fundamental_valuation_metrics "
-                                    "WHERE stock_code = ? AND metric_name = 'pe' AND available_date <= ? "
-                                    "ORDER BY available_date DESC, as_of_date DESC LIMIT 1",
-                                    (stock_code_text, decision_date)
+                                    "SELECT value, as_of_date, available_date, source, source_version, quality FROM fundamental_valuation_metrics "
+                                    "WHERE stock_code = ? AND metric_name = 'pe' AND available_date <= ? AND as_of_date <= ? AND quality = 'observed' "
+                                    "ORDER BY as_of_date DESC, available_date DESC, source_version DESC LIMIT 1",
+                                    (stock_code_text, decision_date, decision_date)
                                 )
                                 row = cursor.fetchone()
                                 if row and row['value'] is not None:
                                     pe_val_dec = to_decimal(row['value'])
+                                    self.last_run_context["fundamental_inputs"].append({"stock_code": stock_code_text, "metric": "pe", **dict(row)})
                         except Exception as e:
                             logger.error(f"查詢 PE 失敗: {e}")
 
@@ -481,7 +596,7 @@ class RecommendationService:
                                 stock_name=stock_name_text,
                                 status="skipped",
                                 reason_codes=["valuation_pe_missing"],
-                                quality="observed",
+                                quality="missing",
                                 stage="strategy_evaluation",
                                 threshold_name="filters.pe_ratio_max",
                                 observed_value="missing",
@@ -519,11 +634,16 @@ class RecommendationService:
                             decision_date=date.fromisoformat(decision_date),
                         )
                         if revenue_records:
+                            self.last_run_context["fundamental_inputs"].extend({
+                                "stock_code": stock_code_text, "metric": "monthly_revenue", "period": record.period,
+                                "available_date": record.available_date.isoformat(), "source": record.source,
+                                "source_version": record.source_version, "value": str(record.revenue),
+                            } for record in sorted(revenue_records, key=lambda item: (item.period, item.available_date, item.source_version)))
                             latest_revenue = max(
                                 revenue_records,
                                 key=lambda record: (
-                                    record.available_date,
                                     record.period,
+                                    record.available_date,
                                     record.source_version,
                                 ),
                             )
@@ -558,7 +678,7 @@ class RecommendationService:
                                 stock_name=stock_name_text,
                                 status="skipped",
                                 reason_codes=["fundamental_revenue_yoy_missing"],
-                                quality="observed",
+                                quality="missing",
                                 stage="strategy_evaluation",
                                 threshold_name="filters.monthly_revenue_yoy_min",
                                 observed_value="missing",
@@ -610,7 +730,7 @@ class RecommendationService:
                     )
 
                     # 獲取股票所屬產業
-                    stock_industries = self.industry_mapper.get_stock_industries(stock_code)
+                    stock_industries = [] if cutoff else self.industry_mapper.get_stock_industries(stock_code)
                     industry_display = ', '.join(stock_industries[:2]) if stock_industries else '未知'
                     if len(stock_industries) > 2:
                         industry_display += '...'
@@ -621,7 +741,7 @@ class RecommendationService:
                     # 添加產業表現理由
                     if stock_industries:
                         for industry in stock_industries[:1]:  # 只取第一個產業
-                            industry_perf = self.industry_mapper.get_industry_performance(industry)
+                            industry_perf = self.industry_mapper.get_industry_performance(industry, date=decision_date)
                             if industry_perf:
                                 industry_change = industry_perf.get('漲跌百分比', 0)
                                 if isinstance(industry_change, str):
@@ -642,8 +762,18 @@ class RecommendationService:
                     # 使用 FinalScore（含 Regime Match Factor）作為排序依據
                     final_score = latest_row.get(
                         'FinalScore',
-                        latest_row.get('TotalScore', latest_row.get('綜合評分', 0))
+                        latest_row.get('TotalScore', latest_row.get('綜合評分'))
                     )
+                    if final_score is None or not to_decimal(final_score).is_finite():
+                        row = self._matrix_row(
+                            stock_code=stock_code_text, stock_name=stock_name_text,
+                            status="missing", reason_codes=["total_score_missing_or_nonfinite"],
+                            quality="missing", stage="strategy_evaluation", threshold_mode=threshold_mode,
+                        )
+                        self.last_screening_matrix.append(row)
+                        matrix_rows_by_stock[stock_code_text] = row
+                        stats['skipped_no_result'] += 1
+                        continue
 
                     # 判斷 Regime Match
                     regime = config.get('regime', None)
@@ -658,7 +788,7 @@ class RecommendationService:
                     recommendation = RecommendationDTO(
                         stock_code=stock_code_text,
                         stock_name=latest_row.get('證券名稱', stock_df.iloc[-1].get('證券名稱', stock_code)),
-                        close_price=latest_row.get(close_col, stock_df.iloc[-1].get(close_col, 0)) if close_col else 0,
+                        close_price=to_decimal(latest_row.get(close_col, stock_df.iloc[-1].get(close_col, 0))) if close_col else Decimal("0"),
                         price_change=price_change,
                         total_score=final_score,
                         indicator_score=latest_row.get('IndicatorScore', 0),
@@ -750,6 +880,10 @@ class RecommendationService:
                 )
 
         latest_date_str = ""
+        if not all_recommendations:
+            self.last_run_context["eligible_universe_size"] = 0
+            self._finalize_negative_evidence_buffers()
+            return []
         if not df.empty and "日期" in df.columns:
             latest_date_str = df["日期"].max().strftime("%Y-%m-%d")
         ranking_plan = build_ranking_plan(
@@ -757,14 +891,18 @@ class RecommendationService:
             mode=threshold_mode,
             top_n=top_n,
             ranking_config=ranking_config,
-            eligible_universe_date=latest_date_str,
+            eligible_universe_date=decision_cutoff or latest_date_str,
         )
+        self.last_run_context["eligible_universe_size"] = ranking_plan.eligible_universe_size
         recommendations_by_code = {
             rec.stock_code: rec for rec in all_recommendations
         }
 
         for rec in all_recommendations:
             rec.threshold_mode = ranking_plan.mode
+            rec.eligible_universe_size = ranking_plan.eligible_universe_size
+            rec.eligible_universe_date = ranking_plan.eligible_universe_date
+            rec.ranking_method = ranking_plan.ranking_method
             matrix_row_for_rec = matrix_rows_by_stock.get(rec.stock_code)
             if ranking_plan.mode != "quantile":
                 continue

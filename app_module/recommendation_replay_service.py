@@ -1,4 +1,5 @@
 from typing import Any, Callable, Dict, Iterable, List, Optional
+from copy import deepcopy
 
 import pandas as pd
 
@@ -32,6 +33,12 @@ class RecommendationReplayService:
         data = data[data["日期"] <= as_of_ts]
 
         diagnostics = []
+        if "available_date" in data:
+            available = parse_stock_dates(data["available_date"])
+            rejected = available.isna() | (available > as_of_ts)
+            if rejected.any():
+                diagnostics.append(f"unavailable_rows_excluded:{int(rejected.sum())}")
+            data = data[~rejected]
         if universe is not None:
             universe_set = {str(code) for code in universe}
             stock_col = "證券代號" if "證券代號" in data.columns else "股票代號"
@@ -40,12 +47,13 @@ class RecommendationReplayService:
             else:
                 diagnostics.append("missing_stock_code_column")
 
-        recommendations = self.provider(data, config, top_n)[:top_n]
+        frozen_config = deepcopy(config)
+        recommendations = deepcopy(self.provider(data, deepcopy(frozen_config), top_n)[:top_n])
 
         return RecommendationSnapshotDTO(
             as_of_date=as_of_ts.strftime("%Y-%m-%d"),
             profile_id=profile_id,
-            strategy_config=config,
+            strategy_config=frozen_config,
             regime=str(config.get("regime") or ""),
             recommendations=recommendations,
             diagnostics=diagnostics,

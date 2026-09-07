@@ -36,8 +36,14 @@ class PeriodHoldingDTO:
     return_pct: float
     shares: int | None = None
     actual_allocation_weight: float | None = None
+    execution_contract: str = "legacy-same-day-close.v1"
+    position_status: str = "closed"
+    exit_signal_date: str = ""
+    pnl_cents: int | None = None
 
     def pnl(self) -> float:
+        if self.pnl_cents is not None:
+            return float(to_decimal(self.pnl_cents) / 100)  # numeric-boundary: dto
         return float(quantize_money(to_decimal(self.allocation_amount) * to_decimal(self.return_pct)))  # numeric-boundary: dto
 
 
