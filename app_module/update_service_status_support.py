@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from app_module.dtos.update_loop_dtos import enrich_status_mapping
+
 
 _DATE_ALIGNED_SOURCES = {
     "market_index",
@@ -27,6 +29,7 @@ def compose_sqlite_status_read_model(
     *,
     is_overview: bool = False,
     apply_freshness: bool = False,
+    include_contract: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """以既有 SQLite status payload 組裝唯讀回傳模型。"""
     result = {source: dict(payload) for source, payload in statuses.items()}
@@ -62,4 +65,6 @@ def compose_sqlite_status_read_model(
                     source_payload["status"] = "lagging"
                 else:
                     source_payload["freshness_status"] = "current"
+    if include_contract:
+        return enrich_status_mapping(result)
     return result

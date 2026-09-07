@@ -11,7 +11,13 @@ from typing import Dict ,Any ,Optional ,List ,Callable
 from datetime import date, datetime ,timedelta
 
 import app_module.update_data_normalization as update_data_normalization
-from app_module.update_service_status_support import compose_sqlite_status_read_model
+from app_module.update_service_status_support import (
+    compose_sqlite_status_read_model,
+)
+from app_module.dtos.update_loop_dtos import (
+    UpdateStatusSnapshotDTO,
+    enrich_status_mapping,
+)
 from app_module.update_daily_output import parse_daily_update_output
 from app_module.sqlite_read_only import ReadOnlySQLiteManager
 from data_module.market_data_integrity import (
@@ -2603,7 +2609,7 @@ class UpdateService :
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                }, apply_freshness=True)
+                }, apply_freshness=True, include_contract=True)
                 logger .info ("[UpdateService] 成功從 SQLite 資料庫極速獲取數據狀態！")
                 return result
             except Exception as sql_err :
@@ -2779,7 +2785,12 @@ class UpdateService :
         result ['broker_branch']=self .check_broker_branch_data_status ()
         result ['technical_indicators']=self ._check_technical_indicator_status ()
 
-        return result
+        return enrich_status_mapping(result)
+
+    def check_data_status_dto(self) -> UpdateStatusSnapshotDTO:
+        """以明確 DTO 取得整體更新狀態；保留舊 dict 入口供相容呼叫端使用。"""
+
+        return UpdateStatusSnapshotDTO.from_mapping(self.check_data_status())
 
     def check_data_overview (self )->Dict [str ,Any ]:
         """取得全部資料頁使用的輕量狀態摘要，不執行深度檢查或自動修復"""
@@ -2793,7 +2804,7 @@ class UpdateService :
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                },is_overview =True ,apply_freshness =True )
+                },is_overview =True ,apply_freshness =True ,include_contract =True )
                 return overview
             except Exception as sql_err :
                 import logging
@@ -2814,7 +2825,12 @@ class UpdateService :
         'status':'sqlite only',
         }),
         }
-        return overview
+        return enrich_status_mapping(overview)
+
+    def check_data_overview_dto(self) -> UpdateStatusSnapshotDTO:
+        """以明確 DTO 取得更新頁輕量狀態摘要。"""
+
+        return UpdateStatusSnapshotDTO.from_mapping(self.check_data_overview())
 
     def _scheduler_status_from_artifacts(self) -> Dict[str, Any]:
         """以唯讀方式彙整排程 latest_status artifacts，供 Update 分頁下鑽。"""
@@ -2969,27 +2985,9 @@ class UpdateService :
                     detail = compose_sqlite_status_read_model(
                         {"daily_data": reference, normalized: detail},
                         apply_freshness=True,
+                        include_contract=True,
                     ).get(normalized, detail)
-                # 狀態查詢本身是唯讀；manifest 只是可選的快取。正式資料根目錄
-                # 可能被掛成唯讀（例如 production desktop 權限），此時不能讓
-                # 子分頁把已成功取得的 SQLite 狀態誤報成查詢失敗。
-                try:
-                    self ._update_data_status_manifest (normalized ,detail )
-                except Exception as manifest_err:
-                    import logging
-
-                    logging .getLogger (__name__ ).warning(
-                        f"[UpdateService] 狀態 manifest 更新略過：{manifest_err}"
-                    )
-                    warnings = detail.get("warnings")
-                    warning_items = list(warnings) if isinstance(warnings, list) else []
-                    warning_items.append(
-                        f"status_manifest_write_skipped:{type(manifest_err).__name__}"
-                    )
-                    detail["warnings"] = list(
-                        dict.fromkeys(str(item) for item in warning_items if str(item).strip())
-                    )
-                return detail
+                return enrich_status_mapping({normalized: detail}).get(normalized, detail)
             except Exception as sql_err :
                 import logging
                 logging .getLogger (__name__ ).warning (f"[UpdateService] 從 SQLite check_source_detail 失敗: {sql_err}")
@@ -3007,23 +3005,7 @@ class UpdateService :
         else :
             detail ={'latest_date':None ,'total_records':0 ,'status':'sqlite only'}
 
-        try:
-            self ._update_data_status_manifest (normalized ,detail )
-        except Exception as manifest_err:
-            import logging
-
-            logging .getLogger (__name__ ).warning(
-                f"[UpdateService] 狀態 manifest 更新略過：{manifest_err}"
-            )
-            warnings = detail.get("warnings")
-            warning_items = list(warnings) if isinstance(warnings, list) else []
-            warning_items.append(
-                f"status_manifest_write_skipped:{type(manifest_err).__name__}"
-            )
-            detail["warnings"] = list(
-                dict.fromkeys(str(item) for item in warning_items if str(item).strip())
-            )
-        return detail
+        return enrich_status_mapping({normalized: detail}).get(normalized, detail)
 
     def _read_data_status_manifest (self )->Dict [str ,Any ]:
         """讀取資料狀態 manifest，格式錯誤時回傳空 manifest"""

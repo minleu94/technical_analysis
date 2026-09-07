@@ -1532,7 +1532,7 @@ def test_broker_branch_sqlite_loader_rejects_legacy_b_only_values_as_lots(tmp_pa
     assert loaded.loc[0, "買賣超金額千元"] == 4638
 
 
-def test_check_source_detail_runs_deep_check_and_updates_manifest(tmp_path):
+def test_check_source_detail_runs_deep_check_without_writing_manifest(tmp_path):
     config = _config(tmp_path)
     branch_dir = config.broker_flow_dir / "9200_1234"
     (branch_dir / "meta").mkdir(parents=True)
@@ -1553,11 +1553,9 @@ def test_check_source_detail_runs_deep_check_and_updates_manifest(tmp_path):
 
     service = UpdateService(config)
     detail = service.check_source_detail("broker_branch")
-    manifest = service._read_data_status_manifest()
-
     assert detail["latest_date"] == "2026-05-19"
     assert detail["broker_count"] == 1
-    assert manifest["sources"]["broker_branch"]["latest_date"] == "2026-05-19"
+    assert not service.status_manifest_file.exists()
 
 
 def test_smart_incremental_technical_calculation_replays_warmup_window(tmp_path, monkeypatch):

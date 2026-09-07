@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 import json
 import traceback
 import logging
+import tempfile
+import sqlite3
 from typing import List, Dict, Any, Optional
 
 # 添加專案根目錄到路徑
@@ -19,6 +21,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from data_module.config import TWStockConfig
+from data_module.fundamental_schema import apply_fundamental_schema
 from app_module.update_service import UpdateService
 
 # 設置日誌
@@ -41,6 +44,210 @@ TEST_DATE_RANGE = {
     'start': (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
     'end': datetime.now().strftime("%Y-%m-%d")
 }
+
+
+def _isolated_config(root: Path) -> TWStockConfig:
+    """建立本腳本專用的雙根隔離設定，避免 QA 觸碰正式資料。"""
+
+    config = TWStockConfig(
+        data_root=root / "data",
+        output_root=root / "artifacts",
+        profile="qa",
+    )
+    config.use_sqlite = True
+    config.min_data_days = 5
+    config.technical_process_pool_enabled = False
+    return config
+
+
+def _seed_isolated_fixture(config: TWStockConfig) -> None:
+    """寫入最小離線 fixture，覆蓋價格、指數與分點來源。"""
+
+    dates = pd.bdate_range("2026-07-01", periods=12)
+    daily_rows: list[dict[str, Any]] = []
+    market_rows: list[dict[str, Any]] = []
+    industry_rows: list[dict[str, Any]] = []
+    for timestamp in dates:
+        date_key = timestamp.strftime("%Y%m%d")
+        close = 100 + int(timestamp.day)
+        daily_rows.append(
+            {
+                "日期": date_key,
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "成交股數": 1000,
+                "成交筆數": 10,
+                "成交金額": 100000,
+                "開盤價": close - 1,
+                "最高價": close + 1,
+                "最低價": close - 2,
+                "收盤價": close,
+                "漲跌": "+",
+                "漲跌價差": 1,
+                "最後揭示買價": close - 1,
+                "最後揭示買量": 10,
+                "最後揭示賣價": close + 1,
+                "最後揭示賣量": 10,
+                "本益比": 20,
+            }
+        )
+        market_rows.append(
+            {"日期": date_key, "收盤價": 20000 + int(timestamp.day)}
+        )
+        industry_rows.append(
+            {
+                "日期": date_key,
+                "產業別": "半導體業",
+                "收盤指數": 1000 + int(timestamp.day),
+            }
+        )
+
+    for row in daily_rows:
+        pd.DataFrame([row]).to_csv(
+            config.daily_price_dir / f"{row['日期']}.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
+    pd.DataFrame(market_rows).to_csv(
+        config.market_index_file, index=False, encoding="utf-8-sig"
+    )
+    pd.DataFrame(industry_rows).to_csv(
+        config.industry_index_file, index=False, encoding="utf-8-sig"
+    )
+
+    broker_daily = config.broker_flow_dir / "9200_1234" / "daily"
+    broker_daily.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        [
+            {
+                "date": dates[-1].strftime("%Y%m%d"),
+                "trade_type": "買超",
+                "counterparty_broker_code": "2330",
+                "counterparty_broker_name": "台積電",
+                "buy_lots": 10,
+                "sell_lots": 1,
+                "net_lots": 9,
+                "branch_display_name": "測試分點",
+            }
+        ]
+    ).to_csv(
+        broker_daily / f"{dates[-1].strftime('%Y%m%d')}.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+
+    # 狀態摘要也會讀取月營收表；在隔離 SQLite 建立一筆中性 fixture，
+    # 使缺少該可選表時明確呈現為 unavailable，而非把 schema 缺件誤判成 QA 通過。
+    with sqlite3.connect(config.db_file) as conn:
+        apply_fundamental_schema(conn)
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "2330",
+                "2026-06",
+                "2026-06-30",
+                "2026-07-10",
+                "2026-07-16",
+                "1000000",
+                "qa.fixture",
+                "qa.fixture.v1",
+                "observed",
+            ),
+        )
+
+
+def _close_isolated_file_handlers(root: Path) -> None:
+    """關閉指向隔離根的檔案 logger，讓 Windows 可安全清理暫存根。"""
+
+    resolved_root = root.resolve()
+    loggers = [logging.getLogger()]
+    loggers.extend(
+        value
+        for value in logging.Logger.manager.loggerDict.values()
+        if isinstance(value, logging.Logger)
+    )
+    for logger in loggers:
+        for handler in list(logger.handlers):
+            filename = getattr(handler, "baseFilename", None)
+            if not filename:
+                continue
+            try:
+                is_isolated = Path(filename).resolve().is_relative_to(resolved_root)
+            except (OSError, ValueError):
+                is_isolated = False
+            if is_isolated:
+                logger.removeHandler(handler)
+                handler.close()
+
+
+def validate_closed_loop_fixture(config: TWStockConfig, result: "ValidationResult") -> None:
+    """以離線 fixture 驗證同步、SQLite 落地與指標單一寫入者。"""
+
+    service = UpdateService(config)
+    try:
+        daily = service.sync_source_to_sqlite("daily_price_files")
+        market = service.sync_source_to_sqlite("market_index")
+        industry = service.sync_source_to_sqlite("industry_index")
+        broker = service.sync_source_to_sqlite("broker_branch_files")
+        if not all(item.get("success") for item in (daily, market, industry, broker)):
+            result.add_fail(
+                "closed_loop_sqlite_sync",
+                "離線 fixture 同步未完整成功",
+                evidence={"daily": daily, "market": market, "industry": industry, "broker": broker},
+                issue_type="logic_errors",
+            )
+            return
+        result.add_pass(
+            "closed_loop_sqlite_sync",
+            evidence={
+                "daily_records": daily.get("synced_records"),
+                "market_records": market.get("synced_records"),
+                "industry_records": industry.get("synced_records"),
+                "broker_records": broker.get("synced_records"),
+            },
+        )
+
+        indicators = service.calculate_technical_indicators(force_all=True)
+        if not indicators.get("success"):
+            result.add_fail(
+                "closed_loop_technical_indicators",
+                str(indicators.get("message") or "技術指標計算失敗"),
+                evidence=indicators,
+                issue_type="logic_errors",
+            )
+            return
+        status = service.check_data_status()
+        technical = status.get("technical_indicators", {})
+        if technical.get("status") not in {"ok", "current"}:
+            result.add_fail(
+                "closed_loop_technical_status",
+                f"技術指標狀態未完成：{technical.get('status')}",
+                evidence=technical,
+                issue_type="data_quality",
+            )
+            return
+        result.add_pass(
+            "closed_loop_technical_indicators",
+            evidence={
+                "success_count": indicators.get("success_count"),
+                "status": technical,
+                "parent_single_writer": indicators.get("technical_process_pool", {}).get(
+                    "parent_single_writer"
+                ),
+            },
+        )
+    except Exception as exc:
+        result.add_fail(
+            "closed_loop_fixture_exception",
+            str(exc),
+            traceback.format_exc(),
+            issue_type="logic_errors",
+        )
 
 
 class ValidationResult:
@@ -299,7 +506,7 @@ def validate_service_layer(config, result: ValidationResult):
         result.add_fail('Service_Layer_Setup', str(e), traceback.format_exc())
 
 
-def validate_ui_service_contract(result: ValidationResult):
+def validate_ui_service_contract(result: ValidationResult, config: TWStockConfig):
     """驗證 UI 與 Service 的 Contract"""
     logger.info("=" * 80)
     logger.info("驗證 UI ↔ Service Contract")
@@ -329,8 +536,6 @@ def validate_ui_service_contract(result: ValidationResult):
         
         # 驗證這些方法在 Service 中是否存在
         from app_module.update_service import UpdateService
-        from data_module.config import TWStockConfig
-        config = TWStockConfig()
         service = UpdateService(config)
         
         missing_methods = []
@@ -630,17 +835,21 @@ def main():
     result = ValidationResult()
     
     try:
-        # 初始化配置
-        config = TWStockConfig()
-        
-        # 驗證 Service 層
-        validate_service_layer(config, result)
-        
-        # 驗證 UI ↔ Service Contract
-        validate_ui_service_contract(result)
-        
-        # 驗證數據狀態檢查邏輯
-        validate_data_status_logic(config, result)
+        # 所有可寫入資料都落在暫存雙根；不讀取、不修改正式資料根目錄。
+        with tempfile.TemporaryDirectory(prefix="task-loop-01-qa-") as sandbox:
+            sandbox_root = Path(sandbox)
+            config = _isolated_config(sandbox_root)
+            _seed_isolated_fixture(config)
+
+            try:
+                # 先驗證離線資料取得、SQLite 落地與技術指標單一寫入者，
+                # 再驗證 service/UI contract 與狀態判讀，避免空資料誤報通過。
+                validate_closed_loop_fixture(config, result)
+                validate_service_layer(config, result)
+                validate_ui_service_contract(result, config)
+                validate_data_status_logic(config, result)
+            finally:
+                _close_isolated_file_handlers(sandbox_root)
         
     except Exception as e:
         logger.error(f"驗證過程發生錯誤: {e}")
