@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+from decimal import Decimal
+from typing import Any, Callable
 
 from financial_module.units import (
     apply_bps_to_price,
@@ -14,7 +16,43 @@ from financial_module.units import (
     calculate_slippage_cost,
     round_down_to_lot,
     to_decimal,
+    quantize_money,
 )
+from backtest_module.conservative_fill_policy import ConservativeFillPolicy
+
+NEXT_OPEN_CONTRACT = "next-session-open.v2"
+LEGACY_CLOSE_CONTRACT = "legacy-same-day-close.v1"
+
+
+def executable_open(row: pd.Series) -> Decimal | None:
+    """只使用成交當下開盤與已知停牌狀態，不以收盤價補成交價。"""
+    if str(row.get("trading_status", "")).lower() in {"suspended", "halted", "停牌"}:
+        return None
+    suspended = row.get("is_suspended", False)
+    if pd.notna(suspended) and str(suspended).lower() in {"true", "1", "1.0"}:
+        return None
+    for column in ("成交股數", "成交量", "Volume", "volume"):
+        if column in row and pd.notna(row[column]) and to_decimal(row[column]) <= 0:
+            return None
+    for column in ("開盤價", "Open", "open", "開盤"):
+        if column in row and pd.notna(row[column]):
+            price = to_decimal(row[column])
+            return price if price.is_finite() and price > 0 else None
+    return None
+
+
+def exact_execution_costs(
+    gross: Decimal, *, side: str, fee_bps: Any = 0,
+    slippage_bps: Any = 0, tax_bps: Any = 0, minimum_fee: Decimal = Decimal("0"),
+) -> dict[str, Decimal]:
+    """滑價以單次現金成本計入；不再同時調價與重複扣款。"""
+    rates = [to_decimal(value or 0) for value in (fee_bps, slippage_bps, tax_bps)]
+    if any(not rate.is_finite() or rate < 0 for rate in rates):
+        raise ValueError("交易成本必須是有限非負數")
+    fee = calculate_fee(gross, rates[0], minimum_fee=minimum_fee)
+    slippage = quantize_money(gross * rates[1] / Decimal("10000"))
+    tax = calculate_fee(gross, rates[2], minimum_fee=Decimal("0")) if side == "sell" else Decimal("0")
+    return {"fee": fee, "slippage": slippage, "tax": tax, "total": fee + slippage + tax}
 
 
 @dataclass
@@ -73,6 +111,7 @@ class BrokerSimulator:
             config: 券商配置
         """
         self.config = config
+        self.execution_diagnostics: list[dict[str, Any]] = []
 
     def _get_column_name(self, df: pd.DataFrame, logical_name: str) -> Optional[str]:
         """依常見中英文欄位名稱取得價格欄位。"""
@@ -90,7 +129,8 @@ class BrokerSimulator:
         self,
         signal_frame: pd.DataFrame,
         initial_capital: float,
-        price_col: str = '收盤價'
+        price_col: str = '收盤價',
+        check_cancel: Callable[[], bool] | None = None,
     ) -> Tuple[List[Trade], pd.DataFrame]:
         """
         執行撮合模擬
@@ -105,6 +145,10 @@ class BrokerSimulator:
             - trades: 交易列表
             - equity_curve: 權益曲線 DataFrame (date, equity, cash, position_value)
         """
+        if self.config.execution_price == "next_open":
+            return self._run_next_open(signal_frame, initial_capital, price_col, check_cancel)
+        if self.config.execution_price != "close":
+            raise ValueError("execution_price 必須是 next_open 或 close")
         if self.config.execution_price == "close":
             import warnings
             warnings.warn(
@@ -527,6 +571,168 @@ class BrokerSimulator:
                 )
         
         return trades, equity_curve
+
+    def _run_next_open(
+        self, signal_frame: pd.DataFrame, initial_capital: Any, price_col: str,
+        check_cancel: Callable[[], bool] | None = None,
+    ) -> Tuple[List[Trade], pd.DataFrame]:
+        """前一收盤委託 → 當日開盤撮合 → 當日收盤風控，禁止預讀下一列。"""
+        frame = signal_frame.copy()
+        if not isinstance(frame.index, pd.DatetimeIndex):
+            if "日期" not in frame:
+                raise ValueError("signal_frame 必須含日期")
+            frame = frame.set_index("日期")
+            frame.index = pd.to_datetime(frame.index.astype(str), format="mixed")
+        frame = frame.sort_index()
+        if frame.index.has_duplicates or frame.index.isna().any():
+            raise ValueError("訊號日期不得重複或缺失")
+        if "signal" not in frame:
+            raise ValueError("signal_frame 必須包含 signal")
+        if (self.config.stop_loss_atr_mult is not None or self.config.take_profit_atr_mult is not None) and "ATR" not in frame:
+            raise ValueError("ATR 風控需要決策當時可得的 ATR 欄位")
+        if price_col not in frame:
+            price_col = self._get_column_name(frame, "Close") or price_col
+        if price_col not in frame:
+            raise ValueError("缺少收盤估值價格")
+        cash = quantize_money(to_decimal(initial_capital))
+        if not cash.is_finite() or cash <= 0:
+            raise ValueError("初始資金必須為有限正數")
+        qty = 0
+        entry = Decimal("0")
+        mark = Decimal("0")
+        pending: dict[str, Any] | None = None
+        last_exit: pd.Timestamp | None = None
+        trades: list[Trade] = []
+        records: list[dict[str, Any]] = []
+        self.execution_diagnostics = []
+        fill_policy = ConservativeFillPolicy(
+            lot_size=1000,
+            max_participation_rate=(
+                self.config.max_participation_rate
+                if self.config.enable_volume_constraint
+                else None
+            ),
+            enable_limit_up_down=self.config.enable_limit_up_down,
+            limit_up_down_pct=self.config.limit_up_down_pct,
+            # Preserve the existing simulator's sell behavior while exposing
+            # the stricter option to standalone policy callers.
+            apply_volume_to_sell=False,
+        )
+        for session, row in frame.iterrows():
+            if check_cancel is not None and check_cancel():
+                raise InterruptedError("回測已取消")
+            open_price = executable_open(row)
+            if pending is not None and open_price is not None:
+                side = pending["side"]
+                minimum = Decimal("20")
+                if side == "buy":
+                    budget = cash
+                    if self.config.sizing_mode == "fixed_amount" and self.config.fixed_amount is not None:
+                        budget = min(budget, to_decimal(self.config.fixed_amount))
+                    elif self.config.sizing_mode == "risk_based":
+                        risk = to_decimal(self.config.risk_pct or 0)
+                        distance = to_decimal(self.config.stop_loss_pct or 0)
+                        if risk <= 0 or distance <= 0:
+                            raise ValueError("risk_based 需要正數 risk_pct 與 stop_loss_pct")
+                        budget = min(budget, cash * risk / distance)
+                    rate = (to_decimal(self.config.fee_bps) + to_decimal(self.config.slippage_bps)) / Decimal("10000")
+                    size = round_down_to_lot(int(max(budget - minimum, Decimal("0")) / (open_price * (Decimal("1") + rate))))
+                else:
+                    budget = cash
+                    size = qty
+                while size > 0:
+                    gross = quantize_money(open_price * size)
+                    costs = exact_execution_costs(
+                        gross, side=side, fee_bps=self.config.fee_bps,
+                        slippage_bps=self.config.slippage_bps, tax_bps=30,
+                        minimum_fee=minimum,
+                    )
+                    if side == "sell" or gross + costs["total"] <= min(cash, budget):
+                        break
+                    size -= 1000
+                decision = fill_policy.decide(
+                    side=side,
+                    requested_shares=size,
+                    open_price=open_price,
+                    prior_close=mark if mark > 0 else None,
+                    known_volume=pending.get("volume"),
+                )
+                if decision.status == "unfilled":
+                    pending["last_reason"] = decision.reason or "insufficient_cash_or_known_volume"
+                    self.execution_diagnostics.append({**pending, **decision.to_dict()})
+                    if decision.reason != "open_at_price_limit":
+                        pending = None
+                    continue
+                size = decision.filled_shares
+                gross = quantize_money(open_price * size)
+                costs = exact_execution_costs(
+                    gross, side=side, fee_bps=self.config.fee_bps,
+                    slippage_bps=self.config.slippage_bps, tax_bps=30,
+                    minimum_fee=minimum,
+                )
+                if side == "buy":
+                    entry = (entry * qty + open_price * size) / (qty + size)
+                    qty += size
+                    cash = quantize_money(cash - gross - costs["total"])
+                else:
+                    cash = quantize_money(cash + gross - costs["total"])
+                    qty = 0
+                    entry = Decimal("0")
+                    last_exit = pd.Timestamp(session)
+                trades.append(Trade(
+                    date=pd.Timestamp(session), type=side,
+                    price=float(open_price), shares=size,  # numeric-boundary: dto
+                    value=float(gross), fee=float(costs["fee"] + costs["tax"]),  # numeric-boundary: dto
+                    slippage=float(costs["slippage"]),  # numeric-boundary: dto
+                    reason_tags=str(pending["reason"]), signal=1 if side == "buy" else -1,
+                ))
+                self.execution_diagnostics.append({
+                    **pending,
+                    **decision.to_dict(),
+                    "execution_time": pd.Timestamp(session).isoformat(),
+                })
+                pending = None
+            elif pending is not None:
+                pending["last_reason"] = "missing_open_or_suspended"
+
+            if pd.notna(row[price_col]) and to_decimal(row[price_col]) > 0:
+                mark = to_decimal(row[price_col])
+            elif qty:
+                self.execution_diagnostics.append({"status": "degraded", "reason": "stale_mark", "date": str(session)})
+            signal = int(row["signal"]) if pd.notna(row["signal"]) else 0
+            reason = str(row.get("reason_tags", ""))
+            if qty and entry > 0:
+                # ATR 與百分比都在收盤確認；下一開盤才可出場。
+                atr_value = row.get("ATR")
+                atr = to_decimal(atr_value) if atr_value is not None and pd.notna(atr_value) else None
+                loss = to_decimal(self.config.stop_loss_pct) if self.config.stop_loss_pct is not None else None
+                gain = to_decimal(self.config.take_profit_pct) if self.config.take_profit_pct is not None else None
+                stop = (entry - atr * to_decimal(self.config.stop_loss_atr_mult)) if atr is not None and self.config.stop_loss_atr_mult is not None else (entry * (Decimal("1") - abs(loss)) if loss is not None else None)
+                take = (entry + atr * to_decimal(self.config.take_profit_atr_mult)) if atr is not None and self.config.take_profit_atr_mult is not None else (entry * (Decimal("1") + abs(gain)) if gain is not None else None)
+                if stop is not None and mark <= stop:
+                    signal, reason = -1, "停損收盤確認"
+                elif take is not None and mark >= take:
+                    signal, reason = -1, "停利收盤確認"
+            if pending and pending["side"] == "buy" and signal == -1:
+                self.execution_diagnostics.append({**pending, "status": "cancelled", "reason": "opposite_close_signal"})
+                pending = None
+            if pending is None:
+                can_buy = not qty or self.config.allow_pyramid
+                if last_exit is not None:
+                    can_buy = can_buy and self.config.allow_reentry and (session - last_exit).days >= self.config.reentry_cooldown_days
+                side = "buy" if signal == 1 and can_buy else "sell" if signal == -1 and qty else None
+                if side:
+                    volume = next((to_decimal(row[c]) for c in ("成交股數", "成交量", "Volume", "volume") if c in row and pd.notna(row[c])), None)
+                    pending = {"side": side, "signal_time": pd.Timestamp(session).isoformat(), "reason": reason, "volume": volume}
+            value = quantize_money(mark * qty)
+            records.append({"date": session, "equity": float(cash + value), "cash": float(cash), "position": qty, "position_value": float(value), "price": float(mark)})  # numeric-boundary: dto
+        if pending:
+            self.execution_diagnostics.append({**pending, "status": "unfilled", "reason": pending.get("last_reason", "end_of_data")})
+        curve = pd.DataFrame(records, columns=["date", "equity", "cash", "position", "position_value", "price"]).set_index("date")
+        curve.attrs["execution_contract"] = NEXT_OPEN_CONTRACT
+        curve.attrs["terminal_position"] = qty
+        curve.attrs["execution_diagnostics"] = self.execution_diagnostics
+        return trades, curve
     
     def _execute_buy(
         self,

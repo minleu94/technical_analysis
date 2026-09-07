@@ -87,6 +87,7 @@ def test_portfolio_backtest_entry_exit_dates_alignment():
     
     with pytest.warns(UserWarning) as record:
         result = service.run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
             start_date="2026-06-01",
             end_date="2026-06-02",
             profile_id="test_profile",

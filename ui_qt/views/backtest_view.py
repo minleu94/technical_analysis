@@ -24,6 +24,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 from datetime import datetime, timedelta
 from pathlib import Path
+from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -870,12 +871,13 @@ class BacktestView(QWidget):
             )
             self.current_run_params = request.run_params()
 
-            def backtest_task():
-                return request.execute(self.backtest_service)
+            def backtest_task(cancel_callback=None):
+                return request.execute(self.backtest_service, check_cancel=cancel_callback)
 
             self.worker = TaskWorker(backtest_task)
             self.worker.finished.connect(self._on_backtest_finished)
             self.worker.error.connect(self._on_backtest_error)
+            self.worker.cancelled.connect(lambda: self._on_backtest_error("回測已取消"))
             self.worker.start()
 
     def _on_backtest_finished(self, report: BacktestReportDTO):
@@ -1137,18 +1139,22 @@ class BacktestView(QWidget):
 
         run_params_snapshot = {
             "initial_capital": self.capital_input.value(),
+            "execution_contract": "next-session-open.v2",
+            "fee_bps": str(self.fee_bps_input.value()),
+            "slippage_bps": str(self.slippage_bps_input.value()),
+            "tax_bps": "30",
             "top_n": self.recommendation_portfolio_top_n.value(),
             "max_stocks": self.recommendation_portfolio_max_stocks.value(),
             "rebalance_frequency": self._recommendation_portfolio_rebalance_value(),
             "allocation_method": self._recommendation_portfolio_allocation_value(),
             "holding_days": self.recommendation_portfolio_holding_days.value(),
             "stop_loss_pct": (
-                self.stop_loss_input.value() / 100.0
+                str(Decimal(str(self.stop_loss_input.value())) / 100)
                 if self.stop_loss_input.value() > 0
                 else None
             ),
             "take_profit_pct": (
-                self.take_profit_input.value() / 100.0
+                str(Decimal(str(self.take_profit_input.value())) / 100)
                 if self.take_profit_input.value() > 0
                 else None
             ),
@@ -1157,7 +1163,7 @@ class BacktestView(QWidget):
         }
         self.current_recommendation_portfolio_run_params = dict(run_params_snapshot)
 
-        def backtest_task():
+        def backtest_task(cancel_callback=None):
             history = self._load_recommendation_portfolio_history(start_date, end_date)
             provider = RecommendationDataFrameProvider()
             service = RecommendationPortfolioBacktestService(provider=provider)
@@ -1177,6 +1183,12 @@ class BacktestView(QWidget):
                 holding_days=run_params_snapshot["holding_days"],
                 stop_loss_pct=run_params_snapshot["stop_loss_pct"],
                 take_profit_pct=run_params_snapshot["take_profit_pct"],
+                execution_contract="next-session-open.v2",
+                check_cancel=cancel_callback,
+                fee_bps=run_params_snapshot["fee_bps"],
+                slippage_bps=run_params_snapshot["slippage_bps"],
+                tax_bps=run_params_snapshot["tax_bps"],
+                lot_size=1000,
             )
 
         self.worker = TaskWorker(backtest_task)
@@ -1185,90 +1197,7 @@ class BacktestView(QWidget):
         self.worker.start()
 
     def _load_recommendation_portfolio_history(self, start_date=None, end_date=None):
-        import logging
-        logger = logging.getLogger(__name__)
-
-        history = None
-        if getattr(self.config, 'use_sqlite', False):
-            try:
-                from data_module.db_manager import DBManager
-                if not self.config:
-                    return
-                db = DBManager(self.config)
-
-                # 預設查詢 SQL 與參數
-                sql = "SELECT 日期, 證券代號, 證券名稱, 收盤價 FROM daily_prices"
-                params = []
-                where_clauses = []
-
-                if start_date:
-                    from datetime import datetime, timedelta
-                    try:
-                        # start_date 格式為 YYYY-MM-DD
-                        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-                        # 往前推 365 天作為技術指標計算之 warmup 暖機期
-                        warmup_dt = start_dt - timedelta(days=365)
-                        warmup_start_str = warmup_dt.strftime("%Y%m%d")
-                        where_clauses.append("日期 >= ?")
-                        params.append(warmup_start_str)
-                    except Exception as e:
-                        logger.warning(f"[BacktestView] 解析 start_date 失敗: {e}")
-
-                if end_date:
-                    from datetime import datetime
-                    try:
-                        end_str = datetime.strptime(end_date, "%Y-%m-%d").strftime("%Y%m%d")
-                        where_clauses.append("日期 <= ?")
-                        params.append(end_str)
-                    except Exception as e:
-                        logger.warning(f"[BacktestView] 解析 end_date 失敗: {e}")
-
-                if where_clauses:
-                    sql += " WHERE " + " AND ".join(where_clauses)
-
-                sql += ";"
-
-                sql_df = db.execute_query(sql, tuple(params))
-                if not sql_df.empty:
-                    history = sql_df
-                    # 日期格式化為 YYYY-MM-DD，讓 parse_stock_dates 解析更穩定
-                    history['日期'] = pd.to_datetime(history['日期'].astype(str), format='%Y%m%d', errors='coerce').dt.strftime('%Y-%m-%d')
-                    history['證券代號'] = history['證券代號'].astype(str).str.strip()
-                    history['收盤價'] = pd.to_numeric(history['收盤價'], errors='coerce')
-                    logger.info(f"成功從 SQLite 載入回測歷史資料，共 {len(history)} 筆 (含暖機期)")
-            except Exception as sql_err:
-                logger.warning(f"從 SQLite 載入回測歷史資料失敗: {sql_err}，將降級讀取 CSV")
-
-        if history is None:
-            if not self.config:
-                raise ValueError("配置未初始化，無法載入歷史資料")
-            stock_data_file = None
-            if self.config.all_stocks_data_file.exists():
-                stock_data_file = self.config.all_stocks_data_file
-            elif self.config.stock_data_file.exists():
-                stock_data_file = self.config.stock_data_file
-            if stock_data_file is None:
-                raise FileNotFoundError("找不到 all_stocks_data.csv 或 stock_data_whole.csv")
-
-            history = pd.read_csv(stock_data_file, encoding="utf-8-sig", low_memory=False)
-            if "日期" not in history.columns:
-                raise ValueError("歷史資料缺少 日期 欄位")
-            if "證券代號" not in history.columns and "股票代號" in history.columns:
-                history["證券代號"] = history["股票代號"]
-            if "證券名稱" not in history.columns and "股票名稱" in history.columns:
-                history["證券名稱"] = history["股票名稱"]
-            if "收盤價" not in history.columns:
-                for candidate in ["Close", "close"]:
-                    if candidate in history.columns:
-                        history["收盤價"] = history[candidate]
-                        break
-            required = ["日期", "證券代號", "收盤價"]
-            missing = [column for column in required if column not in history.columns]
-            if missing:
-                raise ValueError(f"歷史資料缺少欄位: {', '.join(missing)}")
-
-        history["日期"] = parse_stock_dates(history["日期"])
-        return history
+        return self.backtest_service.load_recommendation_portfolio_history(start_date, end_date)
 
     def _recommendation_portfolio_rebalance_value(self) -> str:
         return "weekly" if self.recommendation_portfolio_rebalance.currentText() == "每週重播" else "once"

@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+from decimal import Decimal
 from backtest_module.broker_simulator import Trade
 from financial_module.units import quantize_money, to_decimal
 
@@ -176,6 +177,46 @@ class PerformanceAnalyzer:
         # 返回最大回撤（負數）
         return drawdown.min()
     
+    def _closed_trade_pairs(self, trades: List[Trade]) -> list[dict[str, Any]]:
+        """FIFO 保留加碼與部分出場的成本；未平倉成本不混入已實現損益。"""
+        lots: list[dict[str, Any]] = []
+        pairs: list[dict[str, Any]] = []
+        for trade in trades:
+            if trade.shares <= 0:
+                raise ValueError("交易股數必須為正整數")
+            if trade.type == "buy":
+                lots.append({"date": trade.date, "shares": trade.shares, "value": to_decimal(trade.value),
+                    "cost": to_decimal(trade.fee) + to_decimal(trade.slippage)})
+                continue
+            if trade.type != "sell":
+                raise ValueError("未知交易方向")
+            if sum(lot["shares"] for lot in lots) < trade.shares:
+                raise ValueError("賣出數量超過可配對持倉")
+            remaining = trade.shares
+            invested, buy_cost = Decimal("0"), Decimal("0")
+            entry_date = lots[0]["date"]
+            while remaining:
+                lot = lots[0]
+                used = min(remaining, lot["shares"])
+                value = lot["value"] if used == lot["shares"] else quantize_money(lot["value"] * used / lot["shares"])
+                cost = lot["cost"] if used == lot["shares"] else quantize_money(lot["cost"] * used / lot["shares"])
+                invested += value
+                buy_cost += cost
+                remaining -= used
+                lot["shares"] -= used
+                lot["value"] -= value
+                lot["cost"] -= cost
+                if not lot["shares"]:
+                    lots.pop(0)
+            profit = quantize_money(to_decimal(trade.value) - invested - buy_cost - to_decimal(trade.fee) - to_decimal(trade.slippage))
+            ratio = profit / invested if invested > 0 else Decimal("0")
+            pairs.append({"entry_date": entry_date, "exit_date": trade.date,
+                "entry_price": float(invested / trade.shares), "exit_price": trade.price,  # numeric-boundary: dto
+                "shares": trade.shares, "profit": float(profit), "return_pct": float(ratio),  # numeric-boundary: dto
+                "return_percent": float(ratio * 100), "reason_tags": trade.reason_tags,  # numeric-boundary: dto
+                "holding_days": (trade.date - entry_date).days})
+        return pairs
+
     def _analyze_trades(self, trades: List[Trade], initial_capital: float) -> Dict[str, Any]:
         """
         分析交易統計
@@ -199,30 +240,7 @@ class PerformanceAnalyzer:
                 'largest_loss': 0.0
             }
         
-        # 配對買賣交易
-        trade_pairs = []
-        buy_trade = None
-        
-        for trade in trades:
-            if trade.type == 'buy':
-                buy_trade = trade
-            elif trade.type == 'sell' and buy_trade is not None:
-                # 計算報酬
-                profit = self._trade_profit(buy_trade, trade)
-                return_pct = self._trade_return_pct(profit, buy_trade.value)
-                
-                trade_pairs.append({
-                    'entry_date': buy_trade.date,
-                    'exit_date': trade.date,
-                    'entry_price': buy_trade.price,
-                    'exit_price': trade.price,
-                    'shares': trade.shares,
-                    'profit': profit,
-                    'return_pct': return_pct,
-                    'reason_tags': trade.reason_tags,
-                    'holding_days': (trade.date - buy_trade.date).days
-                })
-                buy_trade = None
+        trade_pairs = self._closed_trade_pairs(trades)
         
         if len(trade_pairs) == 0:
             return {
@@ -278,28 +296,10 @@ class PerformanceAnalyzer:
         Returns:
             交易明細 DataFrame
         """
-        trade_pairs = []
-        buy_trade = None
-        
-        for trade in trades:
-            if trade.type == 'buy':
-                buy_trade = trade
-            elif trade.type == 'sell' and buy_trade is not None:
-                profit = self._trade_profit(buy_trade, trade)
-                return_pct = self._trade_return_pct(profit, buy_trade.value)
-                
-                trade_pairs.append({
-                    '進場日期': buy_trade.date,
-                    '出場日期': trade.date,
-                    '進場價格': buy_trade.price,
-                    '出場價格': trade.price,
-                    '股數': trade.shares,
-                    '報酬': profit,
-                    '報酬率%': return_pct * 100,
-                    '持有天數': (trade.date - buy_trade.date).days,
-                    '理由標籤': trade.reason_tags
-                })
-                buy_trade = None
+        trade_pairs = [{"進場日期": pair["entry_date"], "出場日期": pair["exit_date"],
+            "進場價格": pair["entry_price"], "出場價格": pair["exit_price"], "股數": pair["shares"],
+            "報酬": pair["profit"], "報酬率%": pair["return_percent"], "持有天數": pair["holding_days"],
+            "理由標籤": pair["reason_tags"]} for pair in self._closed_trade_pairs(trades)]
         
         if len(trade_pairs) == 0:
             return pd.DataFrame(columns=['進場日期', '出場日期', '進場價格', '出場價格', '股數', '報酬', '報酬率%', '持有天數', '理由標籤'])

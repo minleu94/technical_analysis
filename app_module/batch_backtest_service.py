@@ -576,7 +576,7 @@ class BatchBacktestService:
             slippage_bp_x100=self._bps_to_bp_x100(slippage_bps),
             stop_loss_bp=self._pct_to_bp(stop_loss_pct),
             take_profit_bp=self._pct_to_bp(take_profit_pct),
-            execution_price=execution_price,
+            execution_price=str(details.get("execution_contract", execution_price)),
             sizing_mode=sizing_mode,
             metrics=metrics,
             regime_breakdown=dict(details.get("regime_breakdown", {}) or {}),

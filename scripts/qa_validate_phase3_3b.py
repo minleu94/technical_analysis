@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import json
 import traceback
 import logging
+import argparse
 from typing import List, Dict, Any, Optional
 
 # 添加專案根目錄到路徑
@@ -37,7 +38,14 @@ from decision_module.industry_mapper import IndustryMapper
 import app_module.strategies
 
 # 設置日誌
-log_dir = project_root / 'output' / 'qa' / 'phase3_3b_validation'
+qa_root = (project_root / 'output' / 'master_goal' / 'TASK-LOOP-04').resolve()
+for root_name in ('DATA_ROOT', 'OUTPUT_ROOT'):
+    root_value = os.environ.get(root_name)
+    if not root_value or not Path(root_value).resolve().is_relative_to(qa_root):
+        raise SystemExit(f'{root_name} 必須明確指向 TASK-LOOP-04 隔離目錄')
+if os.environ.get('PROFILE') != 'test':
+    raise SystemExit('QA 必須使用 PROFILE=test')
+log_dir = Path(os.environ['OUTPUT_ROOT']) / '_test' / 'qa' / 'phase3_3b_validation'
 log_dir.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
@@ -1047,14 +1055,65 @@ class Phase33BValidator:
 
 def main():
     """主函數"""
+    parser = argparse.ArgumentParser(description='TASK-04 隔離研究閉環驗收')
+    parser.add_argument('--legacy-full', action='store_true', help='另執行舊全工作流；包含隔離 watchlist 與 promotion，不觸碰正式雙根')
+    args = parser.parse_args()
+    if not args.legacy_full:
+        return validate_execution_contract()
     try:
         validator = Phase33BValidator()
         validator.run_all_tests()
-        return 0
+        return 0 if all(result.passed for result in validator.results) else 1
     except Exception as e:
         logger.error(f"驗證過程發生錯誤: {str(e)}")
         logger.error(traceback.format_exc())
         return 1
+
+
+def validate_execution_contract() -> int:
+    """無資料服務初始化的離線撮合驗收；fixture 不折抵正式 evidence。"""
+    from decimal import Decimal
+    from app_module.recommendation_portfolio_backtest_service import RecommendationPortfolioBacktestService
+    from backtest_module.broker_simulator import BrokerConfig, BrokerSimulator, NEXT_OPEN_CONTRACT
+    result: dict[str, Any] = {'schema_version': 'task-loop-04-qa.v1', 'fixture_only': True,
+        'formal_credit_authorized': False, 'tests': [], 'data_root': os.environ['DATA_ROOT'],
+        'output_root': str(log_dir), 'execution_contract': NEXT_OPEN_CONTRACT}
+    try:
+        history = pd.DataFrame([
+            {'日期': '2026-06-05', '證券代號': '2330', '開盤價': '100', '收盤價': '100', '成交股數': 1000000},
+            {'日期': '2026-06-08', '證券代號': '2330', '開盤價': '110', '收盤價': '105', '成交股數': 1000000},
+            {'日期': '2026-06-09', '證券代號': '2330', '開盤價': '104', '收盤價': '90', '成交股數': 1000000},
+            {'日期': '2026-06-10', '證券代號': '2330', '開盤價': '80', '收盤價': '85', '成交股數': 1000000},
+        ])
+        service = RecommendationPortfolioBacktestService(lambda *_: [{'stock_code': '2330', 'stock_name': '台積電', 'total_score': 90}])
+        report = service.run_portfolio_backtest(start_date='2026-06-05', end_date='2026-06-10', profile_id='qa',
+            recommendation_config={}, history=history, initial_capital='1000000', rebalance_frequency='once',
+            top_n=1, allocation_method='equal_weight', holding_days=30, stop_loss_pct='0.10',
+            fee_bps='10', slippage_bps='20', tax_bps='30', lot_size=1000)
+        holding = report.period_holdings[0]
+        assert holding.entry_date == '2026-06-08' and holding.actual_exit_date == '2026-06-10'
+        assert holding.entry_price == 110 and holding.actual_exit_price == 80
+        assert holding.exit_signal_date == '2026-06-09'
+        assert Decimal(str(report.summary['ending_cash'])) == Decimal('1000000') + Decimal(holding.pnl_cents) / 100
+        result['tests'].append({'name': 'recommendation_next_open_gap_cash_conservation', 'passed': True})
+        frame = history.set_index('日期')
+        frame.index = pd.to_datetime(frame.index)
+        frame['signal'] = [1, 0, 0, -1]
+        simulator = BrokerSimulator(BrokerConfig(execution_price='next_open', enable_limit_up_down=False, enable_volume_constraint=False))
+        trades, equity = simulator.run(frame, 1000000)
+        assert trades[0].date == pd.Timestamp('2026-06-08')
+        assert not any(trade.type == 'sell' for trade in trades)
+        assert equity.iloc[-1]['position'] > 0
+        result['tests'].append({'name': 'single_stock_terminal_position_not_synthetic_fill', 'passed': True})
+        result['status'] = 'passed'
+    except Exception as error:
+        result['status'] = 'failed'
+        result['error'] = str(error)
+        logger.exception('TASK-04 隔離 QA 失敗')
+    (log_dir / 'VALIDATION_REPORT.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    (log_dir / 'VALIDATION_REPORT.md').write_text('# TASK-04 隔離 QA\n\n' + json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result['status'] == 'passed' else 1
 
 
 if __name__ == '__main__':

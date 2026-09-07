@@ -173,6 +173,7 @@ def test_portfolio_backtest_records_period_holdings_and_contributions():
 
     service = RecommendationPortfolioBacktestService(provider=provider)
     result = service.run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -215,6 +216,7 @@ def test_portfolio_backtest_exposes_cash_ledger_for_successful_holding():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -277,6 +279,7 @@ def test_portfolio_backtest_applies_optional_execution_costs_to_cash_ledger():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -329,6 +332,7 @@ def test_portfolio_backtest_rounds_allocation_down_to_lot_size():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -372,6 +376,7 @@ def test_portfolio_backtest_exposes_actual_weight_after_lot_sizing():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -425,6 +430,7 @@ def test_portfolio_backtest_records_unfilled_order_when_lot_size_cannot_be_met()
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -475,6 +481,7 @@ def test_portfolio_backtest_releases_exit_cash_before_same_day_rebalance_buy():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-09",
         profile_id="momentum",
@@ -520,6 +527,7 @@ def test_portfolio_backtest_records_cash_limited_when_rebalance_cash_is_unavaila
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-09",
         profile_id="momentum",
@@ -573,6 +581,7 @@ def test_portfolio_backtest_marks_equity_to_market_each_trading_day():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -615,6 +624,7 @@ def test_portfolio_backtest_records_next_open_gap_risk_labels():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -674,6 +684,7 @@ def test_portfolio_backtest_exits_early_on_stop_loss_and_summarizes_diagnostics(
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -719,6 +730,7 @@ def test_portfolio_backtest_exits_early_on_take_profit():
         return [{"stock_code": "2330", "stock_name": "TSMC", "total_score": 90.0, "factor_scores": {}}]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -866,6 +878,7 @@ def test_portfolio_backtest_summary_includes_robustness_metrics():
         ][:top_n]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -899,6 +912,7 @@ def test_portfolio_backtest_details_include_rolling_risk_metrics():
         return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-08",
         profile_id="momentum",
@@ -950,6 +964,7 @@ def test_portfolio_backtest_microstructure_preflight_flags_optional_risks():
         return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -991,6 +1006,7 @@ def test_portfolio_backtest_microstructure_preflight_discloses_missing_optional_
         return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1042,6 +1058,7 @@ def test_portfolio_backtest_relative_attribution_uses_optional_reference_columns
         return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1082,6 +1099,7 @@ def test_portfolio_backtest_relative_attribution_discloses_missing_reference_col
         return [{"stock_code": "2330", "stock_name": "台積電", "total_score": 90.0, "factor_scores": {}}]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1127,6 +1145,7 @@ def test_portfolio_backtest_can_replay_weekly_recommendations():
 
     service = RecommendationPortfolioBacktestService(provider=provider)
     result = service.run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-13",
         profile_id="momentum",
@@ -1213,6 +1232,7 @@ def test_portfolio_backtest_with_percentile_ranking():
     
     service = RecommendationPortfolioBacktestService(provider=provider)
     result = service.run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1257,6 +1277,7 @@ def test_portfolio_backtest_result_includes_factor_manifest_from_replay_snapshot
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1301,6 +1322,7 @@ def test_portfolio_backtest_result_includes_credibility_manifest():
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1355,6 +1377,7 @@ def test_portfolio_backtest_records_unfilled_order_when_recommended_stock_has_no
         ][:top_n]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",
@@ -1409,6 +1432,7 @@ def test_portfolio_backtest_records_unfilled_order_when_liquidity_is_insufficien
         ]
 
     result = RecommendationPortfolioBacktestService(provider=provider).run_portfolio_backtest(
+            execution_contract="legacy-same-day-close.v1",
         start_date="2026-01-02",
         end_date="2026-01-06",
         profile_id="momentum",

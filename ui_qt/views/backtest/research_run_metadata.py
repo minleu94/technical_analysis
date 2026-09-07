@@ -73,6 +73,30 @@ def pct_to_bp(value: Any) -> int | None:
     return int((Decimal(str(value)) * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP))
 
 
+def execution_manifest(details: dict[str, Any], summary: dict[str, Any]) -> dict[str, Any]:
+    manifest = dict(details.get("data_manifest", {}) or {})
+    declarations = {str(value) for value in (
+        details.get("execution_contract"), summary.get("execution_contract"),
+        manifest.get("execution_contract"),
+    ) if value}
+    if len(declarations) > 1:
+        raise ValueError("研究結果的執行契約宣告不一致")
+    if declarations:
+        manifest["execution_contract"] = declarations.pop()
+    if details.get("portfolio_credibility"):
+        manifest["execution_assumptions"] = json_safe(details["portfolio_credibility"])
+    status = summary.get("status") or details.get("status")
+    if status:
+        manifest["run_status"] = str(status)
+    return manifest
+
+
+def ratio_to_bp(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int((Decimal(str(value)) * Decimal("10000")).to_integral_value(rounding=ROUND_HALF_UP))
+
+
 def build_single_backtest_metadata(
     *,
     run_id: str,
@@ -84,14 +108,18 @@ def build_single_backtest_metadata(
     created_at: str,
 ) -> ResearchRunMetadataDTO:
     metrics = single_backtest_metrics(report)
-    payload_hash = research_payload_hash(
-        {
-            "run_type": "single_backtest",
-            "params": params,
-            "metrics": metrics,
-            "validation_status": getattr(report.validation_status, "value", ""),
-        }
-    )
+    manifest = execution_manifest(details, {})
+    payload = {
+        "run_type": "single_backtest",
+        "params": params,
+        "metrics": metrics,
+        "validation_status": getattr(report.validation_status, "value", ""),
+    }
+    # Keep the legacy unversioned hash stable.  New versioned execution
+    # metadata binds its manifest (contract/status/assumptions) into the hash.
+    if any(key in manifest for key in ("execution_contract", "run_status", "execution_assumptions")):
+        payload["data_manifest"] = manifest
+    payload_hash = research_payload_hash(payload)
     return ResearchRunMetadataDTO(
         run_id=run_id,
         run_name=run_name,
@@ -110,13 +138,13 @@ def build_single_backtest_metadata(
         fingerprint_algorithm=(
             "sha256" if str(details.get("data_version", "")).startswith("sha256") else ""
         ),
-        data_manifest=dict(details.get("data_manifest", {}) or {}),
+        data_manifest=manifest,
         capital_cents=money_to_cents(params.get("capital", 0)),
         fee_bp_x100=bps_to_bp_x100(params.get("fee_bps", 0)),
         slippage_bp_x100=bps_to_bp_x100(params.get("slippage_bps", 0)),
         stop_loss_bp=pct_to_bp(params.get("stop_loss_pct")),
         take_profit_bp=pct_to_bp(params.get("take_profit_pct")),
-        execution_price=str(params.get("execution_price") or details.get("execution_price", "")),
+        execution_price=str(manifest.get("execution_contract") or details.get("execution_price") or params.get("execution_price", "")),
         sizing_mode=str(params.get("sizing_mode", "")),
         metrics=metrics,
         regime_breakdown=dict(details.get("regime_breakdown", {}) or {}),
@@ -138,12 +166,17 @@ def build_recommendation_portfolio_metadata(
     created_at: str,
 ) -> ResearchRunMetadataDTO:
     strategy_config = dict(config.get("strategy_config", {}) or {})
+    manifest = execution_manifest(details, metrics)
+    assumptions = manifest.get("execution_assumptions", {})
+    costs = assumptions.get("execution_costs", {}) if isinstance(assumptions, dict) else {}
+    threshold_to_bp = ratio_to_bp if manifest.get("execution_contract") == "next-session-open.v2" else pct_to_bp
     payload_hash = research_payload_hash(
         {
             "run_type": "recommendation_portfolio",
             "config": config,
             "run_params": run_params,
             "metrics": metrics,
+            "data_manifest": manifest,
         }
     )
     return ResearchRunMetadataDTO(
@@ -164,11 +197,13 @@ def build_recommendation_portfolio_metadata(
         fingerprint_algorithm=(
             "sha256" if str(details.get("data_version", "")).startswith("sha256") else ""
         ),
-        data_manifest=dict(details.get("data_manifest", {}) or {}),
+        data_manifest=manifest,
         capital_cents=money_to_cents(run_params.get("initial_capital", 0)),
-        stop_loss_bp=pct_to_bp(run_params.get("stop_loss_pct")),
-        take_profit_bp=pct_to_bp(run_params.get("take_profit_pct")),
-        execution_price=str(details.get("execution_price", "")),
+        fee_bp_x100=bps_to_bp_x100(costs.get("fee_bps", run_params.get("fee_bps", 0))),
+        slippage_bp_x100=bps_to_bp_x100(costs.get("slippage_bps", run_params.get("slippage_bps", 0))),
+        stop_loss_bp=threshold_to_bp(run_params.get("stop_loss_pct")),
+        take_profit_bp=threshold_to_bp(run_params.get("take_profit_pct")),
+        execution_price=str(manifest.get("execution_contract") or details.get("execution_price", "")),
         sizing_mode=str(run_params.get("allocation_method", "")),
         metrics=metrics,
         regime_breakdown=dict(details.get("regime_breakdown", {}) or {}),

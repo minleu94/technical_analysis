@@ -23,7 +23,57 @@ from data_module.microstructure_source_preflight import build_microstructure_sou
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorQuality, FactorRecord, MissingPolicy
 from financial_module.units import bps_to_rate, calculate_fee, quantize_money, to_decimal
+from backtest_module.broker_simulator import (
+    NEXT_OPEN_CONTRACT, LEGACY_CLOSE_CONTRACT, executable_open, exact_execution_costs,
+)
+from backtest_module.conservative_fill_policy import ConservativeFillPolicy
 from app_module.recommendation_portfolio_result_support import build_credibility_manifest, build_factor_manifest, build_relative_attribution, build_stock_contribution, return_bp_from_values
+
+
+_LIMIT_LOCK_FIELDS = (
+    "limit_up_down_flag",
+    "limit_lock",
+    "漲跌停標示",
+    "漲停鎖死",
+    "跌停鎖死",
+)
+_LIMIT_LOCK_MARKERS = frozenset(
+    {
+        "1",
+        "true",
+        "yes",
+        "locked",
+        "limit_lock",
+        "limit_up_lock",
+        "limit_down_lock",
+        "漲停鎖死",
+        "跌停鎖死",
+    }
+)
+
+
+def _row_observes_limit_lock(row: Any) -> bool:
+    """Return true only for an explicit same-session lock observation.
+
+    A next-open price equal to a theoretical +/-10% boundary is not enough to
+    infer a locked order book.  The replay may enforce the conservative price
+    limit only when the supplied row carries an explicit lock marker.
+    """
+
+    if row is None:
+        return False
+    for field in _LIMIT_LOCK_FIELDS:
+        if field not in row.index:
+            continue
+        value = row[field]
+        if pd.isna(value):
+            continue
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float, Decimal)):
+            return to_decimal(value) != 0
+        return str(value).strip().lower() in _LIMIT_LOCK_MARKERS
+    return False
 
 
 class RecommendationPortfolioBacktestService:
@@ -49,6 +99,8 @@ class RecommendationPortfolioBacktestService:
         slippage_bps: float | None = None,
         tax_bps: float | None = None,
         lot_size: int | None = None,
+        execution_contract: str = NEXT_OPEN_CONTRACT,
+        check_cancel: Callable[[], bool] | None = None,
     ) -> RecommendationPortfolioBacktestResultDTO:
         """
         執行推薦組合回測。
@@ -56,6 +108,19 @@ class RecommendationPortfolioBacktestService:
         注意：目前本服務進場點（PeriodHoldingDTO.entry_price）採用 rebalance_ts（訊號日）當天的收盤價。
         此模式隱含「同日收盤訊號同日收盤成交」之理想化研究假設，在實盤操作中可能存在時間差而無法以該價格買入。
         """
+        if execution_contract == NEXT_OPEN_CONTRACT:
+            return self._run_next_open_portfolio(
+                start_date=start_date, end_date=end_date, profile_id=profile_id,
+                config=recommendation_config, history=history, initial_capital=initial_capital,
+                rebalance_frequency=rebalance_frequency, top_n=top_n,
+                allocation_method=allocation_method, holding_days=holding_days,
+                stop_loss_pct=stop_loss_pct, take_profit_pct=take_profit_pct,
+                max_participation_rate=max_participation_rate, fee_bps=fee_bps,
+                slippage_bps=slippage_bps, tax_bps=tax_bps,
+                lot_size=lot_size or 1, check_cancel=check_cancel,
+            )
+        if execution_contract != LEGACY_CLOSE_CONTRACT:
+            raise ValueError("不支援的 execution_contract")
         import warnings
         warnings.warn(
             "推薦組合回測目前採用「同日收盤訊號同日收盤成交」之理想化研究假設，實盤中可能因時間差無法以收盤價買入。",
@@ -291,6 +356,7 @@ class RecommendationPortfolioBacktestService:
                     "max_drawdown": 0.0,
                     "total_trades": 0,
                     "execution_assumption": "idealized_same_day_close",
+                    "execution_contract": LEGACY_CLOSE_CONTRACT,
                     "credibility_status": credibility_manifest["status"],
                     "credibility_warning_count": len(credibility_manifest["warnings"]),
                     "unfilled_order_count": len(unfilled_orders),
@@ -328,6 +394,7 @@ class RecommendationPortfolioBacktestService:
             ),
             "capital_used": sum(holding.allocation_amount for holding in period_holdings),
             "execution_assumption": "idealized_same_day_close",
+            "execution_contract": LEGACY_CLOSE_CONTRACT,
             "credibility_status": credibility_manifest["status"],
             "credibility_warning_count": len(credibility_manifest["warnings"]),
             "unfilled_order_count": len(unfilled_orders),
@@ -385,6 +452,281 @@ class RecommendationPortfolioBacktestService:
             improvement_hints=improvement_hints,
             details=details,
         )
+
+    def _run_next_open_portfolio(
+        self, *, start_date: str, end_date: str, profile_id: str,
+        config: Dict[str, Any], history: pd.DataFrame, initial_capital: Any,
+        rebalance_frequency: str, top_n: int, allocation_method: str, holding_days: int,
+        stop_loss_pct: Any, take_profit_pct: Any, max_participation_rate: Any,
+        fee_bps: Any, slippage_bps: Any, tax_bps: Any, lot_size: int,
+        check_cancel: Callable[[], bool] | None,
+        include_benchmark: bool = True,
+    ) -> RecommendationPortfolioBacktestResultDTO:
+        """日序事件撮合；精確帳務直到 DTO 產出才轉展示型別。"""
+        capital = quantize_money(to_decimal(initial_capital))
+        if not capital.is_finite() or capital <= 0 or top_n < 1 or holding_days < 1 or lot_size < 1:
+            raise ValueError("資金、top_n、holding_days 與 lot_size 必須為正數")
+        if rebalance_frequency not in {"once", "weekly"} or allocation_method not in {"equal_weight", "score_weight"}:
+            raise ValueError("不支援的再平衡或配置方式")
+        for threshold in (stop_loss_pct, take_profit_pct, max_participation_rate):
+            if threshold is not None and (not to_decimal(threshold).is_finite() or to_decimal(threshold) <= 0):
+                raise ValueError("風控與成交量比例必須為有限正數")
+        exact_execution_costs(Decimal("0"), side="sell", fee_bps=fee_bps, slippage_bps=slippage_bps, tax_bps=tax_bps)
+        data = history.copy()
+        if not {"日期", "證券代號", "收盤價"}.issubset(data.columns):
+            raise ValueError("歷史資料缺少日期、證券代號或收盤價")
+        data["日期"] = parse_stock_dates(data["日期"])
+        if data["日期"].isna().any():
+            raise ValueError("歷史日期不可解析")
+        data["證券代號"] = data["證券代號"].astype(str)
+        start, end = pd.Timestamp(start_date), pd.Timestamp(end_date)
+        if end < start:
+            raise ValueError("end_date 不得早於 start_date")
+        data = data[data["日期"] <= end].sort_values(["日期", "證券代號"])
+        if data.duplicated(["日期", "證券代號"]).any():
+            raise ValueError("每檔股票每日只能有一筆市場資料")
+        rebalance_dates = set(self._get_rebalance_dates(data, start, end, rebalance_frequency))
+        sessions = sorted(data.loc[data["日期"] >= start, "日期"].unique())
+        cash, cost_total = capital, Decimal("0")
+        positions: dict[str, dict[str, Any]] = {}
+        all_positions: list[dict[str, Any]] = []
+        pending: dict[str, dict[str, Any]] = {}
+        snapshots: list[RecommendationSnapshotDTO] = []
+        trade_rows: list[dict[str, Any]] = []
+        cash_ledger: list[dict[str, Any]] = []
+        curve_rows: list[dict[str, Any]] = []
+        unfilled: list[dict[str, Any]] = []
+        diagnostics: list[str] = []
+        cancelled = False
+        peak, max_drawdown = capital, Decimal("0")
+        final_equity = capital
+        fill_policy = ConservativeFillPolicy(
+            lot_size=lot_size,
+            max_participation_rate=max_participation_rate,
+            enable_limit_up_down=True,
+            limit_up_down_pct=Decimal("0.10"),
+            apply_volume_to_sell=False,
+        )
+
+        for raw_session in sessions:
+            if check_cancel is not None and check_cancel():
+                cancelled = True
+                break
+            session = pd.Timestamp(raw_session)
+            day = {str(row["證券代號"]): row for _, row in data[data["日期"] == session].iterrows()}
+            # 每日先賣再買；只有實際賣出後的現金才能被當天新買單消費。
+            ordered = sorted(pending.items(), key=lambda item: (item[1]["side"] != "sell", item[1]["rank"], item[0]))
+            for code, order in ordered:
+                row = day.get(code)
+                price = executable_open(row) if row is not None else None
+                if price is None:
+                    order["last_reason"] = "missing_open_or_suspended"
+                    continue
+                side = order["side"]
+                if side == "buy":
+                    budget = min(order["budget"], cash)
+                    buy_rate = (to_decimal(fee_bps or 0) + to_decimal(slippage_bps or 0)) / Decimal("10000")
+                    shares = int(budget / (price * (Decimal("1") + buy_rate))) // lot_size * lot_size
+                else:
+                    budget = cash
+                    shares = positions[code]["shares"]
+                while shares > 0:
+                    gross = quantize_money(price * shares)
+                    costs = exact_execution_costs(gross, side=side, fee_bps=fee_bps, slippage_bps=slippage_bps, tax_bps=tax_bps)
+                    if side == "sell" or gross + costs["total"] <= budget:
+                        break
+                    shares -= lot_size
+                decision = fill_policy.decide(
+                    side=side,
+                    requested_shares=shares,
+                    open_price=price,
+                    # 價位剛好落在理論漲跌停邊界，不足以證明「鎖死」。
+                    # 只有同一執行日有官方/明示的鎖死欄位時，才把前收傳給
+                    # ConservativeFillPolicy；缺少該來源時由 preflight 揭露
+                    # 限制，避免把未知狀態誤判成不可成交。
+                    prior_close=(
+                        order.get("signal_close")
+                        if _row_observes_limit_lock(row)
+                        else None
+                    ),
+                    known_volume=order.get("volume"),
+                )
+                if decision.status == "unfilled":
+                    unfilled.append({"stock_code": code, "signal_date": order["signal_date"], "rebalance_date": order["signal_date"], "allocation_weight": float(order.get("weight", 0)), "reason": decision.reason or "insufficient_cash_or_known_volume", "side": side, "requested_shares": decision.requested_shares, "fill_status": decision.status})  # numeric-boundary: dto
+                    del pending[code]
+                    continue
+                shares = decision.filled_shares
+                if shares <= 0:
+                    unfilled.append({"stock_code": code, "signal_date": order["signal_date"], "rebalance_date": order["signal_date"], "allocation_weight": float(order.get("weight", 0)), "reason": "insufficient_cash_or_known_volume", "side": side})  # numeric-boundary: dto
+                    del pending[code]
+                    continue
+                gross = quantize_money(price * shares)
+                costs = exact_execution_costs(gross, side=side, fee_bps=fee_bps, slippage_bps=slippage_bps, tax_bps=tax_bps)
+                cost_total += costs["total"]
+                if side == "buy":
+                    cash = quantize_money(cash - gross - costs["total"])
+                    position = {**order, "stock_code": code, "shares": shares, "entry_date": session,
+                                "entry_price": price, "entry_gross": gross, "entry_cost": costs["total"],
+                                "mark": price, "status": "open", "exit_reason": "end_of_data_open",
+                                "exit_signal_date": "", "exit_date": None, "exit_price": Decimal("0"), "exit_cost": Decimal("0")}
+                    positions[code] = position
+                    all_positions.append(position)
+                else:
+                    cash = quantize_money(cash + gross - costs["total"])
+                    position = positions.pop(code)
+                    position.update(status="closed", exit_date=session, exit_price=price,
+                                    exit_cost=costs["total"], exit_signal_date=order["signal_date"], exit_reason=order["reason"])
+                trade_rows.append({"date": session.strftime("%Y-%m-%d"), "signal_date": order["signal_date"],
+                                   "stock_code": code, "stock_name": order["stock_name"], "side": side,
+                                   "price": float(price), "shares": shares, "amount": float(gross),  # numeric-boundary: dto
+                                   "fee": float(costs["fee"]), "tax": float(costs["tax"]), "slippage": float(costs["slippage"]),  # numeric-boundary: dto
+                                   "requested_shares": decision.requested_shares, "unfilled_shares": decision.unfilled_shares,
+                                   "fill_status": decision.status, "fill_reason": decision.reason,
+                                   "execution_contract": NEXT_OPEN_CONTRACT})
+                cash_ledger.append({"date": session.strftime("%Y-%m-%d"), "stock_code": code, "side": side,
+                                    "amount": float(gross), "total_cost": float(costs["total"]), "cash_balance": float(cash)})  # numeric-boundary: dto
+                del pending[code]
+
+            for code, position in positions.items():
+                row = day.get(code)
+                if row is not None and pd.notna(row["收盤價"]) and to_decimal(row["收盤價"]) > 0:
+                    position["mark"] = to_decimal(row["收盤價"])
+                else:
+                    diagnostics.append(f"stale_mark:{code}:{session.date()}")
+                if code in pending:
+                    continue
+                change = position["mark"] / position["entry_price"] - Decimal("1")
+                reason = None
+                if stop_loss_pct is not None and change <= -abs(to_decimal(stop_loss_pct)):
+                    reason = "stop_loss_close_confirmed"
+                elif take_profit_pct is not None and change >= abs(to_decimal(take_profit_pct)):
+                    reason = "take_profit_close_confirmed"
+                elif session >= position["entry_date"] + pd.Timedelta(days=holding_days):
+                    reason = "holding_period_close_confirmed"
+                if reason:
+                    pending[code] = {**position, "side": "sell", "signal_date": session.strftime("%Y-%m-%d"), "reason": reason}
+
+            value = sum((position["mark"] * position["shares"] for position in positions.values()), Decimal("0"))
+            final_equity = quantize_money(cash + value)
+            peak = max(peak, final_equity)
+            max_drawdown = min(max_drawdown, final_equity / peak - Decimal("1"))
+            curve_rows.append({"date": session.strftime("%Y-%m-%d"), "equity": float(final_equity), "cash": float(cash), "position_value": float(quantize_money(value))})  # numeric-boundary: dto
+            if session in rebalance_dates:
+                snapshot = self.replay_service.run_snapshot(as_of_date=session.strftime("%Y-%m-%d"), profile_id=profile_id,
+                    config=dict(config), history=data, universe=None, top_n=top_n)
+                snapshots.append(snapshot)
+                recs = snapshot.recommendations
+                scores = [max(to_decimal(rec.get("total_score", 0)), Decimal("0")) for rec in recs]
+                total_score = sum(scores, Decimal("0"))
+                for rank, rec in enumerate(recs, 1):
+                    code = str(rec["stock_code"])
+                    if code in positions or code in pending:
+                        continue
+                    weight = scores[rank - 1] / total_score if allocation_method == "score_weight" and total_score > 0 else Decimal("1") / len(recs)
+                    source_row = day.get(code)
+                    volume = next((to_decimal(source_row[c]) for c in ("成交股數", "成交量", "Volume", "volume") if source_row is not None and c in source_row and pd.notna(source_row[c])), None)
+                    pending[code] = {"side": "buy", "signal_date": session.strftime("%Y-%m-%d"), "stock_name": str(rec.get("stock_name", "")),
+                        "rank": rank, "weight": weight, "budget": quantize_money(capital * weight), "score": rec.get("total_score", 0),
+                        "factor_scores": dict(rec.get("factor_scores", {})), "volume": volume,
+                        "signal_close": to_decimal(source_row["收盤價"]) if source_row is not None and pd.notna(source_row["收盤價"]) else None}
+        for code, order in pending.items():
+            unfilled.append({"stock_code": code, "signal_date": order["signal_date"], "side": order["side"],
+                             "rebalance_date": order["signal_date"], "allocation_weight": float(order.get("weight", 0)) if order["side"] == "buy" else 0,  # numeric-boundary: dto
+                             "reason": "cancelled" if cancelled else order.get("last_reason", "end_of_data")})
+        if not curve_rows:
+            curve_rows = [{"date": start.strftime("%Y-%m-%d"), "equity": float(capital), "cash": float(capital), "position_value": 0}]  # numeric-boundary: dto
+        holdings: list[PeriodHoldingDTO] = []
+        contribution_groups: dict[str, list[tuple[dict[str, Any], Decimal, Decimal]]] = {}
+        realized = Decimal("0")
+        for position in all_positions:
+            exit_price = position["exit_price"] if position["status"] == "closed" else position["mark"]
+            pnl = quantize_money((exit_price - position["entry_price"]) * position["shares"] - position["entry_cost"] - position["exit_cost"])
+            if position["status"] == "closed":
+                realized += pnl
+            contribution_groups.setdefault(position["stock_code"], []).append((position, pnl, pnl / position["entry_gross"]))
+            last = position["exit_date"] or pd.Timestamp(curve_rows[-1]["date"])
+            holdings.append(PeriodHoldingDTO(
+                rebalance_date=position["signal_date"], stock_code=position["stock_code"], stock_name=position["stock_name"], rank=position["rank"],
+                total_score=float(position["score"]), factor_scores=position["factor_scores"],  # numeric-boundary: dto
+                allocation_amount=float(position["entry_gross"]), allocation_weight=float(position["weight"]),  # numeric-boundary: dto
+                entry_date=position["entry_date"].strftime("%Y-%m-%d"), entry_price=float(position["entry_price"]),  # numeric-boundary: dto
+                planned_exit_date=(position["entry_date"] + pd.Timedelta(days=holding_days)).strftime("%Y-%m-%d"),
+                actual_exit_date=position["exit_date"].strftime("%Y-%m-%d") if position["exit_date"] is not None else "",
+                actual_exit_price=float(position["exit_price"]), exit_reason=position["exit_reason"],  # numeric-boundary: dto
+                holding_days=(last - position["entry_date"]).days, return_pct=float(pnl / position["entry_gross"]),  # numeric-boundary: dto
+                shares=position["shares"], actual_allocation_weight=float(position["entry_gross"] / capital),  # numeric-boundary: dto
+                execution_contract=NEXT_OPEN_CONTRACT, position_status=position["status"], exit_signal_date=position["exit_signal_date"],
+                pnl_cents=int(pnl * 100),
+            ))
+        equity_curve = pd.DataFrame(curve_rows)
+        contributions = []
+        for code, items in contribution_groups.items():
+            total_pnl = sum((item[1] for item in items), Decimal("0"))
+            returns = [item[2] for item in items]
+            contributions.append(StockContributionDTO(stock_code=code, stock_name=items[0][0]["stock_name"], selected_count=len(items),
+                total_pnl=float(total_pnl), avg_return_pct=float(sum(returns, Decimal("0")) / len(returns)),  # numeric-boundary: dto
+                win_rate=float(Decimal(sum(value > 0 for value in returns)) / len(returns)), worst_return_pct=float(min(returns))))  # numeric-boundary: dto
+        # Benchmark 缺同版本撮合／成本資料時明確不可比較，不能沿用 close-to-close excess。
+        benchmark: dict[str, Any] = {"status": "not_computable", "policy": "requires_same_execution_contract_and_costs", "execution_contract": NEXT_OPEN_CONTRACT, "benchmarks": {}, "missing_sources": ["aligned_executable_benchmark"]}
+        benchmark_excess_bp = None
+        if include_benchmark and not cancelled:
+            if allocation_method == "equal_weight":
+                baseline_equity = final_equity
+                baseline_curve = curve_rows
+            else:
+                frozen = {item.as_of_date: item.recommendations for item in snapshots}
+                baseline_service = RecommendationPortfolioBacktestService(lambda frame, *_: frozen.get(frame["日期"].max().strftime("%Y-%m-%d"), []))
+                baseline_result = baseline_service._run_next_open_portfolio(start_date=start_date, end_date=end_date,
+                    profile_id=profile_id, config=config, history=data, initial_capital=initial_capital,
+                    rebalance_frequency=rebalance_frequency, top_n=top_n, allocation_method="equal_weight", holding_days=holding_days,
+                    stop_loss_pct=stop_loss_pct, take_profit_pct=take_profit_pct, max_participation_rate=max_participation_rate,
+                    fee_bps=fee_bps, slippage_bps=slippage_bps, tax_bps=tax_bps, lot_size=lot_size, check_cancel=None, include_benchmark=False)
+                baseline_equity = to_decimal(baseline_result.summary["ending_equity_cents"]) / 100
+                baseline_curve = baseline_result.equity_curve.to_dict("records")
+            baseline_return = baseline_equity / capital - Decimal("1")
+            benchmark_excess_bp = int(((final_equity - baseline_equity) / capital * Decimal("10000")).to_integral_value(rounding=ROUND_HALF_UP))
+            benchmark = {"status": "comparable", "policy": "frozen_recommendations_equal_weight_same_costs_sessions",
+                "execution_contract": NEXT_OPEN_CONTRACT, "benchmark_type": "equal_weight", "missing_sources": [],
+                "benchmarks": {"benchmark": {"status": "observed", "return_bp": int((baseline_return * Decimal("10000")).to_integral_value(rounding=ROUND_HALF_UP)), "excess_return_bp": benchmark_excess_bp}},
+                "equity_curve": baseline_curve}
+        warnings = ["close_confirmed_exit_only", "price_limit_order_book_not_modeled"]
+        if any(value is None for value in (fee_bps, slippage_bps, tax_bps)):
+            warnings.append("unspecified_cost_assumptions")
+        credibility = {"schema_version": 2, "status": "limited", "execution_assumption": "next_session_open", "execution_contract": NEXT_OPEN_CONTRACT,
+            "warnings": warnings, "terminal_policy": "mark_open_positions_without_synthetic_liquidation", "exit_policy": "close_confirmed_next_open",
+            "liquidity_policy": "signal_session_known_volume", "share_sizing": {"lot_size": lot_size},
+            "execution_costs": {"fee_bps": str(fee_bps or 0), "slippage_bps": str(slippage_bps or 0), "tax_bps": str(tax_bps or 0)}}
+        manifest = self._build_factor_manifest(snapshots)
+        manifest["execution_contract"] = NEXT_OPEN_CONTRACT
+        rolling_risk = calculate_rolling_risk_metrics(equity_curve=equity_curve, period_holdings=holdings)
+        microstructure = self._build_microstructure_preflight(snapshots, data)
+        gap_records = []
+        for position in all_positions:
+            signal_close = position["signal_close"]
+            if signal_close is None or signal_close <= 0:
+                continue
+            gap = position["entry_price"] / signal_close - Decimal("1")
+            gap_records.append({"stock_code": position["stock_code"], "signal_date": position["signal_date"],
+                "execution_date": position["entry_date"].strftime("%Y-%m-%d"),
+                "signal_close_price": float(signal_close), "execution_open_price": float(position["entry_price"]), "gap_pct": float(gap),  # numeric-boundary: dto
+                "gap_bp": int((gap * 10000).to_integral_value(rounding=ROUND_HALF_UP))})
+        gap_risk = {"schema_version": 2, "supported": "partial", "policy": "signal_close_to_actual_execution_open",
+                    "records": gap_records, "record_count": len(gap_records)}
+        summary = {"total_return": float(final_equity / capital - Decimal("1")), "max_drawdown": float(max_drawdown),  # numeric-boundary: dto
+            "total_trades": len([p for p in all_positions if p["status"] == "closed"]), "execution_assumption": "next_session_open", "execution_contract": NEXT_OPEN_CONTRACT,
+            "ending_cash": float(cash), "ending_equity": float(final_equity), "total_transaction_cost": float(cost_total), "realized_pnl": float(realized),  # numeric-boundary: dto
+            "unrealized_pnl": float(final_equity - capital - realized),  # numeric-boundary: dto
+            "ending_equity_cents": int(final_equity * 100), "ending_cash_cents": int(cash * 100),
+            "open_position_count": len(positions), "unfilled_order_count": len(unfilled), "status": "cancelled" if cancelled else "completed",
+            "rolling_risk_status": rolling_risk["status"], "microstructure_risk_count": microstructure["risk_count"],
+            "credibility_status": "limited", "credibility_warning_count": len(warnings), "benchmark_excess_return_bp": benchmark_excess_bp, "relative_attribution_status": benchmark["status"]}
+        summary.update(calculate_robustness_metrics(equity_curve=equity_curve, trade_returns=[h.return_pct for h in holdings if h.position_status == "closed"]))
+        return RecommendationPortfolioBacktestResultDTO(summary=summary, equity_curve=equity_curve, trades=pd.DataFrame(trade_rows), snapshots=snapshots,
+            period_holdings=holdings, stock_contribution=contributions, selection_diagnostics=diagnostics + [str(o["reason"]) for o in unfilled],
+            details={"data_manifest": manifest, "execution_contract": NEXT_OPEN_CONTRACT, "portfolio_credibility": credibility,
+                     "cash_ledger": cash_ledger, "unfilled_orders": unfilled, "relative_attribution": benchmark, "benchmark_results": benchmark,
+                     "weight_exposure": self._build_weight_exposure(period_holdings=holdings, unfilled_orders=unfilled),
+                     "gap_risk": gap_risk, "rolling_risk_metrics": rolling_risk, "microstructure_preflight": microstructure})
 
     def _get_rebalance_dates(
         self,

@@ -5,11 +5,14 @@
 
 import pandas as pd
 import numpy as np
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable
 from datetime import date, datetime
 from pathlib import Path
 import logging
 from decimal import Decimal, InvalidOperation
+from dataclasses import replace
+import sqlite3
+from app_module.recommendation_portfolio_dates import parse_stock_dates
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +21,13 @@ from app_module.strategy_registry import StrategyRegistry
 from app_module.daily_signal import DailySignalFrame
 from app_module.dtos import BacktestReportDTO, ValidationStatus
 from app_module.sop_validator import SOPValidator
-from backtest_module.broker_simulator import BrokerSimulator, BrokerConfig
+from backtest_module.broker_simulator import BrokerSimulator, BrokerConfig, NEXT_OPEN_CONTRACT, LEGACY_CLOSE_CONTRACT
 from backtest_module.performance_metrics import PerformanceAnalyzer
 from decision_module.factors.factor_adapters import build_technical_total_score_factor
 from decision_module.factors.factor_dtos import FactorRecord
 from app_module.backtest_report_support import create_empty_report, date_from_index, factor_decision_date, score_factor_records
 from app_module.backtest_contracts import WalkForwardResultContract
+from app_module.exceptions import BacktestCancelledError
 
 
 class BacktestService:
@@ -72,7 +76,8 @@ class BacktestService:
         enable_overfitting_risk: bool = True,
         changed_layers: Optional[List[str]] = None,
         walkforward_executed: bool = False,
-        signal_context_start_date: Optional[str] = None
+        signal_context_start_date: Optional[str] = None,
+        check_cancel: Callable[[], bool] | None = None,
     ) -> BacktestReportDTO:
         """
         執行回測
@@ -205,7 +210,9 @@ class BacktestService:
         broker = BrokerSimulator(broker_config)
         
         try:
-            trades, equity_curve = broker.run(signal_frame, capital)
+            trades, equity_curve = broker.run(signal_frame, capital, check_cancel=check_cancel)
+        except InterruptedError as error:
+            raise BacktestCancelledError(str(error)) from error
         except Exception as e:
             return self._create_empty_report(f"撮合模擬失敗: {str(e)}")
         
@@ -222,11 +229,20 @@ class BacktestService:
         baseline_comparison = None
         try:
             # 計算 Buy & Hold Baseline
-            baseline_result = analyzer.calculate_buy_hold_return(
-                df=df,
-                start_date=actual_start_date,
-                end_date=actual_end_date
-            )
+            if execution_price == "next_open":
+                baseline_frame = signal_frame.copy()
+                baseline_frame["signal"] = 0
+                baseline_frame.iloc[0, baseline_frame.columns.get_loc("signal")] = 1
+                baseline_config = replace(broker_config, sizing_mode="all_in", stop_loss_pct=None,
+                    take_profit_pct=None, stop_loss_atr_mult=None, take_profit_atr_mult=None,
+                    allow_pyramid=False)
+                baseline_trades, baseline_equity = BrokerSimulator(baseline_config).run(baseline_frame, capital, check_cancel=check_cancel)
+                baseline_metrics = analyzer.summarize(baseline_trades, baseline_equity, capital)
+                baseline_result = {"total_return": baseline_metrics.total_return,
+                    "sharpe_ratio": baseline_metrics.sharpe_ratio, "max_drawdown": baseline_metrics.max_drawdown}
+            else:
+                baseline_result = analyzer.calculate_buy_hold_return(
+                    df=df, start_date=actual_start_date, end_date=actual_end_date)
             
             # 確保 baseline_result 中的值都是數值類型
             baseline_returns = float(baseline_result.get('total_return', 0.0))
@@ -242,6 +258,8 @@ class BacktestService:
                 baseline_sharpe=baseline_sharpe,
                 baseline_max_drawdown=baseline_max_drawdown
             )
+        except InterruptedError as error:
+            raise BacktestCancelledError(str(error)) from error
         except Exception as e:
             import traceback
             logger.warning(f"[BacktestService] Baseline 對比計算失敗: {e}")
@@ -340,6 +358,14 @@ class BacktestService:
                 'strategy_id': strategy_spec.strategy_id,
                 'strategy_version': strategy_spec.strategy_version,
                 'initial_capital': capital,
+                'execution_price': execution_price,
+                'execution_contract': NEXT_OPEN_CONTRACT if execution_price == "next_open" else LEGACY_CLOSE_CONTRACT,
+                'data_manifest': {'execution_contract': NEXT_OPEN_CONTRACT if execution_price == "next_open" else LEGACY_CLOSE_CONTRACT},
+                'execution_diagnostics': broker.execution_diagnostics,
+                'terminal_position': int(equity_curve['position'].iloc[-1]) if 'position' in equity_curve else 0,
+                'benchmark_results': {'execution_contract': NEXT_OPEN_CONTRACT if execution_price == "next_open" else LEGACY_CLOSE_CONTRACT,
+                    'policy': 'same_costs_next_open_mark_terminal' if execution_price == 'next_open' else 'legacy_close_to_close',
+                    'comparison': baseline_comparison},
                 'final_equity': equity_curve['equity'].iloc[-1],
                 'profit_factor': metrics.profit_factor,
                 'avg_win': metrics.avg_win,
@@ -355,6 +381,49 @@ class BacktestService:
             }
         )
     
+    def load_recommendation_portfolio_history(self, start_date: str | None = None, end_date: str | None = None) -> pd.DataFrame:
+        """應用層唯讀載入研究切片；保留開盤與量，不初始化 DB writer。"""
+        if self.config is None:
+            raise ValueError("配置未初始化")
+        if getattr(self.config, "use_sqlite", False):
+            path = Path(self.config.db_file).resolve()
+            if not path.is_file():
+                raise FileNotFoundError(f"市場 SQLite 不存在：{path}")
+            connection = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)
+            try:
+                connection.execute("PRAGMA query_only=ON")
+                clauses, params = [], []
+                if start_date:
+                    clauses.append("REPLACE(CAST(日期 AS TEXT), '-', '') >= ?")
+                    params.append((pd.Timestamp(start_date) - pd.Timedelta(days=365)).strftime("%Y%m%d"))
+                if end_date:
+                    clauses.append("REPLACE(CAST(日期 AS TEXT), '-', '') <= ?")
+                    params.append(pd.Timestamp(end_date).strftime("%Y%m%d"))
+                query = "SELECT * FROM daily_prices"
+                if clauses:
+                    query += " WHERE " + " AND ".join(clauses)
+                history = pd.read_sql_query(query, connection, params=params)
+            finally:
+                connection.close()
+        else:
+            csv_path = next((Path(p) for p in (self.config.all_stocks_data_file, self.config.stock_data_file) if Path(p).is_file()), None)
+            if csv_path is None:
+                raise FileNotFoundError("找不到歷史資料檔")
+            history = pd.read_csv(csv_path, encoding="utf-8-sig", low_memory=False, dtype={"證券代號": str, "股票代號": str})
+        aliases = {"股票代號": "證券代號", "股票名稱": "證券名稱", "Close": "收盤價", "Open": "開盤價"}
+        history = history.rename(columns={old: new for old, new in aliases.items() if new not in history.columns})
+        if not {"日期", "證券代號", "收盤價"}.issubset(history.columns):
+            raise ValueError("歷史資料缺少日期、證券代號或收盤價")
+        history["日期"] = parse_stock_dates(history["日期"])
+        if history["日期"].isna().any():
+            raise ValueError("歷史日期不可解析")
+        history["證券代號"] = history["證券代號"].astype(str).str.strip()
+        if start_date:
+            history = history[history["日期"] >= pd.Timestamp(start_date) - pd.Timedelta(days=365)]
+        if end_date:
+            history = history[history["日期"] <= pd.Timestamp(end_date)]
+        return history.sort_values(["日期", "證券代號"]).reset_index(drop=True)
+
     def _build_score_factor_records(
         self,
         *,

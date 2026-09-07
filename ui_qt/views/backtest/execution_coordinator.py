@@ -40,7 +40,8 @@ class BacktestExecutionRequest:
         values["strategy_params"] = dict(self.strategy_params)
         return values
 
-    def execute(self, backtest_service: Any) -> Any:
+    def execute(self, backtest_service: Any, *, check_cancel: Any = None) -> Any:
+        cancel_kwargs = {"check_cancel": check_cancel} if check_cancel is not None else {}
         return backtest_service.run_backtest(
             stock_code=self.stock_code,
             start_date=self.start_date,
@@ -66,6 +67,7 @@ class BacktestExecutionRequest:
             enable_limit_up_down=self.enable_limit,
             enable_volume_constraint=self.enable_volume,
             max_participation_rate=self.max_participation,
+            **cancel_kwargs,
         )
 
 
