@@ -4,7 +4,6 @@ import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Protocol, Sequence
-from numbers import Integral, Real
 
 import pandas as pd
 from decimal import Decimal, ROUND_HALF_UP
@@ -50,6 +49,8 @@ class WatchlistTriggerService:
             )
 
         if not watchlist_codes:
+            if getattr(self.watchlist_provider, "source_available", False):
+                return WatchlistTriggerSummary(as_of_date, DecisionDeskQuality.OBSERVED, ("watchlist_trigger_empty_pool",), 0)
             return WatchlistTriggerSummary(
                 as_of_date=as_of_date,
                 quality=DecisionDeskQuality.MISSING,
@@ -86,6 +87,8 @@ class WatchlistTriggerService:
             if isinstance(prov_actual, date) and prov_actual != as_of_date:
                 actual_date = prov_actual
                 has_fallback = True
+        if actual_date > as_of_date:
+            return WatchlistTriggerSummary(None, DecisionDeskQuality.MISSING, ("watchlist_trigger_future_source_rejected",))
 
         previous_scores = self._load_previous_scores(actual_date)
 
@@ -100,7 +103,8 @@ class WatchlistTriggerService:
             warnings.append(f"watchlist_trigger_as_of_fallback:{actual_date.isoformat()}")
 
         for code in watchlist_codes:
-            current = self._read_score(current_scores.get(code))
+            current_payload = current_scores.get(code)
+            current = self._read_score(current_payload) if self._known_at(current_payload, as_of_date) else None
             if current is None:
                 data_insufficient_codes.append(code)
                 warnings.append(f"watchlist_trigger_data_insufficient:{code}")
@@ -110,7 +114,10 @@ class WatchlistTriggerService:
                 risk_codes.append(code)
                 warnings.append(f"watchlist_trigger_risk_alert:{code}")
 
-            previous = self._read_score(previous_scores.get(code))
+            previous_payload = previous_scores.get(code)
+            previous = self._read_score(previous_payload) if self._known_at(previous_payload, actual_date) else None
+            if previous is None:
+                warnings.append(f"watchlist_trigger_previous_unknown:{code}")
             if current < self.entry_threshold_bp:
                 continue
 
@@ -123,10 +130,11 @@ class WatchlistTriggerService:
 
         triggered_codes = tuple(dict.fromkeys(new_candidates + increases + decreases))
         top_signal = self._build_top_signal(new_candidates, increases, decreases)
-        has_data_gap = len(data_insufficient_codes) > 0
         has_any_warning = bool(warnings)
 
-        if has_fallback:
+        if len(data_insufficient_codes) == len(watchlist_codes):
+            quality = DecisionDeskQuality.MISSING
+        elif has_fallback:
             quality = DecisionDeskQuality.DEGRADED
         elif has_any_warning:
             quality = DecisionDeskQuality.ESTIMATED
@@ -137,7 +145,7 @@ class WatchlistTriggerService:
             as_of_date=actual_date,
             quality=quality,
             warnings=tuple(warnings),
-            trigger_count=len(triggered_codes),
+            trigger_count=None if quality == DecisionDeskQuality.MISSING else len(triggered_codes),
             triggered_codes=triggered_codes,
             top_signal=top_signal,
         )
@@ -223,27 +231,24 @@ class WatchlistTriggerService:
             payload = score
         if isinstance(payload, bool):
             return None
-        if isinstance(payload, Integral):
-            return int(payload)
-        if isinstance(payload, Real):
-            try:
-                numeric_value = float(payload)
-            except (TypeError, ValueError):
-                return None
-            return int(numeric_value)
-        if isinstance(payload, str):
-            cleaned = payload.strip()
-            if cleaned.startswith(("+", "-")) and cleaned[1:].isdigit():
+        try:
+            value = Decimal(str(payload))
+            return int(value) if value.is_finite() and Decimal("0") <= value <= Decimal("10000") else None
+        except (ValueError, TypeError, ArithmeticError):
+            return None
+
+    @staticmethod
+    def _known_at(payload: Any, decision_date: date) -> bool:
+        if not isinstance(payload, Mapping):
+            return True
+        for key in ("as_of_date", "available_date"):
+            if key in payload:
                 try:
-                    return int(cleaned)
-                except ValueError:
-                    return None
-            if cleaned.isdigit():
-                try:
-                    return int(cleaned)
-                except ValueError:
-                    return None
-        return None
+                    if date.fromisoformat(str(payload[key])[:10]) > decision_date:
+                        return False
+                except (ValueError, TypeError):
+                    return False
+        return True
 
     def _is_risk(self, payload: Any) -> bool:
         if not isinstance(payload, Mapping):
@@ -265,11 +270,25 @@ class WatchlistServiceWatchlistProvider:
     def __init__(self, watchlist_service: Any, watchlist_id: str = "default") -> None:
         self.watchlist_service = watchlist_service
         self.watchlist_id = watchlist_id
+        self.source_available = False
 
     def fetch(self, as_of_date: date) -> Sequence[object]:
         if self.watchlist_service is None:
             return []
-        return self.watchlist_service.get_stocks(self.watchlist_id)
+        rows = self.watchlist_service.get_stocks(self.watchlist_id)
+        getter = getattr(self.watchlist_service, "get_watchlist", None)
+        self.source_available = bool(getter(self.watchlist_id) is not None) if callable(getter) else bool(rows)
+        visible = []
+        for row in rows:
+            added_at = row.get("added_at") if isinstance(row, Mapping) else None
+            if added_at is not None:
+                try:
+                    if date.fromisoformat(str(added_at)[:10]) > as_of_date:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            visible.append(row)
+        return visible
 
 
 class SQLiteRankingProvider:

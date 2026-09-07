@@ -14,6 +14,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QAction
 import pandas as pd
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional
@@ -21,6 +23,9 @@ from typing import List, Dict, Optional
 from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.watchlist_service import WatchlistService
 from app_module.universe_service import UniverseService
+from app_module.watchlist_analysis_service import WatchlistAnalysisService
+from app_module.research_session import ResearchStockContextDTO
+from ui_qt.workers.task_worker import TaskWorker
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.table_style import apply_financial_table_style
 
@@ -31,6 +36,8 @@ class WatchlistView(QWidget):
     # 信號：當觀察清單更新時發出
     watchlistUpdated = Signal()
     sendToBacktestRequested = Signal(dict)
+    stockAnalysisRequested = Signal(str)
+    stockResearchRequested = Signal(object)
     
     def __init__(self, watchlist_service: WatchlistService, config=None, parent=None):
         """初始化觀察清單視圖
@@ -46,6 +53,9 @@ class WatchlistView(QWidget):
         
         self.watchlist_service = watchlist_service
         self.config = config
+        self.analysis_service = WatchlistAnalysisService(config) if config and hasattr(config, "output_root") else None
+        self._analysis_request_id = 0
+        self._analysis_worker: TaskWorker | None = None
         logger.info("[WatchlistView] watchlist_service 設置完成")
         
         # 初始化選股清單服務（用於回測）
@@ -139,6 +149,16 @@ class WatchlistView(QWidget):
         self.stocks_table.customContextMenuRequested.connect(self._show_context_menu)
         
         work_area_layout.addWidget(self.stocks_table, stretch=1)
+        self.stocks_table.doubleClicked.connect(self._open_stock_analysis)
+        self.stock_analysis_btn = QPushButton("查看選中個股分析／主力流向")
+        self.stock_analysis_btn.setToolTip("選取一檔股票後開啟個股資金與分點分析；也可雙擊股票。")
+        self.stock_analysis_btn.clicked.connect(self._open_stock_analysis)
+        work_area_layout.addWidget(self.stock_analysis_btn)
+        self.analysis_text = QTextEdit()
+        self.analysis_text.setReadOnly(True)
+        self.analysis_text.setMinimumHeight(130)
+        self.analysis_text.setPlaceholderText("選取一檔股票，查看已保存的推薦分數、理由與分析日期。")
+        work_area_layout.addWidget(self.analysis_text)
         
         # 統計信息（放在表格下方）
         self.stats_label = QLabel("共 0 檔股票")
@@ -220,6 +240,12 @@ class WatchlistView(QWidget):
             self.universe_list = QListWidget()
             self._refresh_universe_list()
             universe_layout.addWidget(self.universe_list, stretch=1)
+            universe_layout.addWidget(QLabel("清單個股預覽（單擊看摘要，雙擊開啟主力流向）"))
+            self.universe_stock_list = QListWidget()
+            universe_layout.addWidget(self.universe_stock_list, stretch=1)
+            self.universe_list.itemSelectionChanged.connect(self._preview_universe_stocks)
+            self.universe_stock_list.currentItemChanged.connect(self._select_universe_stock)
+            self.universe_stock_list.itemDoubleClicked.connect(self._open_universe_stock_analysis)
             
             # 載入到觀察清單按鈕
             self.load_to_watchlist_btn = QPushButton("載入到候選池")
@@ -280,6 +306,8 @@ class WatchlistView(QWidget):
 
     def _load_watchlist(self):
         """載入觀察清單"""
+        self._analysis_request_id += 1
+        self.analysis_text.clear()
         logger.info("[WatchlistView._load_watchlist] 開始載入...")
         self._set_status_label("載入中…", level="info")
         try:
@@ -328,6 +356,9 @@ class WatchlistView(QWidget):
             logger.info("[WatchlistView._load_watchlist] 設置表格模型...")
             try:
                 self.stocks_table.setModel(self.stocks_model)
+                self._analysis_request_id += 1
+                self.analysis_text.clear()
+                self.stocks_table.selectionModel().selectionChanged.connect(self._load_selected_analysis)
                 logger.info("[WatchlistView._load_watchlist] 表格模型設置成功")
             except Exception as e:
                 logger.error(f"[WatchlistView._load_watchlist] 設置表格模型失敗: {e}")
@@ -563,12 +594,187 @@ class WatchlistView(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "錯誤", f"清空清單失敗：\n{str(e)}")
     
+    def _load_selected_analysis(self, *_args):
+        self._analysis_request_id += 1
+        request_id = self._analysis_request_id
+        selection = self.stocks_table.selectionModel()
+        rows = selection.selectedRows() if selection else []
+        if self.stocks_model is None or len(rows) != 1:
+            self.analysis_text.setPlainText("請選取一檔股票查看分析摘要。")
+            return
+        row = self.stocks_model.getDataFrame().iloc[rows[0].row()]
+        code = str(row["證券代號"]).strip()
+        source = row.get("source_id", "")
+        source_id = source.strip() if isinstance(source, str) else ""
+        self._request_stock_summary(code, source_id, request_id)
+
+    def _request_stock_summary(self, code, source_id, request_id):
+        if self.analysis_service is None:
+            self.analysis_text.setPlainText(f"{code}｜分析來源尚未配置；可使用個股主力流向入口。")
+            return
+        self.analysis_text.setPlainText(f"{code}｜正在讀取已保存分析…")
+        service = self.analysis_service
+        cutoff = datetime.now(ZoneInfo("Asia/Taipei")).date()
+        worker = TaskWorker(lambda: service.fetch(code, source_id, cutoff))
+        self._analysis_worker = worker
+        worker.finished.connect(lambda result: self._show_selected_analysis(request_id, result))
+        worker.error.connect(lambda error: self._show_analysis_error(request_id, error))
+        worker.native_thread_finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _preview_universe_stocks(self):
+        self._analysis_request_id += 1
+        self.analysis_text.clear()
+        self.universe_stock_list.clear()
+        selected = self.universe_list.currentItem()
+        if selected is None or self.universe_service is None:
+            return
+        try:
+            universe = self.universe_service.load_watchlist(selected.data(Qt.UserRole))
+            if universe is None:
+                return
+            codes = [str(code).strip() for code in universe.codes]
+            names = self._query_stock_names(codes)
+            for code in codes:
+                item = QListWidgetItem(f"{code} {names.get(code, '')}")
+                item.setData(Qt.UserRole, code)
+                item.setData(Qt.UserRole + 1, names.get(code, ""))
+                self.universe_stock_list.addItem(item)
+        except Exception as error:
+            self.analysis_text.setPlainText(f"清單預覽讀取失敗：{error}")
+
+    def _select_universe_stock(self, current, _previous):
+        self._analysis_request_id += 1
+        if current is not None:
+            self._request_stock_summary(str(current.data(Qt.UserRole)), "", self._analysis_request_id)
+
+    def _show_selected_analysis(self, request_id, result):
+        if request_id != self._analysis_request_id:
+            return
+        lines = [result.stock_code, result.message]
+        if result.analysis_date:
+            lines.append(f"分析日期：{result.analysis_date}｜來源：{result.result_id}")
+        if getattr(result, "data_date", "") and result.data_date != result.analysis_date:
+            lines.append(f"資料日期：{result.data_date}")
+        if getattr(result, "profile_id", ""):
+            profile = result.profile_id
+            if getattr(result, "profile_version", ""):
+                profile += f"（{result.profile_version}）"
+            lines.append(f"Profile：{profile}")
+        if result.status == "saved":
+            lines.extend([f"當時收盤價：{result.close_price}｜推薦總分：{result.score}", f"推薦理由：{result.reasons}"])
+        self.analysis_text.setPlainText("\n".join(lines))
+
+    def _show_analysis_error(self, request_id, error):
+        if request_id == self._analysis_request_id:
+            self.analysis_text.setPlainText(f"分析讀取失敗：{str(error).splitlines()[0]}")
+
+    def closeEvent(self, event):
+        self._analysis_request_id += 1
+        super().closeEvent(event)
+
+    def _open_stock_analysis(self, _checked=False):
+        """以畫面排序後的選取列傳送股票代號與來源脈絡。"""
+        selection = self.stocks_table.selectionModel()
+        rows = selection.selectedRows() if selection else []
+        if self.stocks_model is None or len(rows) != 1:
+            self._set_status_label("請選取一檔股票查看個股分析", level="info")
+            return
+        frame = self.stocks_model.getDataFrame()
+        row = frame.iloc[rows[0].row()]
+        code = str(row["證券代號"]).strip()
+        if code:
+            source_value = row.get("source_id", "")
+            source_id = source_value.strip() if isinstance(source_value, str) else ""
+            self.stockAnalysisRequested.emit(code)
+            self.stockResearchRequested.emit(
+                self._build_stock_research_context(
+                    code,
+                    str(row.get("證券名稱", "") or "").strip(),
+                    source_id,
+                )
+            )
+
+    def _open_universe_stock_analysis(self, item: QListWidgetItem) -> None:
+        """由保存的選股清單下鑽；沒有 result id 時仍保留股票識別。"""
+
+        code = str(item.data(Qt.UserRole) or "").strip()
+        if not code:
+            return
+        name = str(item.data(Qt.UserRole + 1) or "").strip()
+        self.stockAnalysisRequested.emit(code)
+        self.stockResearchRequested.emit(
+            self._build_stock_research_context(code, name, "")
+        )
+
+    def _build_stock_research_context(
+        self,
+        stock_code: str,
+        stock_name: str = "",
+        source_id: str = "",
+    ) -> ResearchStockContextDTO:
+        """從觀察清單的保存來源建立唯讀上下文，不重新計算。"""
+
+        code = str(stock_code).strip()
+        source = str(source_id or "").strip()
+        result = None
+        if self.analysis_service is not None and source:
+            try:
+                cutoff = datetime.now(ZoneInfo("Asia/Taipei")).date()
+                result = self.analysis_service.fetch(code, source, cutoff)
+            except Exception as error:
+                logger.warning("[WatchlistView] 讀取保存來源 metadata 失敗：%s", error)
+
+        result_id = str(getattr(result, "result_id", "") or source)
+        decision_date = str(
+            getattr(result, "decision_date", "")
+            or getattr(result, "analysis_date", "")
+            or ""
+        )
+        data_date = str(getattr(result, "data_date", "") or "")
+        profile_id = str(getattr(result, "profile_id", "") or "")
+        profile_version = str(getattr(result, "profile_version", "") or "")
+        lineage_id = str(getattr(result, "source_id", "") or "")
+        return ResearchStockContextDTO(
+            stock_code=code,
+            stock_name=stock_name,
+            decision_date=decision_date,
+            data_date=data_date,
+            result_id=result_id,
+            profile_id=profile_id,
+            profile_version=profile_version,
+            source_id=source or lineage_id,
+            source_kind=str(getattr(result, "source_kind", "") or "recommendation"),
+            source_label=("已保存推薦結果" if result_id else "觀察清單"),
+            source_workspace="watchlist",
+        )
+
+    def select_stock(self, stock_code: str, result_id: str | None = None) -> bool:
+        """返回觀察清單時定位既有列，不載入或重算推薦。"""
+
+        if self.stocks_model is None:
+            return False
+        code = str(stock_code).strip()
+        frame = self.stocks_model.getDataFrame()
+        for row_number, value in enumerate(frame.get("證券代號", ())):
+            if str(value).strip() == code:
+                if result_id:
+                    source = str(frame.iloc[row_number].get("source_id", "") or "").strip()
+                    if source and source != str(result_id).strip():
+                        return False
+                self.stocks_table.selectRow(row_number)
+                return True
+        return False
+
     def _show_context_menu(self, position):
         """顯示右鍵選單"""
         if not self.stocks_model:
             return
         
         menu = QMenu(self)
+        analysis_action = QAction("查看個股分析／主力流向", self)
+        analysis_action.triggered.connect(self._open_stock_analysis)
+        menu.addAction(analysis_action)
         
         # 移除選項
         remove_action = QAction("移除選中", self)
@@ -593,12 +799,17 @@ class WatchlistView(QWidget):
         for _, row in df.iterrows():
             stock_code = row.get('證券代號') or row.get('stock_code')
             stock_name = row.get('證券名稱') or row.get('stock_name', stock_code)
+            source_id = row.get('source_id')
+            if not isinstance(source_id, str) or not source_id.strip():
+                source_id = row.get('result_id')
+            source_id = source_id.strip() if isinstance(source_id, str) else ''
             
             if stock_code:
                 stocks.append({
                     'stock_code': str(stock_code),
                     'stock_name': str(stock_name),
-                    'notes': ''
+                    'notes': '',
+                    'source_id': source_id
                 })
         
         if stocks:
@@ -702,74 +913,9 @@ class WatchlistView(QWidget):
                 QMessageBox.critical(self, "錯誤", f"保存失敗：\n{str(e)}")
     
     def _query_stock_names(self, stock_codes: List[str]) -> Dict[str, str]:
-        """
-        查詢股票名稱
-        
-        Args:
-            stock_codes: 股票代號列表
-        
-        Returns:
-            股票代號到名稱的映射字典
-        """
-        stock_name_map = {}
-        
-        if not self.config or not stock_codes:
-            return stock_name_map
-            
-        stock_codes_str = [str(code).strip() for code in stock_codes]
-        
-        # 優先從 SQLite 資料庫載入
-        if getattr(self.config, 'use_sqlite', False):
-            try:
-                from data_module.db_manager import DBManager
-                db = DBManager(self.config)
-                # 使用 SQL 查詢
-                placeholders = ','.join(['?'] * len(stock_codes_str))
-                sql = f"SELECT DISTINCT 證券代號, 證券名稱 FROM daily_prices WHERE 證券代號 IN ({placeholders});"
-                sql_df = db.execute_query(sql, params=tuple(stock_codes_str))
-                if not sql_df.empty:
-                    for _, row in sql_df.iterrows():
-                        code = str(row['證券代號']).strip()
-                        name = str(row['證券名稱']).strip() if pd.notna(row['證券名稱']) else code
-                        if code and name:
-                            stock_name_map[code] = name
-                    return stock_name_map
-            except Exception as sql_err:
-                logger.error(f"[WatchlistView] 從 SQLite 查詢股票名稱失敗: {sql_err}，將降級讀取 CSV")
-        
-        try:
-            # 從 stock_data_file 讀取數據
-            stock_data_file = self.config.stock_data_file
-            if not stock_data_file or not stock_data_file.exists():
-                return stock_name_map
-            
-            # 讀取數據（只讀取需要的欄位以提高效率）
-            df = pd.read_csv(
-                stock_data_file,
-                dtype={'證券代號': str},
-                usecols=['證券代號', '證券名稱'],
-                low_memory=False
-            )
-            
-            # 確保證券代號是字符串格式
-            df['證券代號'] = df['證券代號'].astype(str).str.strip()
-            
-            # 過濾出需要的股票代號
-            df_filtered = df[df['證券代號'].isin(stock_codes_str)]
-            
-            # 建立映射（取最新的記錄，如果有多筆）
-            for _, row in df_filtered.iterrows():
-                code = str(row['證券代號']).strip()
-                name = str(row['證券名稱']).strip() if pd.notna(row['證券名稱']) else code
-                if code and name:
-                    stock_name_map[code] = name
-            
-        except Exception as e:
-            logger.error(f"[WatchlistView] 查詢股票名稱失敗: {e}")
-            # 如果查詢失敗，返回空字典，使用股票代號作為名稱
-        
-        return stock_name_map
-    
+        """名稱解析只經候選池應用服務。"""
+        return self.watchlist_service.query_stock_names(stock_codes)
+
     def _load_universe_to_watchlist(self):
         """從選股清單載入到候選池"""
         if not self.universe_service:

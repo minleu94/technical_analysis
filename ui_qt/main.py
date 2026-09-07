@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from typing import Dict, Any
+from collections.abc import Mapping
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QIcon
 
@@ -78,7 +79,11 @@ from app_module.backtest_service import BacktestService
 from app_module.batch_backtest_service import BatchBacktestService
 from app_module.watchlist_service import WatchlistService
 from app_module.universe_service import UniverseService
-from app_module.research_session import ResearchSessionStore
+from app_module.research_session import (
+    ResearchSessionStore,
+    ResearchSessionSnapshotDTO,
+    ResearchStockContextDTO,
+)
 
 # 導入策略模組以觸發註冊
 import app_module.strategies
@@ -99,7 +104,7 @@ from app_module.smart_money_semantic_service import (
     SQLiteSmartMoneyPriceProvider,
 )
 from app_module.decision_market_frame import DecisionMarketFrameLoader
-from app_module.decision_desk_service import DecisionDeskSnapshotBuilder
+from app_module.decision_desk_service import DecisionDeskSnapshotBuilder, SavedRecommendationDeskProvider
 from app_module.market_data_visibility_service import MarketDataVisibilityService
 from ui_qt.views.decision_desk_view import DecisionDeskView
 from app_module.workbench_source_service import WorkbenchSourceService
@@ -189,6 +194,8 @@ class MainWindow(QMainWindow):
             },
         )
         self.decision_market_frame_loader = composition.market_frame_loader
+        if getattr(self.config, "output_root", None) is not None:
+            composition.builder.recommendation_provider = SavedRecommendationDeskProvider(self.config)
         return composition.builder
 
     def __init__(self):
@@ -635,6 +642,10 @@ class MainWindow(QMainWindow):
             recommendation.sendToBacktestRequested.connect(
                 lambda config: self._handle_send_to_backtest(backtest, config)
             )
+            if hasattr(recommendation, "stockResearchRequested"):
+                recommendation.stockResearchRequested.connect(
+                    self._open_stock_research_context
+                )
             self.recommendation_view = recommendation
             print("[MainWindow] 推薦分析視圖創建成功")
 
@@ -654,6 +665,12 @@ class MainWindow(QMainWindow):
                             lambda config: self._handle_send_to_backtest(backtest, config)
                         )
                     self.watchlist_view = watchlist
+                    if hasattr(watchlist, "stockResearchRequested"):
+                        watchlist.stockResearchRequested.connect(
+                            self._open_stock_research_context
+                        )
+                    elif hasattr(watchlist, "stockAnalysisRequested"):
+                        watchlist.stockAnalysisRequested.connect(self.show_smart_money_flow_for_stock)
                     watchlist_widget = watchlist
                     print("[MainWindow] 觀察清單視圖創建成功")
                 except Exception as e:
@@ -768,6 +785,10 @@ class MainWindow(QMainWindow):
             self.session_context_strip = SessionContextStrip(
                 self.research_session_store, self
             )
+            if hasattr(self.session_context_strip, "returnToSourceRequested"):
+                self.session_context_strip.returnToSourceRequested.connect(
+                    self._return_to_research_source
+                )
             self.statusBar().addPermanentWidget(self.session_context_strip, 1)
         except Exception as e:
             print(f"[MainWindow] 錯誤：設置 UI 失敗")
@@ -854,6 +875,90 @@ class MainWindow(QMainWindow):
                 "下鑽錯誤",
                 f"無法下鑽主力流向：\n{str(e)}\n\n{traceback.format_exc()}",
             )
+
+    def _coerce_stock_research_context(
+        self, value: object
+    ) -> ResearchStockContextDTO | None:
+        """將頁面 signal 正規化成可放入 session store 的唯讀 DTO。"""
+
+        if isinstance(value, ResearchStockContextDTO):
+            return value
+        if isinstance(value, Mapping):
+            fields = {
+                "stock_code",
+                "stock_name",
+                "decision_date",
+                "data_date",
+                "result_id",
+                "profile_id",
+                "profile_version",
+                "source_id",
+                "source_kind",
+                "source_label",
+                "source_workspace",
+            }
+            payload = {key: value.get(key, "") for key in fields}
+            if not str(payload.get("stock_code") or "").strip():
+                return None
+            return ResearchStockContextDTO(**payload)
+        return None
+
+    def _open_stock_research_context(self, value: object) -> None:
+        """接收保存結果／觀察清單的下鑽 context 並開啟單股研究頁。"""
+
+        context = self._coerce_stock_research_context(value)
+        if context is None or not context.stock_code:
+            return
+        store = getattr(self, "research_session_store", None)
+        if store is not None:
+            setter = getattr(store, "set_stock_context", None)
+            if callable(setter):
+                setter(context, source="stock_drilldown")
+            else:
+                # 與測試替身／舊 host 相容；正式 store 會走 set_stock_context。
+                from app_module.research_session import StockResearchContextChanged
+
+                dispatch = getattr(store, "dispatch", None)
+                if callable(dispatch):
+                    dispatch(
+                        StockResearchContextChanged(
+                            stock_code=context.stock_code,
+                            stock_name=context.stock_name,
+                            decision_date=context.decision_date,
+                            data_date=context.data_date,
+                            result_id=context.result_id,
+                            profile_id=context.profile_id,
+                            profile_version=context.profile_version,
+                            source_id=context.source_id,
+                            source_kind=context.source_kind,
+                            source_label=context.source_label,
+                            source_workspace=context.source_workspace,
+                            source="stock_drilldown",
+                        )
+                    )
+        # 個股頁沿用既有主力流向入口；分析資料由該頁自己的唯讀 snapshot 提供。
+        self.show_smart_money_flow_for_stock(context.stock_code)
+
+    def _return_to_research_source(self, value: object) -> None:
+        """由 status strip 返回建立目前上下文的頁面並定位原股票。"""
+
+        context: ResearchStockContextDTO | None = None
+        if isinstance(value, ResearchSessionSnapshotDTO):
+            context = value.stock_context
+        else:
+            context = self._coerce_stock_research_context(value)
+        if context is None or not context.source_workspace:
+            return
+        self._select_main_workspace(context.source_workspace)
+        if context.source_workspace == "recommendation":
+            view = getattr(self, "recommendation_view", None)
+        elif context.source_workspace == "watchlist":
+            view = getattr(self, "watchlist_view", None)
+        else:
+            view = None
+        selector = getattr(view, "select_stock", None)
+        if callable(selector):
+            selector(context.stock_code, context.result_id or None)
 
     def closeEvent(self, event):
         """只在所有受管背景工作安全結束後才允許關閉。"""

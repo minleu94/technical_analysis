@@ -51,6 +51,7 @@ class SmartMoneyFlowView(QWidget):
         self._workers = {}
         self._retired_workers = []
         self._dashboard_as_of_date = date.today()
+        self._requested_stock_code: str | None = None
 
         # 色彩設定 (更為精緻的深藍黑背景)
         palette = self.palette()
@@ -206,6 +207,12 @@ class SmartMoneyFlowView(QWidget):
         # Master: Terminal Scanner Table
         self.scanner_table = QTableView()
         self.scanner_table.setSelectionBehavior(QTableView.SelectRows)
+        self.scanner_table.setFocusPolicy(Qt.StrongFocus)
+        self.scanner_table.setTabKeyNavigation(True)
+        self.scanner_table.setAccessibleName("主力資金流向掃描結果")
+        self.scanner_table.setAccessibleDescription(
+            "使用方向鍵或 Tab 瀏覽股票；信號與近期趨勢提供文字數值替代。"
+        )
         self.scanner_table.setSortingEnabled(True)
         self.scanner_table.setMinimumWidth(900)
         self.scanner_table.horizontalHeader().setStretchLastSection(False)
@@ -292,6 +299,10 @@ class SmartMoneyFlowView(QWidget):
         # 3. 分點明細表格 (套用雙向水平長條圖 Delegate)
         self.detail_table = QTableView()
         self.detail_table.setSelectionBehavior(QTableView.SelectRows)
+        self.detail_table.setFocusPolicy(Qt.StrongFocus)
+        self.detail_table.setTabKeyNavigation(True)
+        self.detail_table.setAccessibleName("個股分點明細")
+        self.detail_table.setAccessibleDescription("使用方向鍵或 Tab 瀏覽分點買賣明細。")
         self.detail_table.setSortingEnabled(True)
         self.detail_table.setShowGrid(False)
         self.detail_table.horizontalHeader().setStretchLastSection(False)
@@ -355,6 +366,12 @@ class SmartMoneyFlowView(QWidget):
 
         self.branch_table = QTableView()
         self.branch_table.setSelectionBehavior(QTableView.SelectRows)
+        self.branch_table.setFocusPolicy(Qt.StrongFocus)
+        self.branch_table.setTabKeyNavigation(True)
+        self.branch_table.setAccessibleName("分點追蹤結果")
+        self.branch_table.setAccessibleDescription(
+            "使用方向鍵或 Tab 瀏覽股票；信號與近期趨勢提供文字數值替代。"
+        )
         self.branch_table.setSortingEnabled(True)
         self.branch_table.horizontalHeader().setStretchLastSection(False)
         self.branch_table.verticalHeader().setVisible(False)
@@ -642,6 +659,9 @@ class SmartMoneyFlowView(QWidget):
         )
         self._on_branch_changed()
 
+        if self._requested_stock_code:
+            self.select_stock(self._requested_stock_code)
+
     def _on_scanner_selection_changed(self):
         selection = self.scanner_table.selectionModel().selectedRows()
         if not selection:
@@ -651,6 +671,7 @@ class SmartMoneyFlowView(QWidget):
         signal = self.scanner_model.get_signal_at(row)
         if not signal:
             return
+        self._requested_stock_code = signal.stock_code
 
         # 1. 更新股票摘要卡片
         self.sub_card_title.setText(f"{signal.stock_name} ({signal.stock_code})")
@@ -857,7 +878,11 @@ class SmartMoneyFlowView(QWidget):
         super().closeEvent(event)
 
     def select_stock(self, stock_code: str):
-        """程式化選取並高亮掃描表格中的個股"""
+        """開啟指定個股；未入掃描榜仍可查分點，初次載入後重套選取。"""
+        stock_code = str(stock_code).strip()
+        if not stock_code:
+            return
+        self._requested_stock_code = stock_code
         self.load_data_if_needed()
         if not hasattr(self, 'scanner_model') or self.scanner_model is None:
             return
@@ -880,3 +905,16 @@ class SmartMoneyFlowView(QWidget):
                 )
                 self.scanner_table.scrollTo(index)
                 self._on_scanner_selection_changed()
+        else:
+            self.scanner_table.clearSelection()
+            self.sub_card_title.setText(stock_code)
+            self.sub_card_stats.setText("此股票未列入目前掃描榜；未提供榜單分數，仍可查看分點資料。")
+            self.detail_table.setModel(PandasTableModel(pd.DataFrame()))
+            self.detail_label.setText("分點買賣明細 (BRANCH DRILL-DOWN)｜載入中…")
+            period = self._get_current_period_val()
+            as_of_date = self._dashboard_as_of_date
+            self._start_request(
+                "detail",
+                lambda: self.flow_service.load_stock_branch_detail(stock_code, period, as_of_date),
+                self._apply_stock_detail,
+            )

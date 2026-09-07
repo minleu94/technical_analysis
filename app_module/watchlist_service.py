@@ -6,7 +6,11 @@
 import json
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Set
-from datetime import datetime
+from datetime import date, datetime
+from contextlib import closing
+import sqlite3
+import pandas as pd
+from data_module.watchlist_repository import WatchlistRepository
 from dataclasses import dataclass, asdict
 
 
@@ -19,6 +23,7 @@ class WatchlistItem:
     source: str  # 'market_watch', 'recommendation', 'manual'
     notes: str = ""
     tags: Optional[List[str]] = None
+    source_id: str = ""
     
     def __post_init__(self):
         """初始化後處理"""
@@ -36,6 +41,7 @@ class Watchlist:
     created_at: str
     updated_at: str
     description: str = ""
+    revision: int | None = None
     
     def __post_init__(self):
         """初始化後處理"""
@@ -48,7 +54,7 @@ class Watchlist:
 class WatchlistService:
     """觀察清單服務"""
     
-    def __init__(self, config):
+    def __init__(self, config, *, repository: WatchlistRepository | None = None):
         """
         初始化觀察清單服務
         
@@ -56,6 +62,7 @@ class WatchlistService:
             config: TWStockConfig 實例
         """
         self.config = config
+        self.repository = repository
         # 儲存在 output_root/watchlist/
         self.watchlist_dir = config.resolve_output_path('watchlist')
         self.watchlist_dir.mkdir(parents=True, exist_ok=True)
@@ -66,192 +73,74 @@ class WatchlistService:
         # 載入預設觀察清單
         self._ensure_default_watchlist()
     
+    def _watchlist_file(self, watchlist_id: str) -> Path:
+        if not watchlist_id or Path(watchlist_id).name != watchlist_id or any(char in watchlist_id for char in ("/", "\\", ":")):
+            raise ValueError("無效候選池 ID")
+        return self.watchlist_dir / f"{watchlist_id}.json"
+
     def _ensure_default_watchlist(self):
-        """確保預設觀察清單存在"""
+        # 讀取損毀資料時保留原檔並回報；不可自動備份改名或覆寫空清單。
+        if self.repository is not None:
+            return
         if not self.default_watchlist_file.exists():
-            default_watchlist = Watchlist(
-                name="預設觀察清單",
-                items=[],
-                created_at=datetime.now().isoformat(),
-                updated_at=datetime.now().isoformat(),
-                description="系統預設觀察清單"
-            )
-            self._save_watchlist("default", default_watchlist)
-        else:
-            # 文件存在，嘗試載入以驗證是否損壞
-            try:
-                watchlist = self._load_watchlist("default")
-                if watchlist is None:
-                    # 文件損壞，創建新的
-                    default_watchlist = Watchlist(
-                        name="預設觀察清單",
-                        items=[],
-                        created_at=datetime.now().isoformat(),
-                        updated_at=datetime.now().isoformat(),
-                        description="系統預設觀察清單"
-                    )
-                    self._save_watchlist("default", default_watchlist)
-            except Exception as e:
-                # 載入失敗，備份並創建新的
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.warning(f"預設觀察清單文件損壞，將創建新的: {e}")
-                
-                # 備份損壞的文件
-                backup_file = self.default_watchlist_file.with_suffix('.json.bak')
-                try:
-                    self.default_watchlist_file.rename(backup_file)
-                    logger.info(f"已備份損壞的文件到: {backup_file}")
-                except Exception as backup_error:
-                    logger.error(f"備份文件失敗: {backup_error}")
-                
-                # 創建新的觀察清單
-                default_watchlist = Watchlist(
-                    name="預設觀察清單",
-                    items=[],
-                    created_at=datetime.now().isoformat(),
-                    updated_at=datetime.now().isoformat(),
-                    description="系統預設觀察清單"
-                )
-                self._save_watchlist("default", default_watchlist)
-    
+            self._save_watchlist("default", Watchlist("預設觀察清單", [], datetime.now().isoformat(), datetime.now().isoformat(), "系統預設觀察清單"))
+
     def _load_watchlist(self, watchlist_id: str) -> Optional[Watchlist]:
-        """載入觀察清單"""
-        watchlist_file = self.watchlist_dir / f"{watchlist_id}.json"
-        if not watchlist_file.exists():
-            return None
-        
-        try:
-            # 讀取文件內容
-            file_content = watchlist_file.read_text(encoding='utf-8')
-            if not file_content.strip():
-                # 文件為空，創建新的觀察清單
+        watchlist_file = self._watchlist_file(watchlist_id)
+        revision = None
+        if self.repository is not None:
+            stored = self.repository.load(watchlist_id)
+            if stored is None:
                 return None
-            
-            # 解析 JSON
-            data = json.loads(file_content)
-            
-            # 驗證數據結構
-            if not isinstance(data, dict):
-                raise ValueError("觀察清單數據格式錯誤：不是字典格式")
-            
-            # 解析項目
-            items = []
-            for item_data in data.get('items', []):
-                try:
-                    item = WatchlistItem(**item_data)
-                    items.append(item)
-                except Exception as e:
-                    # 跳過無效的項目，繼續處理其他項目
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.warning(f"跳過無效的觀察清單項目: {item_data}, 錯誤: {e}")
-                    continue
-            
-            return Watchlist(
-                name=data.get('name', '未命名清單'),
-                items=items,
-                created_at=data.get('created_at', datetime.now().isoformat()),
-                updated_at=data.get('updated_at', datetime.now().isoformat()),
-                description=data.get('description', '')
-            )
-        except json.JSONDecodeError as e:
-            # JSON 解析錯誤，備份損壞的文件並創建新的
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"觀察清單文件損壞（JSON 解析錯誤）: {watchlist_file}, 錯誤: {e}")
-            
-            # 備份損壞的文件
-            backup_file = watchlist_file.with_suffix('.json.bak')
-            try:
-                watchlist_file.rename(backup_file)
-                logger.info(f"已備份損壞的文件到: {backup_file}")
-            except Exception as backup_error:
-                logger.error(f"備份文件失敗: {backup_error}")
-            
-            # 返回 None，讓調用者創建新的觀察清單
-            return None
-        except Exception as e:
-            # 其他錯誤，記錄並返回 None
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"載入觀察清單失敗: {watchlist_file}, 錯誤: {e}")
-            return None
-    
+            data, revision = stored
+        else:
+            if not watchlist_file.exists():
+                return None
+            data = json.loads(watchlist_file.read_text(encoding="utf-8-sig"))
+        if not isinstance(data, dict) or not isinstance(data.get("items"), list):
+            raise ValueError("候選池資料損毀：必須包含 items 陣列")
+        items = [WatchlistItem(**item) for item in data["items"]]
+        return Watchlist(name=data.get("name", "未命名清單"), items=items,
+                         created_at=data.get("created_at", ""), updated_at=data.get("updated_at", ""),
+                         description=data.get("description", ""), revision=revision)
+
     def _save_watchlist(self, watchlist_id: str, watchlist: Watchlist):
-        """儲存觀察清單"""
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        watchlist_file = self.watchlist_dir / f"{watchlist_id}.json"
+        watchlist_file = self._watchlist_file(watchlist_id)
         watchlist.updated_at = datetime.now().isoformat()
-        
-        try:
-            # 準備數據
-            items_data = []
-            for item in watchlist.items:
-                try:
-                    # 確保所有字段都是可序列化的
-                    item_dict = {
-                        'stock_code': str(item.stock_code),
-                        'stock_name': str(item.stock_name),
-                        'added_at': str(item.added_at),
-                        'source': str(item.source),
-                        'notes': str(item.notes) if item.notes else '',
-                        'tags': [str(tag) for tag in (item.tags or [])]
-                    }
-                    items_data.append(item_dict)
-                except Exception as e:
-                    logger.warning(f"跳過無法序列化的項目: {item}, 錯誤: {e}")
-                    continue
-            
-            data = {
-                'version': 1,
-                'name': str(watchlist.name),
-                'description': str(watchlist.description) if watchlist.description else '',
-                'created_at': str(watchlist.created_at),
-                'updated_at': str(watchlist.updated_at),
-                'items': items_data
-            }
-            
-            # 先寫入臨時文件，然後重命名（原子操作）
-            temp_file = watchlist_file.with_suffix('.json.tmp')
+        data = {"version": 1, "name": watchlist.name, "description": watchlist.description,
+                "created_at": watchlist.created_at, "updated_at": watchlist.updated_at,
+                "items": [asdict(item) for item in watchlist.items]}
+        if self.repository is not None:
+            watchlist.revision = self.repository.save(watchlist_id, data, expected_revision=watchlist.revision)
+            return
+        raw = json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False)
+        # 同目錄原子取代；不先搬走來源，失敗仍保留既有有效 JSON。
+        temp_file = watchlist_file.with_suffix(".json.tmp")
+        temp_file.write_text(raw, encoding="utf-8")
+        temp_file.replace(watchlist_file)
+
+    def query_stock_names(self, stock_codes: List[str]) -> Dict[str, str]:
+        """UI 的名稱查詢接點；只讀既有來源，不初始化市場資料庫。"""
+        codes = [str(code).strip() for code in stock_codes if str(code).strip()]
+        if not codes:
+            return {}
+        db_path = getattr(self.config, "db_file", None)
+        if getattr(self.config, "use_sqlite", False) and db_path is not None and Path(db_path).is_file():
             try:
-                json_str = json.dumps(data, ensure_ascii=False, indent=2)
-                temp_file.write_text(json_str, encoding='utf-8')
-                
-                # 驗證 JSON 是否有效
-                json.loads(json_str)
-                
-                # 原子操作：重命名臨時文件為正式文件
-                if watchlist_file.exists():
-                    backup_file = watchlist_file.with_suffix('.json.bak')
-                    watchlist_file.rename(backup_file)
-                
-                temp_file.rename(watchlist_file)
-                
-                # 刪除備份文件（如果存在）
-                backup_file = watchlist_file.with_suffix('.json.bak')
-                if backup_file.exists():
-                    backup_file.unlink()
-                
-                logger.debug(f"成功保存觀察清單: {watchlist_file}")
-            except TypeError as e:
-                logger.error(f"JSON 編碼錯誤: {e}")
-                if temp_file.exists():
-                    temp_file.unlink()
-                raise
-            except Exception as e:
-                logger.error(f"保存觀察清單文件失敗: {e}")
-                if temp_file.exists():
-                    temp_file.unlink()
-                raise
-        except Exception as e:
-            logger.error(f"準備觀察清單數據失敗: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            raise
-    
+                with closing(sqlite3.connect(f"{Path(db_path).resolve().as_uri()}?mode=ro", uri=True)) as conn:
+                    conn.execute("PRAGMA query_only=ON")
+                    placeholders = ",".join("?" for _ in codes)
+                    rows = conn.execute(f"SELECT 證券代號, 證券名稱 FROM daily_prices WHERE 證券代號 IN ({placeholders}) ORDER BY 日期", tuple(codes)).fetchall()
+                    return {str(code): str(name) for code, name in rows if name and str(name).strip()}
+            except sqlite3.Error:
+                pass
+        path = getattr(self.config, "stock_data_file", None)
+        if path is None or not Path(path).is_file():
+            return {}
+        frame = pd.read_csv(path, dtype={"證券代號": str}, usecols=["證券代號", "證券名稱"])
+        return {str(row["證券代號"]): str(row["證券名稱"]) for _, row in frame.iterrows()
+                if str(row["證券代號"]) in codes and pd.notna(row["證券名稱"])}
+
     def get_default_watchlist(self) -> Optional[Watchlist]:
         """取得預設觀察清單"""
         return self._load_watchlist("default")
@@ -340,7 +229,8 @@ class WatchlistService:
                         added_at=datetime.now().isoformat(),
                         source=source,
                         notes=str(stock.get('notes', '')).strip(),
-                        tags=[str(tag) for tag in tags]
+                        tags=[str(tag) for tag in tags],
+                        source_id=str(stock.get("source_id") or stock.get("result_id") or "")
                     )
                     watchlist.items.append(item)
                     existing_codes.add(stock_code)
@@ -474,7 +364,8 @@ class WatchlistService:
                 'added_at': item.added_at,
                 'source': item.source,
                 'notes': item.notes,
-                'tags': item.tags
+                'tags': item.tags,
+                'source_id': item.source_id
             }
             for item in watchlist.items
         ]
@@ -487,8 +378,8 @@ class WatchlistService:
             觀察清單列表，每個項目包含 watchlist_id, name, item_count 等
         """
         watchlists = []
-        for watchlist_file in self.watchlist_dir.glob("*.json"):
-            watchlist_id = watchlist_file.stem
+        ids = self.repository.list_ids() if self.repository is not None else [path.stem for path in self.watchlist_dir.glob("*.json")]
+        for watchlist_id in ids:
             try:
                 watchlist = self._load_watchlist(watchlist_id)
                 if watchlist:
@@ -549,7 +440,10 @@ class WatchlistService:
         if watchlist_id == "default":
             return False
         
-        watchlist_file = self.watchlist_dir / f"{watchlist_id}.json"
+        watchlist_file = self._watchlist_file(watchlist_id)
+        if self.repository is not None:
+            loaded = self.repository.load(watchlist_id)
+            return self.repository.delete(watchlist_id, expected_revision=loaded[1]) if loaded else False
         if watchlist_file.exists():
             watchlist_file.unlink()
             return True

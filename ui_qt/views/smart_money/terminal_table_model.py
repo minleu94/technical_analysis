@@ -15,6 +15,56 @@ ROLE_SPARKLINE = Qt.UserRole + 2
 ROLE_BADGES = Qt.UserRole + 3
 ROLE_SCORE = Qt.UserRole + 4
 
+
+def _format_accessible_number(value: Any) -> str:
+    """保留數值語意的文字呈現，供螢幕閱讀器與鍵盤替代內容使用。"""
+
+    if value is None:
+        return "N/A"
+    if isinstance(value, bool):
+        return str(value)
+    try:
+        if isinstance(value, int):
+            return f"{value:,}"
+        return f"{value:,.6g}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _format_signed_accessible_number(value: Any) -> str:
+    rendered = _format_accessible_number(value)
+    if rendered in {"N/A", "0", "0.0"} or rendered.startswith(("+", "-")):
+        return rendered
+    return f"+{rendered}"
+
+
+def _format_trend_accessible(details: Any, values: Any) -> str:
+    """將 delegate 的 sparkline 資料投影成可朗讀的日期／數值。"""
+
+    rendered: list[str] = []
+    for item in details or ():
+        if isinstance(item, dict):
+            label = item.get("date") or item.get("time") or "未標示日期"
+            value = item.get("value", item.get("net_qty"))
+        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+            label, value = item[0], item[1]
+        else:
+            continue
+        rendered.append(f"{label}：{_format_signed_accessible_number(value)}")
+
+    if not rendered:
+        for index, value in enumerate(values or (), start=1):
+            rendered.append(f"第 {index} 點：{_format_signed_accessible_number(value)}")
+    if not rendered:
+        return "無資料"
+    return "；".join(rendered)
+
+
+def _format_badges_accessible(tags: Any) -> str:
+    values = [str(tag).strip() for tag in (tags or ()) if str(tag).strip()]
+    return "、".join(values) if values else "無"
+
+
 class TerminalTableModel(QAbstractTableModel):
     def __init__(self, signals: List[FlowSignalDTO], parent=None, semantics_by_code=None):
         super().__init__(parent)
@@ -44,9 +94,9 @@ class TerminalTableModel(QAbstractTableModel):
 
     def _format_window_diagnostics(self, semantic) -> str:
         windows = (
-            ("5D", semantic.window_5),
-            ("20D", semantic.window_20),
-            ("60D", semantic.window_60),
+            ("5D", getattr(semantic, "window_5", None)),
+            ("20D", getattr(semantic, "window_20", None)),
+            ("60D", getattr(semantic, "window_60", None)),
         )
         if any(window is None for _, window in windows):
             return "無語意診斷"
@@ -54,6 +104,45 @@ class TerminalTableModel(QAbstractTableModel):
             f"{label} {self._format_compact_qty(window.net_qty)}"
             for label, window in windows
         )
+
+    def _accessible_cell_text(self, signal: FlowSignalDTO, semantic: Any, col: int) -> str:
+        """提供每一格的完整文字，補足自定義 delegate 的圖形欄位。"""
+
+        score = _format_accessible_number(getattr(signal, "smart_money_score", None))
+        stock = f"{getattr(signal, 'stock_name', '')}（{getattr(signal, 'stock_code', '')}）"
+        net_qty = _format_accessible_number(
+            getattr(getattr(signal, "aggregation", None), "total_net_qty", None)
+        )
+        concentration = getattr(signal, "branch_concentration", None)
+        try:
+            concentration_text = f"{concentration:.0%}"
+        except (TypeError, ValueError):
+            concentration_text = _format_accessible_number(concentration)
+        semantic_state = getattr(semantic, "primary_state", "未計算") if semantic else "未計算"
+        diagnostics = self._format_window_diagnostics(semantic) if semantic else "無語意診斷"
+        if col == 0:
+            return f"分數：{score}"
+        if col == 1:
+            return f"股票：{stock}"
+        if col == 2:
+            return f"淨量：{net_qty}"
+        if col == 3:
+            return f"集中度：{concentration_text}"
+        if col == 4:
+            return f"語意狀態：{semantic_state}"
+        if col == 5:
+            return f"5／20／60 日診斷：{diagnostics}"
+        if col == 6:
+            return f"信號：{_format_badges_accessible(getattr(signal, 'signal_tags', ()))}"
+        if col == 7:
+            return (
+                "近期趨勢："
+                + _format_trend_accessible(
+                    getattr(signal, "sparkline_details", ()),
+                    getattr(signal, "sparkline_data", ()),
+                )
+            )
+        return f"股票：{stock}"
 
     def rowCount(self, parent=QModelIndex()) -> int:
         if parent.isValid():
@@ -82,6 +171,9 @@ class TerminalTableModel(QAbstractTableModel):
             return signal.signal_tags
         if role == ROLE_SCORE:
             return signal.smart_money_score
+
+        if role in (Qt.AccessibleTextRole, Qt.StatusTipRole):
+            return self._accessible_cell_text(signal, semantic, col)
 
         # -- 預設的字串顯示 --
         if role == Qt.DisplayRole:
@@ -176,7 +268,11 @@ class TerminalTableModel(QAbstractTableModel):
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+        if orientation == Qt.Horizontal and role in (
+            Qt.DisplayRole,
+            Qt.AccessibleTextRole,
+            Qt.StatusTipRole,
+        ):
             if 0 <= section < len(self.headers):
                 return self.headers[section]
         return None
@@ -230,6 +326,38 @@ class BranchTrackerTableModel(QAbstractTableModel):
         if parent.isValid(): return 0
         return len(self.headers)
 
+    @staticmethod
+    def _branch_badges(agg: BranchFlowAggregation) -> list[str]:
+        net = agg.total_net_qty
+        badges = ["買進 (BUY)" if net > 0 else "賣出 (SELL)"]
+        if abs(net) >= 1000:
+            badges.append("強大 (STRONG)")
+        elif abs(net) >= 500:
+            badges.append("中等 (MED)")
+        return badges
+
+    def _accessible_cell_text(self, agg: BranchFlowAggregation, col: int) -> str:
+        stock = f"{getattr(agg, 'stock_name', '')}（{getattr(agg, 'stock_code', '')}）"
+        if col == 0:
+            return f"淨量：{_format_accessible_number(getattr(agg, 'total_net_qty', None))}"
+        if col == 1:
+            return f"股票：{stock}"
+        if col == 2:
+            return f"買進：{_format_accessible_number(getattr(agg, 'total_buy_qty', None))}"
+        if col == 3:
+            return f"賣出：{_format_accessible_number(getattr(agg, 'total_sell_qty', None))}"
+        if col == 4:
+            return f"信號：{_format_badges_accessible(self._branch_badges(agg))}"
+        if col == 5:
+            return (
+                "近期趨勢："
+                + _format_trend_accessible(
+                    getattr(agg, "sparkline_details", ()),
+                    getattr(agg, "sparkline_data", ()),
+                )
+            )
+        return f"股票：{stock}"
+
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> Any:
         if not index.isValid() or not (0 <= index.row() < len(self.aggregations)):
             return None
@@ -270,6 +398,9 @@ class BranchTrackerTableModel(QAbstractTableModel):
 
         if role == ROLE_SCORE:
             return min(abs(net) / 10, 100.0)
+
+        if role in (Qt.AccessibleTextRole, Qt.StatusTipRole):
+            return self._accessible_cell_text(agg, col)
 
         if role == Qt.DisplayRole:
             if col == 0:
@@ -330,7 +461,11 @@ class BranchTrackerTableModel(QAbstractTableModel):
         return None
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> Any:
-        if orientation == Qt.Horizontal and role == Qt.DisplayRole:
+        if orientation == Qt.Horizontal and role in (
+            Qt.DisplayRole,
+            Qt.AccessibleTextRole,
+            Qt.StatusTipRole,
+        ):
             if 0 <= section < len(self.headers):
                 return self.headers[section]
         return None
