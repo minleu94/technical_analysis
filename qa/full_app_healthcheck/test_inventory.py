@@ -6,10 +6,24 @@ from pathlib import Path
 # This registry serves as a guardrail to ensure that only allowed tests are bridged.
 
 TEST_INVENTORY: dict[str, str] = {
+    "tests/test_task_loop_01_contract.py": "service-oracle-data-market",
+    "tests/test_task_loop_02_contract.py": "service-oracle-data-market",
+    "tests/test_task_loop_03_contract.py": "service-oracle-recommendation",
+    "tests/test_task_loop_04_contract.py": "service-oracle-research-backtest",
+    "tests/test_task_loop_05_contract.py": "service-oracle-research-backtest",
+    "tests/test_task_loop_06_contract.py": "service-oracle-portfolio-decision-runtime",
+    "tests/test_task_loop_07_contract.py": "service-oracle-portfolio-decision-runtime",
+    "tests/test_task_loop_08_contract.py": "service-oracle-portfolio-decision-runtime",
+    "tests/test_data_loader_industry_index_update.py": "service-oracle-data-market",
     # healthcheck-runner-owned
     "tests/test_full_app_healthcheck_batch_closeout_baseline.py": "healthcheck-runner-owned",
     "tests/test_recommendation_fundamental_filters.py": "service-oracle-recommendation",
     "tests/test_capture_external_evidence_manual_cli.py": "governance-doc-tooling",
+    "tests/test_allocation_release_adapter.py": "governance-doc-tooling",
+    "tests/test_conservative_fill_policy.py": "service-oracle-research-backtest",
+    "tests/test_ml_storage_capacity.py": "governance-doc-tooling",
+    "tests/test_train_ml_allocation_out_of_core_cli.py": "governance-doc-tooling",
+    "tests/test_validate_ml_release_parity.py": "governance-doc-tooling",
     "tests/test_evidence_cadence_review_service.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_evidence_outcome_revision_repository.py": "service-oracle-portfolio-decision-runtime",
     "tests/test_external_evidence_contracts.py": "service-oracle-portfolio-decision-runtime",
@@ -137,6 +151,9 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_ui_qt_watchlist_candidate_pool_copy_text.py": "ui-healthcheck-direct-bridge",
     "tests/test_ui_qt_workbench_view.py": "ui-healthcheck-candidate-bridge",
     "tests/test_ui_qt_adaptive_workspace_stack.py": "ui-healthcheck-candidate-bridge",
+    "tests/test_ui_qt_p2_status_accessibility.py": "ui-healthcheck-candidate-bridge",
+    "tests/test_ui_qt_research_context_status.py": "ui-healthcheck-candidate-bridge",
+    "tests/test_watchlist_stock_analysis_navigation.py": "ui-healthcheck-candidate-bridge",
 
     # service-oracle-data-market
     "tests/test_abnormal_fundamental_flags.py": "service-oracle-data-market",

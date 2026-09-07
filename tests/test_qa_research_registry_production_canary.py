@@ -15,7 +15,8 @@ from scripts.qa_research_registry_production_canary import (
 def _create_registry(tmp_path: Path) -> tuple[Path, Path]:
     output_root = tmp_path / "output"
     registry = output_root / "research_runs" / "research_runs.db"
-    ResearchRunRepository(SimpleNamespace(research_run_db_file=registry))
+    repository = ResearchRunRepository(SimpleNamespace(research_run_db_file=registry))
+    repository.ensure_schema()
     return output_root, registry
 
 

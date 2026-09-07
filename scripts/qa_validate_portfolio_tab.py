@@ -8,6 +8,8 @@ import os
 import shutil
 import tempfile
 import logging
+import json
+from decimal import Decimal
 from pathlib import Path
 
 # Add project root to path
@@ -18,6 +20,9 @@ from data_module.config import TWStockConfig
 from app_module.portfolio_service import PortfolioService
 from app_module.journal_service import JournalService
 from portfolio_module import PortfolioValidationError, rebuild_positions, Trade
+from data_module.portfolio_ledger_migration import PortfolioLedgerMigration
+from data_module.portfolio_ledger_repository import PortfolioLedgerEvent, PortfolioLedgerRepository
+from portfolio_module.core import rebuild_ledger_projection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -208,10 +213,100 @@ def run_ui_smoke_tests():
         sys.exit(1)
 
 
+def run_isolated_ledger_tests(temp_dir: Path):
+    """TASK-LOOP-06 candidate-only ledger and migration gate."""
+    logger.info("=== Running isolated precise ledger tests ===")
+    candidate_db = temp_dir / "candidate" / "portfolio_ledger.db"
+    repository = PortfolioLedgerRepository(candidate_db)
+    buy = PortfolioLedgerEvent(
+        event_id="qa-buy-1",
+        portfolio_id="default",
+        source_namespace="synthetic",
+        occurred_at="2026-01-02",
+        stock_code="2330",
+        stock_name="台積電",
+        side="buy",
+        quantity=10,
+        price=Decimal("100.00"),
+        fees=Decimal("1.00"),
+        source_id="qa-ticket",
+        thesis_id="qa-thesis",
+    )
+    sell = PortfolioLedgerEvent(
+        event_id="qa-sell-1",
+        portfolio_id="default",
+        source_namespace="synthetic",
+        occurred_at="2026-01-03",
+        stock_code="2330",
+        stock_name="台積電",
+        side="sell",
+        quantity=4,
+        price=Decimal("125.00"),
+        fees=Decimal("0.50"),
+        source_id="qa-ticket",
+        thesis_id="qa-thesis",
+    )
+    repository.append_many((buy, sell))
+    projection = rebuild_ledger_projection(
+        repository.list_events(),
+        initial_cash=Decimal("10000.00"),
+        reject_negative_cash=True,
+    )
+    assert projection.positions[0].quantity == 6
+    assert projection.realized_pnl == Decimal("99.10")
+    assert projection.cash == Decimal("9498.50")
+    repository.append_compensation(
+        "qa-sell-1",
+        event_id="qa-comp-1",
+        occurred_at="2026-01-04",
+        reason="QA reversal",
+    )
+    compensated = rebuild_ledger_projection(
+        repository.list_events(), initial_cash=Decimal("10000.00")
+    )
+    assert compensated.positions[0].quantity == 10
+    assert compensated.compensated_event_ids == ("qa-sell-1",)
+
+    source = temp_dir / "legacy" / "trades.jsonl"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        json.dumps(
+            {
+                "trade_id": "legacy-1",
+                "portfolio_id": "default",
+                "stock_code": "2317",
+                "stock_name": "鴻海",
+                "side": "buy",
+                "quantity": 10.0,
+                "price": 100.0,
+                "fees": 0.0,
+                "taxes": 0.0,
+                "trade_date": "2026-01-02",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    migrated_db = temp_dir / "migration_copy" / "portfolio_ledger.db"
+    migration = PortfolioLedgerMigration(source, migrated_db)
+    first = migration.migrate_copy()
+    second = migration.migrate_copy()
+    assert first.status == "completed" and first.write_performed is True
+    assert second.status == "already_present" and second.duplicate_event_count == 1
+    assert source.exists()
+    missing = PortfolioLedgerMigration(temp_dir / "missing_fills.jsonl", temp_dir / "missing.db")
+    missing_report = missing.migrate_copy()
+    assert missing_report.status == "blocked"
+    assert "legacy_trade_source_missing" in missing_report.blockers
+    logger.info("Isolated precise ledger, compensation and migration: PASSED")
+
+
 def main():
     temp_dir = Path(tempfile.mkdtemp())
     try:
         run_service_tests(temp_dir)
+        run_isolated_ledger_tests(temp_dir)
         run_ui_smoke_tests()
         logger.info("=== All QA validations PASSED successfully! ===")
     finally:

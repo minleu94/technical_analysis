@@ -11,11 +11,17 @@ import numpy as np
 from datetime import datetime, timedelta
 import json
 from decimal import Decimal
+from copy import deepcopy
+import hashlib
+import tempfile
+from types import SimpleNamespace
 
 class DecimalEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, Decimal):
-            return float(obj)
+            return str(obj)
+        if isinstance(obj, np.generic):
+            return obj.item()
         return super().default(obj)
 
 import traceback
@@ -843,6 +849,62 @@ def generate_report(result: ValidationResult) -> str:
     return "\n".join(report_lines)
 
 
+def validate_isolated_recommendation_loop(root: Path, result: ValidationResult) -> None:
+    """自備離線行情，使用真實評分及推薦 repository；不讀取正式雙根。"""
+    from app_module.recommendation_repository import RecommendationRepository
+
+    config = TWStockConfig(data_root=root / "data", output_root=root / "artifacts", profile="test")
+    if not config.data_root.resolve().is_relative_to(root.resolve()) or not config.output_root.resolve().is_relative_to(root.resolve()):
+        raise AssertionError("推薦 QA 雙根未隔離")
+    result.add_pass("Dual_Root_Isolation", {"DATA_ROOT": str(config.data_root), "OUTPUT_ROOT": str(config.output_root), "source_class": "synthetic_fixture"})
+    rows = [
+        {"日期": day, "available_date": day, "證券代號": code, "證券名稱": code,
+         "收盤價": 100 + index, "成交股數": 1000 + index, "漲幅%": Decimal("1.5"), "成交量變化率%": Decimal("10")}
+        for code in ("2330", "2317") for index, day in enumerate(pd.date_range("2026-05-01", periods=25))
+    ]
+    history = pd.DataFrame(rows)
+    source_file = config.data_root / "recommendation_fixture.csv"
+    history.to_csv(source_file, index=False, encoding="utf-8-sig")
+    source_hash = hashlib.sha256(source_file.read_bytes()).hexdigest()
+    mapper = SimpleNamespace(get_stock_industries=lambda code: [])
+    service = RecommendationService(config, industry_mapper=mapper, market_data_provider=lambda: history, regime_detector=SimpleNamespace())
+    strategy = {"profile_id": "qa_fixture", "profile_version": "1.0", "filters": {"volume_change_min_percent": "0"}, "weights": {"technical": 5000, "pattern": 3000, "volume": 2000}}
+    original = deepcopy(strategy)
+    recommendations = service.run_recommendation(strategy, as_of_date="2026-05-25", top_n=1)
+    if len(recommendations) != 1 or not isinstance(recommendations[0].total_score, Decimal):
+        raise AssertionError("離線真實評分必須產生 Decimal 推薦結果")
+    validate_dto_structure(recommendations[0], result)
+    validate_score_ranges(recommendations[0], result)
+    context = deepcopy(service.last_run_context)
+    why_not = deepcopy(service.last_why_not_payload_json)
+    if context["eligible_universe_size"] != 2 or not why_not or "recommendation_outside_top_n" not in why_not[0]["reason_codes"]:
+        raise AssertionError("母體必須在 top_n 前計算且保留落選理由")
+    result.add_pass("Eligible_Universe_Why_Not", {"universe": 2, "selected": 1})
+    future = history.iloc[[-1]].copy()
+    future["available_date"] = pd.Timestamp("2026-06-01")
+    future["收盤價"] = 9999
+    history = pd.concat([history, future], ignore_index=True)
+    repeated = service.run_recommendation(strategy, as_of_date="2026-05-25", top_n=1)
+    if [item.to_dict() for item in recommendations] != [item.to_dict() for item in repeated] or service.last_run_context != context or service.last_why_not_payload_json != why_not:
+        raise AssertionError("延遲修訂不得改變已知日推薦及負面證據")
+    if strategy != original:
+        raise AssertionError("推薦不得修改呼叫端設定")
+    result.add_pass("Future_Append_Config_Freeze", {"data_fingerprint": context["data_fingerprint"]})
+    repository = RecommendationRepository(config)
+    dto = RecommendationResultDTO("", "隔離推薦驗收", strategy, repeated, why_not_payload_json=why_not, run_context=context)
+    result_id = repository.save_result(dto, "隔離推薦驗收")
+    loaded = repository.load_result(result_id)
+    if loaded is None or loaded.run_context != context or loaded.why_not_payload_json != why_not:
+        raise AssertionError("推薦保存重載不得遺失執行上下文與 Why Not")
+    result.add_pass("Repository_Context_Roundtrip", {"schema_version": context["schema_version"]})
+    if service.run_recommendation(strategy, as_of_date="2026-04-01") != []:
+        raise AssertionError("無可得行情應回傳空集合")
+    result.add_pass("Empty_As_Of_Result")
+    if hashlib.sha256(source_file.read_bytes()).hexdigest() != source_hash:
+        raise AssertionError("推薦不得修改來源 fixture")
+    result.add_pass("Source_Hash_Unchanged", {"source_hash": source_hash})
+
+
 def main():
     """主函數"""
     logger.info("=" * 80)
@@ -852,17 +914,27 @@ def main():
     result = ValidationResult()
     
     try:
-        # 初始化配置
-        config = TWStockConfig()
-        
-        # 驗證 Service 層
-        validate_service_layer(config, result)
-        
-        # 驗證 UI ↔ Service Contract
-        validate_ui_service_contract(result)
-        
-        # 驗證篩選邏輯
-        validate_filtering_logic(config, result)
+        with tempfile.TemporaryDirectory(prefix="task03_", dir=log_dir) as temporary:
+            root = Path(temporary)
+            values = {"DATA_ROOT": str(root / "data"), "OUTPUT_ROOT": str(root / "artifacts"), "PROFILE": "test", "QT_QPA_PLATFORM": "offscreen"}
+            previous = {key: os.environ.get(key) for key in values}
+            os.environ.update(values)
+            try:
+                validate_isolated_recommendation_loop(root, result)
+                validate_ui_service_contract(result)
+            finally:
+                for key, old in previous.items():
+                    if old is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = old
+                # Windows 清理前只釋放本 fixture 建立的檔案 handler。
+                for registered in [logging.getLogger(), *logging.Logger.manager.loggerDict.values()]:
+                    if isinstance(registered, logging.Logger):
+                        for handler in list(registered.handlers):
+                            if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename).resolve().is_relative_to(root.resolve()):
+                                handler.close()
+                                registered.removeHandler(handler)
         
     except Exception as e:
         logger.error(f"驗證過程發生錯誤: {e}")
@@ -885,7 +957,7 @@ def main():
     logger.info(f"\n詳細報告: {report_file}")
     
     # 返回退出碼
-    if result.failed:
+    if result.failed or result.skipped:
         return 1
     return 0
 
