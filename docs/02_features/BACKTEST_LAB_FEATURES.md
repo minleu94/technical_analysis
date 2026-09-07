@@ -4,6 +4,16 @@
 
 「策略回測」標籤已升級為完整的「實驗室/策略工作台」，支援反覆研究、知識累積、快速迭代。
 
+### 2026-09-06 執行與保存契約
+
+推薦回放預設 `next-session-open.v2`，單股／批次／固定組合的 next_open 路徑同樣以收盤訊號於後續有效且可交易的開盤成交；缺開盤、零量、停牌不回退 close。停損停利收盤確認後再於後續開盤退出，末端沒有 session 不合成清倉。期末 open 部位、未成交原因、已實現／未實現損益與 cancelled 狀態需分開判讀；固定組合仍是 per-stock 研究，沒有完整共享現金引擎。
+
+新金融核心採 Decimal／整數單位，推薦 UI 使用所選費率／滑價、30 bp 賣出稅與 1000 股 lot；服務 API 未指定成本會揭露假設不足。Equal Weight 使用同 frozen selections、費稅及 session，不重新選股。明選 `legacy-same-day-close.v1` 才使用舊推薦收盤假設；舊結果保留原版本，不能宣稱符合 v2。
+
+Registry 保存 frozen execution_contract／成本／terminal policy／status；建構與 query 不建 schema、不 reconcile，維護 owner 才可顯式恢復未完成保存。跨版本或 cancelled／partial 為 Incompatible；成本／稅／lot 差異為 Caution。損毀、缺檔、未知版本拒絕比較，不重算歷史。close-to-close forward outcome 是事後診斷，不能替代撮合 PnL；人工覆盤提案不授予 Formal credit 或 promotion。
+
+操作及排錯以 [Application Manual](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/APPLICATION_MANUAL.md) 為準；精確限制與驗收見 [TASK-04](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_04_HANDOFF.md)／[TASK-05](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_05_HANDOFF.md)，跨卡結果見 [TASK-08](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md)。離線研究不等於真實 fills、有效投資證據或 V4 closeout。
+
 ## 已實作功能（優先級 1-4）
 
 ### 參數與評分治理
@@ -427,10 +437,10 @@
 
 ## 注意事項
 
-1. **資料路徑**：所有資料儲存在 `{output_root}/backtest/` 下
+1. **資料路徑**：舊回測庫位於 output_root 的 backtest；新 Registry 使用 TWStockConfig 的 research_runs SQLite／Parquet 路徑，不共用市場 twstock.db。
 2. **向後兼容**：現有回測功能完全保留，新功能為可選
 3. **效能**：SQLite 適合中小型資料，未來可升級為 PostgreSQL
-4. **取消語意**：取消為合作式軟取消；已開始的單檔回測會安全收尾，尚未開始的工作不再提交
+4. **取消語意**：取消為合作式軟取消；單股 next_open 可在 session 邊界停止，尚未開始的批次工作不再提交。已產生結果保留 cancelled／partial，不當完整成功比較。
 
 ---
 
@@ -496,10 +506,12 @@ Legacy 已保存的推薦組合 research run 可透過 Backtest「推薦組合�
 - **安全延遲 (Safety Delay)**：
   對於無明確突破參考點的非突破型圖形，若 `confirm_idx` 為空，則強制採用安全延遲 `end_idx + 2` 當作確認點。
 
-### 4. 強制平倉 Portfolio 記錄與追溯標記
-- **強制平倉允許記錄**：
-  - 由於回測期末結算或風控平倉通常是真實的回溯清盤交易，並非虛假數據，因此系統**允許將其記錄至持倉**。
-- **來源追溯與標記**：
-  - 當使用者在交易明細表右鍵將強制平倉記錄至 Portfolio 時，系統會自動在備註中寫入「`來自回測 (強制平倉)`」。
-  - 儲存時，會自動在 `source_summary` 字典中寫入 `exit_reason="強制平倉"` 的元數據，保留完整的「回測強制平倉」歷史追溯鏈。
+### 4. Legacy 強制平倉紀錄與來源追溯
 
+新 `next-session-open.v2` 不合成期末強制清倉；沒有後續可交易開盤時保留開放部位。舊結果中的「強制平倉」僅是當時研究撮合假設，不能稱作真實成交。既有手動 Portfolio 入口可保留回測來源備註與 `exit_reason="強制平倉"` 作研究追溯；它不構成 broker／Paper fills，不能匯入新的正式精確帳本或折抵成本後 Paper evidence。
+
+
+
+## 更新記錄
+
+- 2026-09-06：同步 next-session-open.v2、取消／末端持倉、Registry 版本與顯式恢復；校正 legacy 強制平倉不等於真實 fills。

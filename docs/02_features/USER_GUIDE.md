@@ -3,6 +3,16 @@
 > 本文件保留推薦、回測與資料治理的深入教學。
 > 需要從安裝開始，依 8 個頂層工作區逐步操作時，請先閱讀 [完整操作手冊](../07_guides/APPLICATION_MANUAL.md)。
 
+## 2026-09-06 推薦與研究判讀更新
+
+推薦保存時會凍結 Profile／設定、決策日、實際行情日、來源指紋與 Why Not。已啟用技術因子缺值或總分無效時保留未知並排除，不補零或中性分數；有效空結果不是故障。fixed 維持預設、quantile 仍需明確選用；歷史產業篩選若缺 PIT 成分證據，不能用今日分類替代。送推薦回放傳的是獨立設定快照，後續修改畫面不改已送出的設定。
+
+推薦回放預設 `next-session-open.v2`，T 收盤訊號於後續可交易開盤成交；停牌或缺價延後，停損停利也是收盤確認後才在後續開盤執行。期末開放持倉只估值，未實現損益不是已完成交易；cancelled 結果只能作部分研究／審計。舊同日收盤結果及無版本結果不會自動升級，Registry 不讓跨版本或取消／部分結果混排，也不在刷新時修復損毀。固定組合仍是 per-stock 研究。
+
+市場／決策區塊保留實際資料日與降級；來源未知不等於零風險，日資料 Trigger 不是即時突破證明。觀察清單仍預設 JSON、手動持倉仍預設 JSONL，候選 SQLite／append-only 帳本只在隔離副本與明確注入下驗證；沒有把回測成交轉成真實 Paper fills。Runtime UNKNOWN 表示來源未確認，不是閒置。
+
+當前入口、費率與結果排錯以 [完整操作手冊](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/APPLICATION_MANUAL.md) 為準；工程證據見 [TASK-08](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md)。V4 Evidence Accumulation／`action_required` 維持；自然前瞻時間、具名覆盤、來源 acceptance 與正式成交成本不能由 fixture 或 replay 折抵。
+
 ## 📋 目錄
 
 完整工作區導覽：
@@ -460,7 +470,7 @@ Explain 面板提供推薦分數的詳細拆解，幫助使用者理解每檔股
 - 單股回測與推薦組合回放完成後，新的「保存結果」入口會寫入 Research Run Registry。
 - Registry 會保存執行參數、資料 fingerprint、成本與成交假設、績效摘要、equity curve 與 trades；明細使用 Parquet，metadata 使用 SQLite。
 - 開始新一輪回測後，上一輪尚未保存的結果會視為 stale，系統不允許再保存。
-- 舊 Backtest / Recommendation Portfolio 保存庫仍可作歷史查詢與 backfill 來源；完整 Cross-run Comparison 與 Registry-based Promote 尚未完成。
+- 舊 Backtest / Recommendation Portfolio 保存庫仍可作歷史查詢與受控 backfill 來源；Cross-run Comparison 與 Registry-based Promote service Gate 已存在。保存不等於升級，仍需完整性、版本可比性、lifecycle 與人工 Gate；本輪沒有執行正式 promotion。
 
 ### 注意事項
 - 一鍵送回測最多載入 20 檔股票（避免過多）
@@ -810,7 +820,7 @@ Promote 機制可以將通過驗證的回測結果升級為策略版本，並在
 - **Promote 後的策略版本會保存完整的參數、配置和回測摘要**
 - **可以在推薦分析中選擇已 Promote 的策略版本作為參數預設**
 - **建議在 Promote 前先執行 Walk-Forward 驗證，確保策略穩定性**
-- **Month 2 M2-B 後，新保存的 registry run 需等 M2-C Registry-based Promote Gate 完成後才可走新版升級流程；完成前不得把 registry save 視為可直接升級**
+- **新保存的 registry run 走既有 Registry-based Promote Gate；保存成功不代表具備 promotion 資格。版本、完整性、驗證與 lifecycle／人工 Gate 仍須個別通過。**
 
 ---
 
@@ -824,8 +834,8 @@ Promote 機制可以將通過驗證的回測結果升級為策略版本，並在
   2. 若部位 Sizing 模式設定為 **「固定金額」**，請將固定金額提高（例如調高至 150 萬元）；或者改為 **「全倉」** 模式。
   3. 回測股價較低的股票（如聯電 2303 或國泰金 2882）進行功能測試。
 
-### Q2: 為什麼強制平倉交易可以記錄到 Portfolio？記錄後會有什麼標記？
-* 強制平倉通常是回測期末結算或風控平倉的必要平倉交易，並非虛假交易，因此系統**允許將其記錄至持倉**。
+### Q2: 如何判讀舊回測的強制平倉 Portfolio 紀錄？
+* `next-session-open.v2` 不合成期末清倉；舊結果的強制平倉只代表當時研究假設。既有手動記錄入口保留來源追溯，不證明真實成交，不可轉成正式 Paper fills 或新精確帳本的成交來源。
 * **操作與標記**：
   1. 在回測明細表格中右鍵點擊該筆強制平倉，點選「記錄到持倉管理（保留回測來源）」。
   2. 系統會彈出對話框進行二次確認，確認後會打開手動記錄視窗。
@@ -1191,7 +1201,7 @@ A: 需要修改 `{meta_data_dir}/broker_branch_registry.csv` 檔案，添加新�
 
 ---
 
-**最後更新：2026-06-11（Phase 4.2 完成：持倉籌碼監控、主力下鑽定位高亮連動、SQLite 股數精準度校正、pytest 全量崩潰修復）**
+**歷史更新：2026-06-11（Phase 4.2 完成：持倉籌碼監控、主力下鑽定位高亮連動、SQLite 股數精準度校正、pytest 全量崩潰修復）**
 
 ## 券商分點資料重新補抓
 
@@ -1203,3 +1213,8 @@ A: 需要修改 `{meta_data_dir}/broker_branch_registry.csv` 檔案，添加新�
 
 一般使用者不需要為本次遷移重新下載歷史網頁；重新合併與 SQLite 同步即可由現有檔案補回 observed/rank 契約。
 
+
+
+## 更新記錄
+
+- 2026-09-06：補上推薦指紋、未知因子、T+1／Registry 判讀及候選來源邊界；更新舊 Promote 與強制平倉說法。

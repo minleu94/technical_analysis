@@ -6,7 +6,7 @@
 
 > Evidence rehearsal closeout：[Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)（`engineering_rehearsal_complete`；不是 external completion）。
 
-> **最後整理**：2026-08-30
+> **最後整理**：2026-09-06
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
 >
 > **Current audit entry**：[Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)
@@ -260,6 +260,21 @@
 
 ## 6. QA 與審核
 
+### 2026-09-06 Master Goal 八卡工程交接
+
+[Master Goal Playbook](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/MASTER_GOAL_PLAYBOOK_2026_09_06.md) 保存任務拆解時的基線與白名單；後續實作以各卡 handoff 與目前 Scoped SSOT 為準。下表只導航工程證據，不授予來源 acceptance、Formal credit、正式 migration／writer 或 V4 closeout。
+
+| 文件 | 內容 |
+|---|---|
+| [TASK-01 DATA](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_01_HANDOFF.md) | 更新 DTO、唯讀狀態、冪等落地、單一寫入者、隔離 QA 與外部下載 skips |
+| [TASK-02 MARKET](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_02_HANDOFF.md) | 市場日期／品質 DTO、排名與 future-append 驗證 |
+| [TASK-03 RECO](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_03_HANDOFF.md) | 推薦 context／指紋、未知因子、PIT 產業拒用與 Profile 重播 |
+| [TASK-04 EXEC](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_04_HANDOFF.md) | 下一可交易開盤 v2、精確撮合、成本後基準、末端持倉／取消 |
+| [TASK-05 REGISTRY](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_05_HANDOFF.md) | 保存／顯式恢復、版本相容、故障注入、Evidence lineage 與 review proposal |
+| [TASK-06 PORT](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_06_HANDOFF.md) | candidate-only append 帳本、補償投影、副本遷移與缺真實 fills |
+| [TASK-07 DESK](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_07_HANDOFF.md) | 候選池／每日決策、來源鏈、完整 loop payload 及中央接線交棒 |
+| [TASK-08 OBS／整合](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md) | 08-A Runtime 觀測與 08-B 中央組裝、文件、inventory／全域驗收；依各階段紀錄判讀 |
+
 | 文件 | 說明 |
 |---|---|
 | [P0_EVIDENCE_REFRESH_2026_08_30.md](../06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md) | 2026-08-30 bounded 官方唯讀 retry；記錄 `1 verified / 9 degraded / 3 official_no_data`、13 份 deferred intake、owner packet、artifact hash 與不升格安全邊界。 |
@@ -446,6 +461,8 @@
 ---
 
 ## 🔄 更新記錄
+
+- 2026-09-06：登錄 Master Goal Playbook 與 TASK-01 至 TASK-08 工程交接；索引只導航，不替代 Scoped SSOT 或外部 Gate。
 
 - 2026-08-29：新增全程式 Program Status Rebaseline 與 ML release_v4 retention cleanup custody audit；更新 Index current summary、Snapshot 快速入口、Evidence／Paper／Formal／Runtime／Performance 判讀與當時 cleanup 後 410.31 GiB headroom，不再把 2026-07 的 OOS plan 或單一 weekly X/3 當 current Next。
 - 2026-08-30：新增 P0／Evidence refresh 與 Paper readiness refresh；校正 sidecar pending=`10`、13/13 P0 的 `1 verified / 9 degraded / 3 official_no_data`、合法休市日 reconciliation，並記錄 Paper ledger 缺失與真實 fills handoff，不以 snapshot／回測補造成交。

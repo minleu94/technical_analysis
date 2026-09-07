@@ -1,6 +1,6 @@
 # UI 功能文件（Qt）
 
-> **最後整理**：2026-08-27
+> **最後整理**：2026-09-06
 > **適用範圍**：`ui_qt/` 目前主要使用者介面。
 > **狀態判讀**：目前狀態以 `docs/00_core/PROJECT_SNAPSHOT.md` 為準；未來 6 個月工程方向以 `docs/00_core/ROADMAP_6M_ENGINEERING.md` 為準；本文件只描述 UI 功能與操作入口。
 > **完整操作**：安裝、逐步操作、參數、結果判讀與排錯見 [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)。
@@ -26,6 +26,16 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - 涉及回測或推薦訊號時，必須維持 Look-ahead bias 防線。
 
 ---
+
+## 2026-09-06 閉環契約更新
+
+- 更新／市場頁消費 App 的決策日、有效日、quality 與 warnings；來源詳情查詢不寫 manifest，市場缺歷史或未來資料不補零。Regime 匹配度不是勝率。
+- 推薦保存 `recommendation-context.v1` 的 Profile／設定、來源指紋與 Why Not；啟用因子缺值不補中性分數。歷史產業篩選缺 PIT 成分證據時拒用，歷史日期仍是服務接點，沒有新增 UI 日期選擇器。
+- 推薦回放新預設 `next-session-open.v2`：收盤委託、後續可交易開盤成交，期末持倉與取消狀態明示。Registry 使用執行時 frozen 版本／成本；跨版本、cancelled／partial 不混排，缺檔／損毀停止比較，UI 不 reconcile。
+- 候選池名稱由 App 查詢，JSON 損毀保留原檔並顯示錯誤；候選 SQLite／精確帳本只供明確注入與副本驗證，正式 JSON／JSONL 預設未切換。Daily Desk 區分有效空池與未知，舊日期回呼不覆蓋新請求；08-B 已接上保存推薦 provider、推薦加入候選的 current_result_id 及 Workbench 新來源欄位重載；未保存結果不捏造來源 ID。
+- Runtime 顯示 UNKNOWN／read state／diagnostics，關閉 observer 解除訂閱；受限事件 ID 去重不是 durable queue，重啟不執行 task。Evidence review proposal 是 App 接點，沒有新增 UI 核准按鈕。
+
+完整操作、參數與排錯以 [Application Manual](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/APPLICATION_MANUAL.md) 為準；實作與整合證據見 [TASK-08](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md)。本輪不改 `action_required`／V4 Evidence Accumulation，不授予 Formal credit、來源 acceptance、scheduler、broker 或正式 writer 權限。
 
 ## 二、頂層 Tab
 
@@ -127,6 +137,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - Optional Historical Replay JSON summary 只作 simulated evidence input；若 DTO 帶 replay summary，data quality 區塊必須揭露 `simulated_scheduler`、source gap、payload gap、outcome maturity、benchmark coverage、missing industry benchmark 與 pending future-data。
 - Workbench `Evidence` 子頁已由 placeholder 替換為唯讀 `ResearchConsoleView`：三區依序顯示固定 fail-closed Safety Boundary、Development Dataset V0 / Rule baseline / ML challenger / E2E frozen projection，以及 EV1–EV5、P0-13、獨立 Broker lane、P0 Data Source Control Center 與 Artifact Inspector。Control Center 固定保留 13 個 P0 source，顯示 contract、machine/audit、人工 decision、blockers 與 downstream eligibility；沒有 audit artifact 時明示 `contract_only`／`Not supplied`，不把缺資料誤顯示為 ready。資料只來自 `ResearchConsoleSourceService` 的 injected mapping 或顯式 sanitized JSON path；缺 artifact / 欄位顯示 Missing / Unknown，不補零、不讀 DB、不重算 domain logic。
 - Research Console 不提供 Apply、Promote、Retrain、Blend、Accept Source 或 Trade；development / candidate / provisional / degraded / fixture / replay 以文字狀態與顏色共同區分，不能解讀為 formal OOS、forward evidence、source accepted 或 production ready。
+- Research Console 頂端先顯示中文結論（Rule 使用中、ML 未參與、正式輸入缺漏或投影過期），原始 machine token 與技術診斷預設收合，按「顯示技術診斷」才展開；這只改變讀取順序，不改任何 gate。
 
 防線：
 
@@ -191,6 +202,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - 推薦結果保存與 round-trip 載入。
 - 一鍵送策略回測。
 - 送 Research Lab 批次回測。
+- 推薦結果表的單股研究按鈕、雙擊與右鍵入口會建立 `ResearchStockContextDTO`，帶入股票、決策日、資料日、結果 ID、Profile 與來源 workspace；市場探索頁的共用 context strip 可顯示這些欄位並返回來源清單。
 - 建立候選池 / Watchlist。
 - Fixed / quantile 門檻模式與 eligible universe 橫斷面百分位排名。
 - 可選月營收 YoY 最低值與 PE 最高值篩選；啟用時只讀 `available_date <= decision_date` 的 PIT 基本面版本，無法標準化決策日期、缺 PE／去年同期營收或不符門檻者寫入 screening matrix 的 `skipped` 原因，不補零也不讀未來資料。
@@ -218,6 +230,7 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - 候選池 / watchlist 管理。
 - 從 Market Watch、Recommendation、Backtest 取得候選標的。
 - 支援後續送入 Backtest / Research workflow。
+- 觀察清單單股下鑽會只讀保存結果 metadata 取得來源 ID／資料日／Profile，無保存結果時保留明確缺漏，不重新計算推薦或猜測來源。
 
 文件同步重點：
 
@@ -355,3 +368,8 @@ Qt UI 不是單純顯示股票名單，而是把「資料更新、候選觀察�
 - [BACKTEST_LAB_FEATURES.md](BACKTEST_LAB_FEATURES.md)
 - [USER_GUIDE.md](USER_GUIDE.md)
 - [APPLICATION_MANUAL.md](../07_guides/APPLICATION_MANUAL.md)
+
+
+## 更新記錄
+
+- 2026-09-06：補上八卡 UI／App 契約、08-B 來源接線與正式來源／權限限制，操作細節指向完整 Manual。

@@ -375,11 +375,19 @@ Direct/OOC maintenance watcher 依 raw pointer、canonical hash、dataset safety
 training identity 自動接續，缺少正式 custody 時仍保持 `formal_oos_allowed=false`、
 `alpha=0` 與 `broker_order_allowed=false`。
 
-runner 在建立 immutable publication 前會對 raw PIT 輸出磁碟做唯讀 headroom preflight，
-預設要求至少保留 20 GiB。若低於門檻，會寫入
-`status=blocked_insufficient_storage` 與 `storage_preflight`，不啟動 builder、不留下
-新的部分 publication；可用 `--minimum-free-space-bytes` 在受控環境調整門檻。這個
-容量檢查不會刪除或搬移既有 run，舊 publication 的 retention 必須另由 owner 審核。
+runner 在建立 immutable publication 前會對 raw PIT 輸出磁碟做唯讀三段容量 preflight：
+本次持久新增上限 `--persistent-storage-budget-bytes`（預設 35 GiB）、暫存峰值上限
+`--temporary-storage-budget-bytes`（可選），以及執行後安全保留 `--safety-reserve-bytes`
+（未指定時沿用相容的至少 20 GiB）。若任一 headroom 不足，會寫入
+`status=blocked_insufficient_storage`、`storage_preflight.capacity_budget` 與 blockers，
+不啟動 builder、不留下新的部分 publication。這個容量檢查不會刪除或搬移既有 run，舊
+publication 的 retention 必須另由 owner 審核。
+
+若要保留日常更新與額外餘裕，建議正式啟動前採用完整 200 GiB headroom profile：
+100 GiB 執行後安全保留、35 GiB 本次持久新增、40 GiB 暫存峰值、10 GiB 日常更新與
+15 GiB 額外餘裕；可把後三者併入 `--safety-reserve-bytes 134217728000`（125 GiB），
+再用 `--preflight-only` 確認 D 槽仍高於 200 GiB。相容預設 20 GiB 只適合小型／測試
+工作，不足以代表全鏈 ML 的容量保證。
 
 若只想確認 immutable pointer、database `ro/query_only` 與 Direct/OOC 磁碟 headroom，
 不想取得 maintenance lock 或啟動長時間 chain，可使用安全的 preflight-only 模式：
@@ -630,9 +638,34 @@ Final A/B 兩次獨立訓練完成 1,137,664 筆 base OOF 與 12,984 筆 meta OO
 
 Runbook、dataset/model/policy hash、calibration、PSI、OOF lane comparison、bootstrap、coverage、drawdown/CVaR、turnover、shadow days 與 rollback 缺一不可。歷史回放只可作 development/OOS portfolio replay，不能替代 freeze 後 Formal OOS 或 20 個真實 elapsed trading days。
 
-訓練器 artifact schema 為 `allocation-model-artifact-v2`。每個 feature pack／5、10、20、60 日／Ridge-Logistic 或 HGB expert 會輸出 9 個 head（benchmark／產業超額報酬、downside、MAE、MFE、realized volatility、max drawdown、tail loss、fill feasibility）、1 個 benchmark rank 與 9 個逐 head missing masks；Meta Allocator 的每個 expert input 因此固定為 19 維。缺 PIT-safe label 的 head 必須帶 missing reason/mask，不得補成已觀測的 0。
+訓練器 artifact schema 依流程可能為既有 `allocation-model-artifact-v2` 或 OOC
+`allocation-model-artifact-v3`。每個 feature pack／5、10、20、60 日／Ridge-Logistic 或 HGB
+expert 會輸出 9 個 head（benchmark／產業超額報酬、downside、MAE、MFE、realized volatility、
+max drawdown、tail loss、fill feasibility）、1 個 benchmark rank 與 9 個逐 head missing masks；
+Meta Allocator 的每個 expert input 因此固定為 19 維。缺 PIT-safe label 的 head 必須帶
+missing reason/mask，不得補成已觀測的 0。
+
+每日 consumer 若使用 `scripts\infer_ml_allocation_copilot.py --release-root <RELEASE_ROOT>`，
+會先由 `AllocationReleaseAdapter` 驗證 release manifest、模型／前處理／校準器 hash、feature
+順序、缺值政策與 dataset lineage，通過後才讀取 frozen input。相同資料列可用
+`validate_frozen_rows()` 做 OOC→release parity；任何 mismatch 都停止 ML path。外部整數
+校準器必須是跨 fold、單調的 0–10,000 bp mapping；現有 OOC calibration 仍是
+`oof_diagnostic_only` 時不可發布，consumer 會維持 Rule-only 與 alpha 0。
+
+若只要驗證已產出的 OOC audit，不執行推論，可使用
+`scripts\validate_ml_release_parity.py --release-root <RELEASE_ROOT> --input <INPUT> --ooc-audit <AUDIT> ...`。
+它只讀 release 與 frozen rows，輸出 `matched` 或 `blocked`；不改寫模型、正式資料庫、
+promotion pointer 或 alpha 狀態。
 
 Full-market OOC 訓練會以 deterministic causal row sample 估計 median，並以完整 train stream 計算 mean／variance；final-meta 的寬 memmap 以 bounded batch 開關讀寫，避免 working set 超過 4 GiB gate。這只改變記憶體配置與可續接性，不放寬 fold cutoff、OOF custody、future-prefix 或 promotion gate。
+
+若要先驗證單一主 horizon 的成本後增益，可在隔離輸出使用
+`scripts\train_ml_allocation_out_of_core.py --profile minimal_linear_shadow --algorithm ridge_logistic --horizon <H>`。
+此 profile 強制只訓練 Ridge／Logistic 與一個明確 horizon；未提供恰好一個
+`--horizon`，或混入 HGB，命令會停止。預設 `full_shadow` 維持既有多 horizon／雙演算法
+研究流程，兩者都只產生 research／shadow artifact；profile 本身不改 Rule、Advice、正式
+OOS 或 broker 權限。比較時要以同一 frozen rows、同一成本模型、Equal Weight 與 Rule
+baseline 檢查超額、回撤、換手、樣本數與不確定區間，再決定是否擴張特徵或 HGB。
 
 Direct numeric store 的 heartbeat 會在每個來源 shard 驗證至少每 100,000 筆 raw row，或連續 30 秒沒有進度事件時，發布 `raw_spool_source_shard_<year>_rows_<n>_processed`；完成 shard 後再發布 `raw_spool_source_shard_<year>_complete`、`year_raw_spool_complete` 與 `year_labels_complete`。進入年度 assembly 後，會以相同的列數／時間節奏發布 `assembly_decision_<date>_rows_<n>_processed`，接著是 `year_assembly_complete`、`year_artifacts_complete` 與 `year_directory_finalized`；`processed` 狀態只表示已讀取驗證或組裝的進度，不是完成或 checkpoint，所有狀態都不能取代年度 manifest 或 hash-bound `latest_manifest.json`。因此長時間重建可由受控 continuation 自動判斷目前真實階段，無須人工猜測或手動標記進度。
 
@@ -1123,6 +1156,8 @@ Advice 不寫 DB、不啟用 scheduler、不建立 broker order、不改 Scoring
 ## 4. 數據更新
 
 ### 4.1 全部資料看板
+
+「檢查數據狀態」及來源明細是唯讀觀測：缺 DB、缺來源或資料降級會保留實際日期、quality 與 warnings，不因檢查而建表、寫入 manifest 或修復資料。candidate 可用不代表已接受正式來源。下載／合併／指標計算仍使用各自明確操作；技術指標由單一寫入者落地，週末資料缺官方交易 session 證據時不會被誤收為交易日。
 
 窄視窗（小於 720px）會將左側資料來源導覽移到內容上方，核心狀態卡改為雙欄、候選資料卡改為單欄、快速／安全／狀態檢查按鈕改為直列；整個更新頁可垂直捲動。這只是畫面排版，更新日期、worker、SQLite 同步與 fail-closed 規則不變。
 
@@ -1675,6 +1710,8 @@ Regime 是對當下市場環境的分類，不是未來預測。規則匹配度�
 
 ### 5.2 強勢與弱勢個股
 
+市場服務同時保留決策日與實際有效日。較舊資料會標為 degraded 並保留 fallback 日期；只有未來資料、日期未知或有效樣本不足時保持 missing。Breadth 的比例以基點、Regime 的規則匹配度以分類分數交換，均不是勝率。指定歷史決策日的應用服務先裁切可用資料才排名，追加未來行情不改當日已凍結母體；本次沒有新增歷史日期 UI 控件。
+
 1. 選擇「本日」或「本周」。
 2. 第一次進入可按「載入數據」。
 3. 需要重新計算時按「刷新」。
@@ -1754,6 +1791,8 @@ Regime 是對當下市場環境的分類，不是未來預測。規則匹配度�
 5. 若目前設定值得重用，可按「保存目前設定為自訂 Profile」；保存後會出現在 `自訂｜...` 清單。
 6. 點擊「執行推薦分析」。
 
+推薦分析執行期間，進度列會顯示目前百分比；下方「執行狀態」會同步顯示四個階段（讀取資料、建立分析範圍、執行推薦規則、整理結果）、耗時與最後活動時間。這些欄位是本輪背景工作的可觀測狀態，不會把等待中的時間推算成額外完成度。按「取消分析」只會送出合作式取消，按鈕會改為「取消中…」並等待背景工作安全收尾；收尾前不套用部分結果，也不會強制終止仍可能持有資料資源的執行緒。完成後畫面會保留「已安全取消」及本輪耗時，需重新按「執行推薦分析」才能開始新一輪。
+
 市場狀態卡會顯示 Regime 中文名、regime code、confidence / 規則匹配度、Regime score、資料日期與來源。confidence / 規則匹配度是當下資料符合分類規則的程度，不是未來走勢勝率。
 
 Profile-Regime 說明：
@@ -1808,6 +1847,8 @@ quantile 目前是 opt-in，不能宣稱比 fixed 更準。
 
 ### 6.4 結果判讀
 
+推薦服務保留決策日、實際行情日與排名母體；top_n 只限制入選數，不改百分位母體。已啟用指標缺值、基本面缺可得證據或總分無效時，結果保留 Why Not 並降低品質，不以零分或中性分數代替未知。無符合候選可以是有效空結果。
+
 - Why：為何入選。
 - Why Not：哪些條件不足或限制排名。
 - Explain：技術、圖形、量能等子分數與風險點。
@@ -1823,6 +1864,10 @@ V1.7 後，「保存結果」會一併保存推薦當下的 screening matrix：�
 
 ### 6.5 結果後續操作
 
+保存時一併保留執行當時的 Profile／設定、決策日、行情與實際基本面輸入指紋、母體及負面證據。送推薦回放會傳送獨立設定快照，後續修改畫面設定不改已送出內容。歷史 as_of_date 目前是應用服務接點；若歷史產業篩選缺當時成分證據，回報 `industry_membership_pit_unavailable`，不能改用今日產業分類解鎖。
+
+加入觀察清單只附上真實已保存的推薦結果 ID；未保存的新分析不捏造 source_id，開始或完成另一輪分析會清除前一輪 ID，避免候選被錯接到舊結果。
+
 - 「保存結果」：保存推薦配置、Profile、Regime、推薦名單、screening matrix 與 negative evidence payload；成功訊息會顯示保存 ID、保存範圍與下一步入口。
 - 「加入觀察清單」：把選取股票加入 Watchlist。
 - 「送 Research Lab 批次回測」：用推薦名單建立批次研究輸入。
@@ -1830,7 +1875,27 @@ V1.7 後，「保存結果」會一併保存推薦當下的 screening matrix：�
 - 表格右鍵「記錄到持倉管理」：建立帶推薦來源 metadata 的交易。
 - 「匯出 Excel」：建立包含元數據、今日推薦配置、Regime 狀態以及推薦股票名單的 Excel 報告，並在背景執行原子寫入。
 
+### 6.6 鍵盤與圖表文字替代
+
+推薦／回測結果中的圖表若使用快速 Canvas renderer，可先聚焦圖表，再用方向鍵、Home、End 移動目前資料點；按「顯示數值」可展開同一份圖表 payload 的日期、數值或 histogram 區間筆數。Smart Money 主表與分點追蹤表可用方向鍵或 Tab 瀏覽，Badges 與近期趨勢圖形欄也提供可朗讀的文字數值替代。
+
 ## 7. 觀察清單與選股清單
+
+### 候選股分析與跨頁下鑽（2026-09-06）
+
+右下方點選已保存的「選股清單」，會直接列出該清單的股票代號與名稱，不必先加入候選池。單擊預覽股票可讀取分析摘要，雙擊可下鑽主力流向；預覽本身不修改清單或候選池。
+
+在上方「觀察候選池」選取一檔股票，下方摘要會讀取已保存推薦的分數、理由及分析日期。有推薦來源 ID 時使用該次保存結果；沒有來源 ID 時使用最近保存的一份推薦，並明示來源與日期。這是當時策略的分析快照，並非即時行情或重新評分；沒有結果、未包含該股、日期缺失或晚於查詢日期時，顯示缺件原因，不推論為看空。讀取失敗可刷新重試；若尚未保存推薦，先至「推薦分析」完成並保存分析。
+
+按「查看選中個股分析／主力流向」、雙擊股票或使用右鍵選單，即可前往「市場探索 → 主力流向」。股票即使未進入目前掃描榜，仍會查詢個股分點資料；不補造主力分數。資料日與週期沿用主力流向頁，沒有可用分點時明細為空，不能解讀成沒有交易。多選時須先改為單選，批次回測仍使用原有「送 Research Lab 批次回測」入口。
+
+### ML 現況與查看位置
+
+ML 的模型訓練位於 `ml_module/allocation_training_service.py`，凍結模型的推論由 `app_module/ml_allocation_inference_service.py` 轉為整數基點配置提案；配置服務另檢查 promotion 授權。模型產物存在不代表已介入正式推薦或持倉，UI 也不執行訓練。
+
+畫面入口為「決策工作台 → Evidence／Research Console」：Development Pipeline 查看 Dataset、Rule Baseline、ML Challenger 與產物；Safety Boundary 查看正式 ML、alpha 與 Rule-only 狀態；Evidence／Source Gates 查看缺件。Runtime 與數據更新的排程狀態可協助判讀工作執行，但排程成功不等於模型獲准使用。
+
+2026-09-06（美西）本次唯讀檢查：目前 process 的 `RESEARCH_CONSOLE_PROJECTION` 指向 2026-07-14 產生的開發投影，scope 為 historical research seen development data，alpha=0、四項 apply flags=false。實際呼叫 ResearchConsoleSourceService.inspect() 回報 degraded／projection_stale。預設正式 output 的舊 scheduled readiness 日期為 2026-08-14；另以台北 2026-09-07 00:00 作查詢 cutoff 重跑正式 input 唯讀檢查，結果仍為 0/3、waiting_for_formal_inputs，三項配置的 prospective input 尚未正式發布：非現金因果帳本、正式 Rule 快照歷史與 PIT 產業成分。新報告僅寫入 repo 的 `output/watchlist_analysis/ml_readiness_current.json`，沒有啟動訓練或修改正式產物。需要最新 ML 畫面時應由既有受控流程產出新 sanitized projection，再更新明確設定；不能只修改 generated_at 或解除 alpha 掩蓋過期。
 
 ### 7.1 候選池操作
 
@@ -1840,6 +1905,8 @@ V1.7 後，「保存結果」會一併保存推薦當下的 screening matrix：�
 - 「刷新」：重新載入資料。
 
 候選池保存來源、加入時間與備註，用於研究，不是實際持倉。
+
+股票名稱由應用服務查詢；跨頁提供的 source_id／result_id 會保留，重複股票不新增。舊 JSON 損毀時保留原檔並顯示錯誤，請先檢查副本，不會自動換成空池。SQLite 遷移只驗證 caller 指定 sandbox 內的 JSON 副本，不會在 UI 啟動時轉換正式候選池。added_at 截止不代表已具備完整歷史候選池事件帳。
 
 ### 7.2 選股清單
 
@@ -1875,6 +1942,10 @@ warnings 在 UI 會以繁體中文說明主要原因與影響範圍；原始 tok
 4. 若初始化或刷新失敗，畫面會保留可閱讀狀態並顯示 fallback 提示，不會中斷整體 App。
 
 ### 8.2 結果解讀
+
+各區塊保留實際資料日期；較舊資料降級，未來或缺日期來源保持未知。有效空候選池顯示 0；全數分數未知保持缺件。前期分數不足的新候選帶 estimated 提示，不代表已驗證的即時突破。刷新期間更換決策日，舊請求結果與錯誤不會蓋掉新日期。
+
+主畫面以唯讀 provider 載入決策日當下已保存的推薦，保留 result ID、Profile、品質及資料指紋；缺 context 或檔案損毀時顯示缺資料，不自行重新評分。完整 loop snapshot 重載到 Workbench 時保留推薦與 source_lineage；舊 snapshot 沒有來源欄位仍以既有缺件語意顯示。候選 ledger 僅在應用服務明確注入時可用，缺行情時 blocked，不顯示安全等級，也不生成調倉或成交。
 
 每日決策摘要會顯示：
 
@@ -2241,6 +2312,8 @@ Research Lab 左側設定面板預設保留足夠寬度給長下拉選項與表�
 4. 設定初始資金、手續費與滑價。
 5. 執行價格建議使用 `next_open`；`close` 是同根 K 收盤成交假設，必須清楚揭露。
 
+`next_open` 新結果使用 `next-session-open.v2`：T 收盤訊號最快於下一可交易 session 的有效開盤成交。缺開盤、零量或停牌延後，不回退收盤價；期末沒有後續 session 時委託保留未成交，已有部位按期末價格估值，不合成強制清倉。單股／批次／固定組合的 per-stock 結果遵守同一契約；固定組合仍不是完整共享現金 portfolio engine。
+
 開始日期與結束日期可開啟日曆選取；開始日期預設為今天往前一年，結束日期預設為今天。日曆開啟時會先定位到今天，方便從目前日期往前選擇研究區間。
 
 ### 9.3 停損、停利與部位
@@ -2325,6 +2398,12 @@ Month 6 lifecycle gate 的預設最低交易數為 20 筆，且缺 benchmark exc
 - Legacy 單股回測 / 推薦組合保存庫仍可用於歷史資料與 backfill；新的「保存結果」入口以 Research Run Registry 為準。
 
 ### 9.9 結果分頁
+
+Registry 保存 `execution_contract`、凍結成本／部位假設與 run_status。v2、legacy 同日收盤及無版本舊 run 不互相升級；不同執行版本或 cancelled／partial 結果停止績效混排與權益標準化。成本／稅／lot 假設不同為 Caution。推薦 v2 的 0.10 停損比例保存為 1000 bp，14.25 bp 手續費保存為 1425 bp_x100；判讀時先確認單位與 manifest。
+
+保存過程依 staging→files_ready→committed 保護半成品。刷新、列表與載入都不暗中修復；只載入 committed、valid 且雙 Parquet hash 一致的結果。缺檔、損毀、未知 schema／execution version 時停止比較並顯示原因。維護 owner 需先在隔離副本驗證，再明確執行 reconciliation；不要把重新整理當修復操作。原始 run 不因市場追加未來資料而重算。
+
+Evidence 的 close-to-close outcome 是事後診斷，不是 v2 執行 PnL；成熟 outcome 仍保留原 event 的 replay／forward／paper／live 宣告來源。應用服務的人工覆盤接點接受 run_id、reviewer、notes 與下一輪研究問題，回傳原推薦 snapshot、event、outcome 與缺件；沒有新增 UI 核准按鈕。宣告 tier 與 reviewer 字串不等於正式來源接受、真實時間或身分驗證，提案不增加 Formal credit 或 promotion 權限。
 
 - 實驗摘要：績效摘要與交易明細。
 - 圖表：權益、回撤、報酬分布、持有天數。
@@ -2602,7 +2681,7 @@ Weekly paper report 同時列出 gross return、成本後 net return、固定成
 
 Position thesis contract 要求人工保存 entry thesis、entry/decision/available date、持有期限、下次 review date、source trace 與至少一條結構化 invalidation rule。規則 threshold 使用 Decimal，future-available thesis 會被拒絕；contract 固定 `auto_exit_allowed=false`。
 
-Position Health state machine 僅使用決策日當下可得的 Decimal metrics。future 或 missing metric 會 fail-closed 到 `WATCH`，失效規則命中只提出 `EXIT_CANDIDATE`；`CLOSED` 是終態。所有結果固定 `apply_transition=false`、`auto_exit_allowed=false`。
+Position Health state machine 僅使用決策日當下可得的 Decimal metrics。future 或 missing metric 會 fail-closed 到 `WATCH`；invalidation rule 可標示 `action=reduce` 或 `action=exit`，論點弱化先提出 `REDUCE_CANDIDATE`，硬性失效才提出 `EXIT_CANDIDATE`。holding horizon 只有在呼叫端提供涵蓋 entry／decision 兩端的官方交易日曆時才計數；日曆不完整會留下 `time_stop_calendar_incomplete`，不猜曆日。`CLOSED` 是終態。所有結果固定 `apply_transition=false`、`auto_exit_allowed=false`。
 
 Position Health transition repository 採 append-only event。`proposal` 事件的 `recorded_state` 必須維持 previous state；只有帶 reviewer 的 `human_approved` 事件可記錄核准後狀態。兩者都固定 `auto_action_allowed=false`，不會送出賣單。
 
@@ -2685,7 +2764,7 @@ V2.0 Phase 1 / Phase 1.5 可用 `scripts\inspect_v2_workbench_prototype.py` 檢�
 - 若 `--db-path` 缺檔、缺 `decision_desk_snapshots` table 或找不到指定 decision date snapshot，輸出會保留 read-only dashboard 並在 warnings / review items 揭露 degraded source；若發現 future decision date，會顯示 `decision_desk_snapshot_future_dated` 與排除診斷；CLI 不會建立 DB 或 schema。
 - 若讀取 `_reference_fix` replay JSON summary，會揭露 simulated scheduler、source gap、source gap coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark、pending future-data 與「方向正確但尚未 production-ready」限制。
 
-V3 score effectiveness audit 可用 `scripts\inspect_score_effectiveness.py` 檢查既有 Evidence Event / Forward Outcome 中，`TotalScore` raw bucket 與 forward outcome 的唯讀關係。第一版支援 `--sample`、`--format json|markdown`、`--output`、`--min-sample-size`，也可用明確 `--db-path` 以 SQLite `mode=ro` / `PRAGMA query_only=ON` 讀既有 evidence DB。這個 CLI 只做 read-only aggregation，不寫 production DB、不提供 `--confirm`、不啟用 scheduler、不改 `ScoringEngine`、不改推薦權重、不改 threshold，也不訓練 ML model。
+V3 score effectiveness audit 可用 `scripts\inspect_score_effectiveness.py` 檢查既有 Evidence Event / Forward Outcome 中，`TotalScore` raw bucket 與 forward outcome 的唯讀關係。第一版支援 `--sample`、`--format json|markdown`、`--output`、`--min-sample-size`，也可用明確 `--db-path` 以 SQLite `mode=ro` / `PRAGMA query_only=ON` 讀既有 evidence DB。現在每個 bucket 另輸出 `liquidity_cost_bp_by_horizon`、`cost_adjusted_excess_bp_by_horizon` 與描述性 `benchmark_excess_ci95_bp_by_horizon`；成本後欄位只扣除 evidence 的 liquidity cost，不把缺失的 turnover、手續費、稅費補成零。這個 CLI 只做 read-only aggregation，不寫 production DB、不提供 `--confirm`、不啟用 scheduler、不改 `ScoringEngine`、不改推薦權重、不改 threshold，也不訓練 ML model。
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\inspect_score_effectiveness.py --sample --format json
@@ -2693,7 +2772,7 @@ V3 score effectiveness audit 可用 `scripts\inspect_score_effectiveness.py` 檢
 .\.venv\Scripts\python.exe scripts\inspect_score_effectiveness.py --db-path <working-copy-db> --format json --min-sample-size 10
 ```
 
-輸出固定保留 `0-40`、`40-50`、`50-60`、`60-70`、`70-80`、`80-100` 六個分數區間，即使該 bucket 沒有樣本也會顯示 empty bucket。每個 bucket 會列出樣本數、ready / pending / missing outcome、各 horizon 的 forward return bp、benchmark excess bp、industry excess bp、max drawdown bp、win rate bp、warnings 與 limitations。`access_boundary.writes_allowed=false`、`production_scheduler_allowed=false`、`investment_effectiveness_claim=false` 與 `ml_training_allowed=false` 必須保留；結果只能用於研究覆盤，不能解讀為買賣建議、投資有效性證明、threshold promotion 或 ML production readiness。
+輸出固定保留 `0-40`、`40-50`、`50-60`、`60-70`、`70-80`、`80-100` 六個分數區間，即使該 bucket 沒有樣本也會顯示 empty bucket。每個 bucket 會列出樣本數、ready / pending / missing outcome、各 horizon 的 forward return bp、benchmark excess bp、industry excess bp、liquidity cost、成本後超額、描述性 95% 區間、max drawdown bp、win rate bp、warnings 與 limitations。`access_boundary.writes_allowed=false`、`production_scheduler_allowed=false`、`investment_effectiveness_claim=false` 與 `ml_training_allowed=false` 必須保留；結果只能用於研究覆盤，不能解讀為買賣建議、投資有效性證明、threshold promotion 或 ML production readiness。
 
 Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified Decision Workbench MVP shell。2026-08-14 後，總覽第一屏先顯示「今日行動中心」與單一下一步導覽，再顯示今日重點帶、語意色摘要卡、今日待判讀、背景證據流、只讀 Action Items 與 Inspector；這些導覽按鈕只切換既有工作區。操作節奏、Evidence mode / data quality、Daily Checklist 與 warnings / degraded source 改成可收合區塊，需要時再展開。畫面只透過 `WorkbenchSourceService` 取得 `WorkbenchDashboardDTO`，不直接讀 SQLite、不寫 DB、不啟用 scheduler，也不重算 scoring、portfolio、backtest 或 lifecycle。若預設 `_reference_fix` replay JSON summary 存在於 `OUTPUT_ROOT/evidence_pipeline/historical_replay_reference_fix_20260706/`，主 UI 會自動把 JSON summary 傳入 WorkbenchSourceService；這仍只是讀 summary，不會讀 replay DB 或執行 replay。
 
@@ -2701,7 +2780,7 @@ Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified 
 
 - 入口：執行 `.\.venv\Scripts\python.exe ui_qt\main.py`，開啟頂層 `決策工作台` 分頁。
 - 今日重點帶與摘要卡：第一屏最上方會用醒目色帶彙總待判讀、人工處理、等待真實時間與 warnings。橘色代表需要人工注意或等待真實時間，紅色代表 warning / blocked / missing 類高風險，藍色代表資訊或 manual observed，綠色代表 ready / observed / passed。顏色只用來輔助掃描，仍需依 Inspector 與原始 source trace 判讀。
-- 操作下鑽：`開啟市場總覽`、`開啟市場探索`、`開啟證據覆盤`、`開啟持倉管理` 只會切到既有 Market Exploration / Daily Decision、Research Lab / 證據覆盤、Portfolio 頁面；Workbench 不嵌入或建立第二份 Decision Desk。它們是 expert drill-down，不會從 Workbench 觸發寫入、scheduler、回測或 lifecycle action。Action Items、今日待判讀與背景證據流的 row drill-down target 也走同一個舊頁導向 contract：`daily_decision` 切到「市場探索 > 市場總覽」、`portfolio_review` 切持倉管理、`evidence_review` / `evidence_mode` 切證據覆盤。
+- 操作下鑽：`開啟市場總覽`、`開啟市場探索`、`開啟證據覆盤`、`開啟持倉管理` 只會切到既有 Market Exploration / Daily Decision、Research Lab / 證據覆盤、Portfolio 頁面；Workbench 不嵌入或建立第二份 Decision Desk。它們是 expert drill-down，不會從 Workbench 觸發寫入、scheduler、回測或 lifecycle action。Action Items、今日待判讀與背景證據流的 row drill-down target 也走同一個舊頁導向 contract：`daily_decision` 切到「市場探索 > 市場總覽」、`portfolio_review` 切持倉管理、`evidence_review` / `evidence_mode` 切證據覆盤。推薦結果與觀察清單的單股下鑽會把股票、決策日、資料日、結果 ID、Profile 與來源 workspace 寫入共用 `研究上下文`；市場探索頁完成後可按「返回來源」回到原清單並重新定位股票，不會重新計算或猜測來源。
 - Status strip：檢查 Daily Decision durable snapshot、Evidence gate、Data quality 與 Production Scheduler；scheduler 應維持 `off` / `production_scheduler_allowed=false`。
 - 今日待判讀：只列出需要人工 review 的 watchlist trigger、portfolio alert、risk prompt 或 readiness gap；它不是買賣建議，也不會產生下單動作。
 - 詳情檢視 / Inspector：點選今日待判讀、背景證據流或 Action Items 的任一列，右側會用狀態徽章與三個分區顯示完整內容：「重點摘要」看標題與 summary，「來源與邊界」看 source trace、degraded reason、drill-down target 與 read-only 保證，「診斷訊號」看 diagnostics token。表格只保留掃描欄位；完整證據不要在表格橫向捲動找，改看 Inspector。
@@ -2710,7 +2789,7 @@ Phase 2 起，Qt 主 UI 新增 `決策工作台` 分頁作為 read-only Unified 
 - 只讀 Action Items：只顯示人工待處理事項；清單供排序與掃描，完整 `queue_group`、`severity`、`source_label`、`source_trace`、`degraded_reason`、`drilldown_target` 與 `write_intent=false` 可點列後在 Inspector 查看。Composer 會先依 severity，再依 queue group 與 source 排序，讓持倉警示、風險提示、觀察清單與 readiness gap 更容易掃描。空狀態不代表可以交易或 gate 已通過；降級狀態只供人工覆盤排序，不是買賣建議。Workbench 不建立 action item repository、不 append DB、不標記完成、不套用 lifecycle action。
 - 操作節奏：只從 `WorkbenchDashboardDTO.operating_loop_steps` 顯示 daily first-look、manual queue、weekly review history、multi-day dry-run、manual review note 與 scheduler gate。這個區塊預設收合；展開後以直列 timeline card 呈現步驟編號、狀態 badge、摘要與 linked item chips，避免水平捲動。長的 source trace、人工提示與 `write_intent=false` 會收在「展開細節」中；Workbench 不會把項目標記完成、不會寫 DB、不會補 weekly history / multi-day dry-run、不會啟用 scheduler。
 - Evidence mode / data quality：讀取 DTO 內的 evidence summary 與 diagnostics；上方以兩張摘要卡拆分「邊界與 Gate 摘要」及「覆蓋率與缺口」，下方表格只保留證據、狀態與摘要，完整 diagnostics 需點列後在 Inspector 查看。若 payload 帶 replay summary，會揭露 `simulated_scheduler`、source gap / coverage、payload gap、outcome maturity、benchmark coverage、industry benchmark coverage、missing industry benchmark 與 pending future-data 限制。2026-07-06 `_reference_fix` summary 的目前判讀是市場 benchmark coverage 已補齊成熟 outcomes，但 screening matrix source gap、產業 benchmark 大量缺口與 pending future-data 仍阻擋 production readiness；這不是投資有效性結論。
-- Workbench > Evidence / Research Console：此子頁固定分成 Safety Boundary、Development Pipeline、Evidence / Source Gates 三區。Safety Boundary 必須顯示 `formal_oos_allowed=False`、`production_blend_alpha_bp=0`、Production ML disabled、正式 Recommendation / Portfolio 維持 Rule-only，以及 promotion / retrain / scheduler / trading disabled。Development Pipeline 只複製顯式 `RESEARCH_CONSOLE_PROJECTION` 指向的 sanitized `ResearchConsoleProjection.json`，顯示 Dataset V0、Rule Development Baseline、ML Development Challenger、E2E identity、row / feature count、label maturity、artifact citation 與 blockers；缺欄使用 `Missing / Unknown`，不補零。Evidence / Source Gates 固定保留 EV1–EV5、13 個 P0 source、獨立 Broker lane、P0 Data Source Control Center 與 Artifact Inspector；Control Center 逐列顯示 governance/machine/audit/decision status、row 數、blockers 與 `downstream_eligibility`，沒有 audit 時仍顯示 13 列 `contract_only`，不把 development、candidate、provisional、degraded、fixture 或 replay 冒充 formal accepted / forward evidence。頁面唯一控制是「重新載入唯讀 projection」，沒有 Apply、Promote、Retrain、Blend、Accept Source 或 Trade。
+- Workbench > Evidence / Research Console：此子頁固定分成 Safety Boundary、Development Pipeline、Evidence / Source Gates 三區。Safety Boundary 必須顯示 `formal_oos_allowed=False`、`production_blend_alpha_bp=0`、Production ML disabled、正式 Recommendation / Portfolio 維持 Rule-only，以及 promotion / retrain / scheduler / trading disabled。頁面上方先給中文結論（例如 Rule 使用中、ML 未參與、缺正式輸入或投影已過期），技術識別碼與原始 blocker 預設收合，按「顯示技術診斷」才展開。Development Pipeline 只複製顯式 `RESEARCH_CONSOLE_PROJECTION` 指向的 sanitized `ResearchConsoleProjection.json`，顯示 Dataset V0、Rule Development Baseline、ML Development Challenger、E2E identity、row / feature count、label maturity、artifact citation 與 blockers；缺欄使用 `Missing / Unknown`，不補零。Evidence / Source Gates 固定保留 EV1–EV5、13 個 P0 source、獨立 Broker lane、P0 Data Source Control Center 與 Artifact Inspector；Control Center 逐列顯示 governance/machine/audit/decision status、row 數、blockers 與 `downstream_eligibility`，沒有 audit 時仍顯示 13 列 `contract_only`，不把 development、candidate、provisional、degraded、fixture 或 replay 冒充 formal accepted / forward evidence。頁面唯一控制是「重新載入唯讀 projection」，沒有 Apply、Promote、Retrain、Blend、Accept Source 或 Trade。
 - Research Console 排錯：未設定 `RESEARCH_CONSOLE_PROJECTION`、檔案不存在、JSON/schema 不合法時，頁面仍可開啟並顯示 `Missing` 或 `degraded`；若 projection scope 不是 exact `historical_research_seen_development_data`，或宣稱 formal OOS、非零／非整數 alpha、promotion eligible、缺少 canonical apply flag、出現額外 flag、任一 flag 不是 literal `false`，service 會以 `projection_boundary_violation` fail-closed，不套用該內容。`lineage.generated_at` 必須是含時區的 ISO-8601；缺少、格式錯誤、超過未來 5 分鐘或距目前超過 7 天時，分別顯示 `projection_generated_at_missing`、`projection_generated_at_invalid`、`projection_generated_at_future` 或 `projection_stale`，保留 sanitized identity 供排錯但整體固定降級，不代表 formal elapsed day。E2E row 的 artifact hash 是實際 projection bytes 的 SHA-256；injected mapping 沒有實體檔時保持 Unknown。啟動與重新載入只讀 JSON，不掃描 development／正式資料目錄、不建立 SQLite 連線、table、directory 或 artifact。
 - 工程預演狀態 / Evidence Rehearsal：在「Evidence mode」下方查看注入的 `EvidenceRehearsalDashboard`。此唯讀區塊固定揭露「工程／Replay／Shadow；不是 forward evidence」、rehearsal tier、coverage、blockers、是否提供 Shadow comparison 與 `Forward handoff：pending`。coverage 會逐來源列出 observed、missing、degraded、future-blocked 與 immature-label 計數；`missing`、source outage 或 `insufficient_sample` 必須維持已阻擋／預演狀態，不得被畫成 clean、ready 或正式通過。這個區塊沒有 apply / promote 按鈕，不能寫入 DB、啟用 scheduler、改變 Advice 或把 replay / shadow 結果視為 forward evidence；要補齊問題時，只能依 blocker 回到既有人工、資料授權或真實時間流程處理。
 - Daily Checklist：以 status card 顯示 freshness、Evidence gate、multi-day dry-run、manual review 與 scheduler write-mode 等 gate，內容可換行，不再以寬表格呈現。未設定 approved projection 時 legacy DB 可能顯示 `0/3`；歷史 working-copy=`1/3`、UI projection=`3/3`、sidecar pending=`10`、multi-day=`3/3`，但 formal credit 仍未授予。現在要完成的是 10 期具名 review、formal credit、backup／rollback／recovery 與 scheduler approval；fixture、單次 smoke、手動改表或 replay 都不能補齊。
@@ -2876,6 +2955,10 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 
 ### 9.10 推薦回放
 
+目前預設 `next-session-open.v2`。T 收盤建立委託，下一個有有效開盤且可交易的 session 才成交；停損停利在收盤確認後，下一有效開盤退出。持有天數從實際進場日起算曆日，到期收盤建立退出訊號。UI 使用所選手續費／滑價、30 bp 賣出稅與 1000 股整張；API 未指定成本仍會揭露 `unspecified_cost_assumptions`。撮合層會以獨立 `ConservativeFillPolicy` 檢查已知成交量參與率與開盤漲跌停，並將請求股數、實際成交股數、未成交股數與 `filled`／`partially_filled`／`unfilled` 狀態寫入診斷；缺已知成交量時不猜測成交量。
+
+期末 `position_status=open`、空 exit date 與 open_position_count 表示未平倉；ending_equity 包含估值，realized_pnl／unrealized_pnl 分列，不能將期末部位當完成交易。未成交會保留 missing_open_or_suspended、end_of_data、現金／已知量不足、開盤漲跌停等原因；partial fill 會保留 request／fill 差額；cancelled 是部分結果。gap_risk 使用訊號收盤至實際成交開盤，Equal Weight benchmark 使用同一批凍結推薦、成本及 sessions。這仍是日頻保守撮合，沒有逐筆委託簿、bid/ask 或真實 fills。
+
 建議從推薦頁按「送 Research Lab 推薦回放」載入配置。這個入口會帶入當下 Profile / Config，並在歷史期間按設定重新產生推薦；它不是只回測今日推薦名單。
 
 可設定：
@@ -2887,6 +2970,10 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 - 等權或分數加權：等權配置平均分配資金，分數加權會讓高分股票取得較高權重。
 
 執行後可保存到 Research Run Registry。結果頁摘要只顯示一次，並用段落解釋總報酬、最大回撤、交易檔數、資金使用、交易假設、虧損交易占比、最拖累股票、Sharpe / Sortino 與 Monte Carlo P05 / P50 / P95。資金使用代表期間投入金額，不等同最終淨值；Monte Carlo P05 / P50 / P95 分別是偏弱、中位與偏強情境，不是保證績效。期間明細、個股貢獻與交易紀錄在結果頁內部分頁查看，避免被底部區域吃掉。若要比較 Profile 或判斷升降級，應以訓練期間先提出候選調整，再用獨立驗證期間或 walk-forward 驗證凍結邏輯，避免用同一段未來資料同時調參與宣稱有效；`ProfileReplayComparisonService` 的驗證期必須晚於訓練期，驗證結果只輸出人工 lifecycle candidate，不會自動降級、退休或刪除策略版本。
+
+#### Legacy 同日收盤結果（legacy-same-day-close.v1）
+
+以下僅描述顯式選用的歷史 legacy 路徑；其成交／風控與成本假設不能套用到目前 v2 結果，也不宣稱符合新時間線精度。既存 run 不重算。
 
 歷史載入、刪除與 legacy Promote 能力仍保留在舊 repository 邊界；新版 Cross-run Comparison 與 Registry-based Promote Gate 以 Registry run 為準。結果 details 會包含 `portfolio_credibility`、`unfilled_orders`、`cash_ledger`、`weight_exposure` 與 `gap_risk`：若推薦股票在回放視窗內沒有可用價格列，會以 `missing_price_rows` 記錄為未成交，而不是靜默跳過；若呼叫端提供 `max_participation_rate`，系統會用進場日成交股數與收盤價估算可參與金額，配置金額超過時以 `liquidity_limited` 記錄為未成交。回放現在會在建立 holding 前檢查可用現金，現金不足時以 `cash_limited` 記錄為未成交；`cash_ledger` 由這個現金 gate 流程產生買進、賣出與 `ending_cash`。若呼叫端提供 fee / tax / slippage bps，成本會套用到買賣現金流、ledger breakdown 與 `total_transaction_cost`；未提供時維持無成本回放。若呼叫端提供 `lot_size`，配置金額會依進場價向下取整為可成交整股股數，買不起最小交易單位時以 `lot_size_limited` 記錄為未成交。期間持倉的 `allocation_weight` 代表推薦配置的目標權重，`actual_allocation_weight` 代表整股 sizing 與 cash gate 後的實際可成交權重；`weight_exposure` 會依每個再平衡日彙總目標權重、實際權重、未成交權重與殘餘現金權重。若歷史資料含「開盤價」，`gap_risk.records` 會列出每筆 holding 的 `entry_close_price`、下一個可用交易日 `next_open_price`、`gap_pct`、`gap_direction` 與 `severity`，用來揭露同日收盤成交假設在隔日開盤可能遇到的跳空風險。V1.2 details 另含 `rolling_risk_metrics`、`microstructure_preflight` 與 `relative_attribution`：rolling risk 只讀已產生 equity curve / holdings；microstructure preflight 只檢查歷史資料內可選的處置股、分盤交易、全額交割、漲跌停鎖死與除權息欄位，缺欄位時揭露 missing source；relative attribution 只在 history 提供 benchmark / industry / concept 參考欄位時產生相對報酬。`portfolio_credibility` 仍會揭露同日收盤成交、再平衡現金重用限制、成交量 / Liquidity 與 Gap 限制；目前仍未建零股、委託簿撮合、買賣價差或 gap 實際成交模型，`gap_risk`、microstructure 與 attribution 只做診斷，不會改變 PnL、成交價、cash ledger 或 sizing。這些 warning 應先讀完，再判讀回放績效。結果仍依成交與推薦回放假設，不等同實盤。
 
@@ -2940,6 +3027,10 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 ## 10. 持倉管理
 
 ### 10.1 手動記錄交易
+
+既有 UI／JSONL 路徑維持相容。新的精確 SQLite 事件帳本只在 caller 明確注入候選 repository 時啟用：append-only、整數分／股、Decimal 成本、namespace 與 source ID，撤銷以 compensation event 重播。JSONL→SQLite 只處理指定 sandbox 副本並保留來源 hash；沒有正式 migration 或預設切換。backtest 結果不得轉成 Portfolio fills，paper namespace 仍需真實 producer 與 source acceptance。
+
+候選帳本 read-model 保留決策日、ledger ID／hash、event_count、quality 與缺件；有部位而缺已提交行情時 blocked，缺 source／thesis 時 degraded。缺 fills 不能補造現金、部位或安全評級；超賣、重複事件、namespace 不一致與啟用負現金拒絕政策時的違規會停止投影。
 
 1. 點擊「手動記錄交易」。
 2. 輸入股票、買賣別、價格、股數、日期、費用與稅金。
@@ -3056,6 +3147,8 @@ buy／sell 的 `filled_quantity` 與 snapshot quantity delta，也會檢查既�
 `needs_review`；欄位 invalid、future event、portfolio 不符或 collision 回 `rejected`。
 snapshot 不會被用來反推成交，`ready` 也不會自動寫 ledger；確認仍須回到上方
 `append_paper_trade_csv.py --confirm-append-paper-ledger`，並重新驗證輸入檔 hash。
+
+對帳結果現在也會顯示期初／期末現金與 fills 現金流的守恆差額。預設只把差額留在 `cash_reconciliation` 與 diagnostics，維持舊流程可讀；若要把現金不一致列為 append 前阻擋，加入 `--require-cash-reconciliation`。此選項仍只做 query-only preflight，不會寫入任何帳本。
 
 若缺少欄位格式，可先建立空白範本（只寫入欄位標題，不建立 ledger）：
 
@@ -3276,6 +3369,12 @@ row count／content hash 沒有變化。未同時提供 owner approval、無並�
 狀態時間只採 `checked_at`、`generated_at`，否則採檔案修改時間；市場決策日期（如 `decision_at`、`as_of_date`）不是排程完成時間。超過 36 小時的 core artifact 會被視為過期。tooltip 保留 raw status、讀取狀態、時間來源、來源路徑與 diagnostic，供追查 provenance。畫面只保證顯示已知或發現的 status artifact，不保證覆蓋全部 12 個 Windows tasks。
 
 ### 11.3 治理 Runtime 判讀
+
+任務來源不存在、無法讀取、格式錯誤或 status 未被識別時，顯示「未知（來源未確認）」。狀態 tooltip 保留 raw status、task/context read state 與 diagnostics；底層無法區分缺檔和部分 I/O 錯誤時保留 missing_or_unreadable。未知不等於閒置，畫面不建立或修復來源。
+
+最近 2,000 個非空 event ID 中，同內容重複事件只發布一次；同 ID 異內容仍保留 conflict 診斷。畫面最多 500 筆不代表底層 log 被裁切。關閉 observer 解除訂閱；重啟從尾端重新觀測，不啟動／重試 task，亦不提供 durable exactly-once queue。
+
+離線 QA 可執行 `scripts/qa_validate_runtime_loop.py`；它自建 TEMP 雙根、輸出逐項結果，失敗非零退出。全程只驗證 observer／Qt 契約，不代表正式 Runtime writer、Windows task 或 V4 readiness。
 
 治理健康度只以目前 24 小時內、時間可解析且不超出容許時鐘誤差的治理事件判定。只有這些 current 事件可使治理狀態成為 `ERROR` 或 `HALTED`；舊事件會顯示為「僅有歷史治理事件」，未來時間或無法解析時間會顯示為不能判定目前狀態。歷史重大違規仍保留供稽核，但不能解讀成今天日常營運已暫停。
 
@@ -3644,12 +3743,16 @@ owner deposit 能被同一個 process 接收；只更新 process memory，HMAC v
 
 單獨執行 `scripts\inspect_ml_formal_input_readiness.py` 時也會使用相同的受控 Windows registry handoff；它只把 late owner deposit 接到當前唯讀 process memory，不會寫回 registry、artifact 或 source DB。
 
-`run_ml_direct_chain_maintenance.cmd` 在啟動 Direct/OOC 前另做唯讀磁碟空間 preflight，
-預設要求輸出所在檔案系統至少有 20 GiB 可用空間。低於門檻時會寫入
-`status=blocked_insufficient_storage`、`storage_preflight.free_bytes` 與診斷，直接結束本次
-wrapper，不啟動重建、不進入維護器 retry loop，也不刪除既有 run。這只是容量保護，不是
-Formal／promotion 通過；若需調整門檻，使用受控命令列的
-`--minimum-free-space-bytes`，並先確認年度 raw shard 估算、備份與 rollback 空間。
+`run_ml_direct_chain_maintenance.cmd` 在啟動 Direct/OOC 前另做唯讀三段 filesystem capacity
+preflight。Direct chain 相容預設以 35 GiB 持久新增、40 GiB 暫存峰值與 20 GiB 安全保留計算
+required headroom；可用 `--persistent-storage-budget-bytes`、`--temporary-storage-budget-bytes`
+與 `--safety-reserve-bytes` 明確調整。任一項不足時會寫入
+`status=blocked_insufficient_storage`、`storage_preflight.capacity_budget` 與 blockers，直接
+結束本次 wrapper，不啟動重建、不進入維護器 retry loop，也不刪除既有 run。這只是容量保護，
+不是 Formal／promotion 通過；舊的 `--minimum-free-space-bytes` 仍可作相容的安全保留門檻。
+全鏈 profile 應將安全保留提高到 125 GiB（`--safety-reserve-bytes 134217728000`），
+使 35 + 40 + 125 = 200 GiB，並先以 `--preflight-only` 驗證；只有通過後才可考慮
+啟動長時間 child。
 
 若 preflight 已回報 `blocked_insufficient_storage`，可先用下列唯讀工具整理容量與人工
 retention 候選：

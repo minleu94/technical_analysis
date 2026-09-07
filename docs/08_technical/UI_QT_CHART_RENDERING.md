@@ -1,6 +1,6 @@
 # UI Qt Chart Rendering
 
-> Last updated: 2026-05-19
+> Last updated: 2026-09-06
 
 ## Summary
 
@@ -78,6 +78,10 @@ Drawdown:
 Equity curve:
 
 - Shows strategy equity, normalized benchmark, buy/sell markers, and hover crosshair.
+
+## Accessibility and keyboard behavior
+
+The Canvas document keeps the chart focusable with `role="img"` and an ARIA label. Once focused, `ArrowLeft` / `ArrowRight` move the crosshair between available series points and `Home` / `End` jump to the first or last point. Every fast widget also exposes a `顯示數值` control; the expandable text alternative is generated from the same payload and lists dates with values or histogram intervals with counts. This keeps the fallback readable when QtWebEngine is unavailable and avoids presenting a separately calculated accessibility value.
 
 ## Why Not TradingView Lightweight Charts Yet
 

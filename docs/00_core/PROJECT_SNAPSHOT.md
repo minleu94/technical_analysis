@@ -1,6 +1,41 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
-## 2026-08-30 Canonical Current Status（先讀此節）
+## 2026-09-07 三面向建議實作增量
+
+依三面向清查的優先順序，已在不改寫正式原始資料、不啟用 production ML／broker 的前提下完成一輪可驗證工程：
+
+- 分數證據：Score effectiveness read model 增加 liquidity cost、成本後 benchmark excess 與描述性 95% 區間；仍只作研究，缺完整成交帳本時不合成淨績效。
+- 成交與帳務：`ConservativeFillPolicy` 將日頻回放的開盤漲跌停、已知成交量參與率、整張與部分／未成交寫入診斷；Paper reconciliation 增加可選現金守恆阻擋；Portfolio ledger migration 仍只允許隔離 candidate 副本。
+- 持倉風控：invalidation rule 支援 `reduce`／`exit` 分級；holding horizon 僅使用涵蓋兩端的官方交易日曆，缺日曆時不猜曆日。
+- ML 交付與容量：Direct／raw wrapper、PIT exporter、OOC trainer 與各階段 checkpoint 使用持久新增、暫存峰值、安全保留三段式 bytes preflight；全鏈操作建議把 safety reserve 設為 125 GiB，與 35 GiB 持久新增、40 GiB 暫存峰值合計保留 200 GiB（另含日常更新與額外餘裕）。`minimal_linear_shadow` CLI profile 提供單一 Ridge／Logistic、單一 horizon 的成本後增益起點；`AllocationReleaseAdapter` 與 parity CLI 綁定模型、前處理、校準、feature order、missing policy、lineage hash。
+- UI：研究上下文、日期／來源返回、中文結論與收合診斷已接入；長任務進度／可存取圖表與表格仍由 UI P2 驗證中。
+
+目前正式輸入仍為 0/3、`formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。OOC calibration 若仍為 diagnostic-only，不得建立 release；容量 preflight 通過只表示可以安全啟動或續跑，不代表 Formal／promotion 通過。
+
+## 2026-09-06 觀察清單分析入口增量
+
+觀察清單可直接預覽已保存選股清單的個股，單擊讀取已保存推薦的分數、理由、日期與來源，雙擊下鑽主力流向；未入掃描榜仍可查分點。摘要透過 App 唯讀 DTO、背景讀取與過期回呼隔離，不重新評分。詳細操作與 ML 現況見 APPLICATION_MANUAL 第 7 節。ML Console 的現有 7/14 projection 經服務確認 stale；台北 9/7 00:00 cutoff 的正式 input 唯讀重驗為 0/3，仍 waiting_for_formal_inputs、alpha=0。本輪未改 ML 授權或訓練流程。
+
+## 2026-09-06 八卡閉環工程增量
+
+整體仍為 `action_required`、`V3.3 Engineering Complete / V4 Evidence Accumulation`。本輪補強資料、研究、候選帳本與唯讀觀測契約，08-B 隔離工程整合驗收已完成；各卡驗收不能折抵正式來源接受、自然前瞻時間、具名覆盤、真實 Paper fills／cost 或 production canary。完整證據以 [TASK-08 交接](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md) 當輪紀錄為準，不將早期並行驗收數字當成本輪全域結果。
+
+| 任務 | 已落地工程與入口 | 保留邊界 |
+|---|---|---|
+| [01 DATA](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_01_HANDOFF.md) | 更新狀態 DTO、查詢不寫 manifest、冪等落地與指標單一寫入者的離線驗證 | 未執行正式更新、網路下載或 candidate promotion；更新 QA 的 4 個 skip 不算通過 |
+| [02 MARKET](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_02_HANDOFF.md) | 決策日／有效日／品質 DTO、日期先行切片與市場排名 | 保留舊 API 相容；分類匹配度不是勝率 |
+| [03 RECO](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_03_HANDOFF.md) | `recommendation-context.v1`、設定快照、行情及基本面指紋、未知分數拒用 | fixed 預設、quantile opt-in；缺 PIT 產業成分時歷史產業篩選拒用 |
+| [04 EXEC](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_04_HANDOFF.md) | `next-session-open.v2`、Decimal／整數帳務、成本後基準、取消與末端持倉揭露 | legacy 同日收盤須明選；固定組合仍是 per-stock 研究；無真實 fills 證據 |
+| [05 REGISTRY](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_05_HANDOFF.md) | 顯式保存／恢復、實際內容冪等、版本隔離、`evidence-lineage.v1` 與人工覆盤提案 | 建構／查詢不 reconcile；tier 宣告與 reviewer 字串不構成 Formal credit |
+| [06 PORT](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_06_HANDOFF.md) | 可注入的 append-only SQLite 候選帳本、補償事件、精確投影與副本 migration | 預設手動 JSONL 路徑未切換；正式 Paper ledger／fills 不由合成帳本補足 |
+| [07 DESK](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_07_HANDOFF.md) | 候選池副本 SQLite、App 名稱查詢、同日聚合、完整 loop payload 與過期回呼隔離 | 預設 JSON 未切換；沒有已刪除候選的歷史 membership；缺行情不顯示安全 |
+| [08 OBS](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md) | `runtime-state.v2`、未知來源、取消訂閱、受限事件去重；08-B 集中組裝與驗收 | EventBus 不是 durable queue；不啟動 task、scheduler、promotion 或交易 |
+
+**08-B 當輪驗收**：八卡契約與代表整合 177 passed、UI 更新頁 81 passed、全模組 mypy 532 files 通過；專用 QA 依序 exit 0，更新 QA 保留 4 個下載／合併 skip。main 保存推薦 provider、current_result_id 及 Workbench 新來源欄位重載已接線；quick healthcheck=`20260906_173334`、full healthcheck=`20260906_173515` 均 passed，兩項金融／未來函數掃描與 08-B 改檔 py_compile 通過。這是現有 healthcheck 路由與 UI／QA bridge 驗收，未 opt-in 真 MainWindow 截圖 smoke，也不代表全量 pytest 或人工 UI 完整驗收。
+
+**下一步**：按既有 External Validation Register 累積逐來源 acceptance、真實 producer／時間與具名 review。正式 JSON／JSONL 遷移、Registry／technical production canary 與 writer 切換仍須各自 Gate；不得用 fixture、回測成交、候選 ledger 或 UI 綠燈替代。以下有日期的正式資料統計仍是原日期觀察，本輪未重新查核或改寫正式資料。
+
+## 2026-08-30 Canonical Current Status（正式來源觀察基線）
 
 > 整體仍為 `action_required`：V3.3 工程底座大致完成，現在位於 V4 evidence／product
 > accumulation track，不是正式 V4.0 Production。完整判讀見
@@ -1255,3 +1290,8 @@ Month 5 月營收候選資料抓取補充（2026-06-16）：新增 `scripts/fetc
 - 已新增 signed `rule-champion-snapshot-history.v1` loader，並將其逐日 Rule score 接到 formal OOS replay input；history 需通過 controlled-store HMAC、immutable snapshot hash、rank／timestamp／coverage 驗證。
 - Direct、OOC、training 與 OOS replay input 現已傳遞並 hash-bind 兩項 custody；OOS replay consumer 會再次驗證 ledger／Rule history，不會在消費端靜默丟棄。這是工程接線完成，不是來源已到位：目前實際三項 blocker 仍為 `causal_non_cash_portfolio_ledger_present`、`formal_rule_champion_snapshot_history_present`、`pit_sector_membership_present`，因此 `formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false` 不變。
 - Direct-chain maintainer 現可由受控 Windows 使用者環境變數 `BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH`／`BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH` 自動發現兩項來源；先做唯讀 ledger／cutoff／HMAC 驗證，再與 PIT sector sidecar 一起 hash-bind。三項來源未同時合法到位時只等待，不因分批 deposit 觸發 partial Direct/OOC 重訓；目前本機未設定這兩個路徑，故沒有新 chain。
+
+
+## 更新記錄
+
+- 2026-09-06：同步八卡工程、08-B 隔離整合與外部缺件；歷史正式來源觀察保留原日期，不升格 V4。

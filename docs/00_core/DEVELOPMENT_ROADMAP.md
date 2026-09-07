@@ -4,7 +4,7 @@
 
 > **2026-07-13 系統工程整合**：A～F committed handoff 已由 G 依 SHA、ownership 與 focused suite 驗證，跨流 DTO／JSON composition、唯讀 smoke 與 pure verifier 均成立。這只代表工程整合已驗證；下一步仍是 forward evidence、逐來源人工接受與正式 ML OOS／promotion review，不是 scheduler、production automation 或 formal product closeout。
 >
-> **最後更新**：2026-08-30
+> **最後更新**：2026-09-06
 > **工程主線**：`V3.3 Engineering Complete`，進入 `V4.0 Evidence Accumulation Track`；這不是正式 V4.0。詳見 [V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)。
 > **Evidence rehearsal**：唯讀 replay / shadow 工程底座另以 `engineering_rehearsal_complete` 收口；它只提供可重跑 diagnostics 與 forward handoff，不會改寫 external Gate 狀態。見 [Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)。
 > **定位**：本文件是 Roadmap Hub，不再保存完整歷史長文。它負責指向目前狀態、6 個月工程路線、系統架構與歷史歸檔。
@@ -56,11 +56,13 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 1. **資料與市場狀態閉環**：Update → SQLite 狀態 → Market Watch / Smart Money → 候選池。
 2. **研究驗證閉環**：Recommendation Profile → Research Lab / Backtest / Replay / Walk-forward → Promote。
 3. **持倉檢查閉環**：Recommendation / Backtest → Portfolio → Condition Monitor / Chip Monitor → Journal → 回到研究。
-4. **每日決策閉環（v1）**：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。此閉環已整併到主 UI 預設首頁「決策工作台 > 決策來源」，其餘 section 仍逐步補齊 providers。
+4. **每日決策閉環（v1）**：Market Intelligence → Daily Decision Desk → Watchlist Trigger / Portfolio Alert / Research Input。唯一實例位於「市場探索 > 市場總覽」，「決策工作台 > 決策來源」只導向同一畫面；08-B 已接保存推薦 provider，來源缺漏仍保留降級。
 
 ---
 
 ## 3. 目前執行狀態
+
+2026-09-06 的 [Master Goal Playbook](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/MASTER_GOAL_PLAYBOOK_2026_09_06.md) 已形成八卡工程交接：日期／品質 DTO、推薦指紋、T+1 撮合、Registry 顯式恢復、候選帳本／候選池及 Runtime 觀測均有隔離驗收。中央組裝與當輪全域結果見 [TASK-08](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md)；各卡現況與殘餘邊界集中於 [Snapshot](C:/Projects/PythonProjects/technical_analysis/docs/00_core/PROJECT_SNAPSHOT.md)。這是既有 Gate 的工程修補，不新增 maturity 版本或放寬正式權限。
 
 目前狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。Gate 2–7 純工程完成後，後續 agent 應先讀 [Engineering Control Center](../06_qa/GATE_2_TO_7_ENGINEERING_CONTROL_CENTER.md)，再依工作類型進入 [External Validation Register](../06_qa/GATE_2_TO_7_EXTERNAL_VALIDATION_REGISTER.md) 或 [Gate 7 ML Shadow Engineering](../06_qa/GATE_7_ML_SHADOW_ENGINEERING.md)。短版摘要如下：
 
@@ -97,6 +99,8 @@ baldr 是一套可觀察市場、產生有條件且可追溯的結構化投資�
 重構完成後的產品主線以 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 為準；未來 6 個月工程以 [ROADMAP_6M_ENGINEERING.md](ROADMAP_6M_ENGINEERING.md) 為準；產品北極星見 [system_vision_specification.md](../01_architecture/system_vision_specification.md)，理想架構見 [target_system_architecture.md](../01_architecture/target_system_architecture.md)。
 
 目前立即順序改為：
+
+本輪 TASK-08 隔離工程整合驗收已完成，接續下列外部 Gate；真 MainWindow 截圖 smoke／人工 UI 驗收缺口仍明列。候選 SQLite 帳本／候選池不自動取代正式 JSONL／JSON；歷史產業篩選須先補已接受的 PIT membership。來源 acceptance、真實 Paper fills／費稅、自然前瞻時間與具名 review 仍不可由離線重跑替代。
 
 ### 2026-08-30 canonical Next
 
@@ -197,6 +201,8 @@ V3.0 engineering candidate 的 closeout/readiness report 已完成，工程狀�
 ---
 
 ## 7. 更新記錄
+
+- 2026-09-06：新增八卡工程交接與整合入口；保留 action_required、V4 證據累積與正式來源／時間／writer Gate。
 
 - 2026-08-19：鎖定 Gate 7 prospective restart 方向；舊 2026-08-19 clock 禁止重建／回填，下一個長任務改建新未來 clock、由 Codex 提出 Rule Champion、採 TWSE／TPEX 官方產業來源，Broker 持續關閉。
 - 2026-07-12：Gate 0 / Gate 1 已 closeout；Hub 的 Next 改為 Gate 2 Real Evidence → Gate 3 P0 Data → Portfolio / Pruning / Exit，Gate 1 證據見 `GATE_1_ADVICE_CLOSEOUT_2026_07_12.md`。

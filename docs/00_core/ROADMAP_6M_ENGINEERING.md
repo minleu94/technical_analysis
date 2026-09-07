@@ -8,7 +8,7 @@
 
 > **2026-07-13 系統整合校正**：跨流 contracts、唯讀正式資料 smoke、Dashboard／Broker latency 與 pure closeout verifier 已完成工程驗證。Gate 2 真實 forward evidence、Gate 3 source／license acceptance、Gate 7 formal OOS、shadow-day 累積與 promotion review 均仍是 external pending，不能由本次工程測試折抵。
 >
-> **最後更新**：2026-08-30
+> **最後更新**：2026-09-06
 > **定位**：本文件是未來六個月工程執行的 scoped authority，將 [PRODUCT_ROADMAP_POST_REFACTOR.md](PRODUCT_ROADMAP_POST_REFACTOR.md) 轉成可交付、可測試、可回滾的 Gate。
 > **現況**：目前完成狀態以 [PROJECT_SNAPSHOT.md](PROJECT_SNAPSHOT.md) 為準。既有 V3.0 engineering candidate、read-only Workbench、candidate source readiness 或 simulated phase progress 不自動折抵本 Roadmap 的產品 Gate。
 > **版本 companion**：產品成熟度版號見 [VERSION_ROADMAP_V2_1_TO_V4_0.md](VERSION_ROADMAP_V2_1_TO_V4_0.md)。
@@ -45,6 +45,19 @@ Gate 7 ML Shadow Layer 只作條件式後續：若 Gate 5 在第六個月以前�
 | Data update / evidence dry-run scheduled tasks | operations scaffold | 自動交易或 production evidence scheduler |
 
 ## 3. 時間配置
+
+### 2026-09-06 閉環工程增量的 Gate 對應
+
+八卡依 [Master Goal Playbook](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/MASTER_GOAL_PLAYBOOK_2026_09_06.md) 的檔案 owner 與隔離雙根執行；[TASK-08 交接](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md) 保存中央組裝與整合驗收。整體仍為 `action_required`、V4 Evidence Accumulation，以下工程契約不代表正式 Gate Exit Criteria 已通過。
+
+| 既有 Gate | 本輪可承接的工程能力 | 下一個不可替代的條件 |
+|---|---|---|
+| Gate 1／3 | 01／02 的日期與品質 DTO、03 推薦設定與輸入指紋、07 同日唯讀聚合 | source-by-source acceptance、精確可得時點、PIT 產業成分及指標版本鏈 |
+| Gate 2 | 05 顯式 Registry 恢復、版本隔離、Evidence lineage／人工提案；08 observer 生命週期 | 自然前瞻週期、具名 review 與正式證據信用；不得由 replay／fixture 折抵 |
+| Gate 4／6 | 04 下一可交易開盤與精確成本；06 candidate-only append 帳本、補償事件及 07 ledger adapter | 真實 Paper producer fills／cost、thesis、已提交估值、reconciliation 及正式來源切換 Gate |
+| 跨 Gate | 八卡專用契約與離線 QA、中央文件／inventory／組裝驗收 | 工程全域結果依當輪紀錄；production canary、scheduler／writer 審核各自保留 |
+
+08-B 已完成本輪隔離工程接線與驗收，後續依正式接受與時間條件推進；真 MainWindow 截圖 smoke／人工 UI 完整驗收仍未執行。固定組合仍是 per-stock 研究；舊無版本與 legacy run 不升級為 `next-session-open.v2`，取消／部分結果不作績效混排。現有 JSON／JSONL 正式預設未切換，migration 只驗證指定隔離副本，不以完成候選 schema 宣稱正式帳本完成。
 
 | 月份 | 主要 Gate | 交付結果 |
 |---|---|---|
@@ -513,6 +526,8 @@ TotalScore、component、gate、alert 與 Profile 中，哪些真正有貢獻，
 - 因此工程順序更新為 Gate 2 → Gate 3 → Gate 4；已完成 Gate 1 的 bounded Advice 仍維持 read-only / paper boundary。
 
 ## 更新記錄
+
+- 2026-09-06：將八卡工程增量映射到既有 Gate，保留真實 fills、來源接受、自然時間、具名 review 及正式遷移邊界。
 
 - 2026-08-29：完成整體 Gate rebaseline 與 owner-authorized ML release_v4 retention cleanup 紀錄；三個主要 root 釋放約 `403.95 GiB`、D free 約 `410.31 GiB`，各保留 6 個完整 PIT／Direct／OOC run 與有效 current pointer。這解除實體 headroom blocker，但不改 Evidence credit、P0 acceptance、Paper fills、Formal 0/3、alpha 0、scheduler／broker 或 technical production canary Gate；cleanup 前的 6.56 GiB 條目保留作歷史。
 - 2026-08-28：新增唯讀 `scripts/qa_technical_indicator_latency.py`、full-batch／isolated writer、real calculator staging process-pool、worker crash recovery／queued cancellation、parent single-writer integration staging 與 broker 離線 bounded-fetch acceptance probes；Broker CSV writer 加上 process-local single-writer lock。technical／broker pool 目前只在 protected-root 外 staging 以 bounded in-flight、retry、parent single writer 與 fail-closed checks 證明形狀；technical batch 的 production feature flag／scheduler lifecycle 已接上且預設關閉，真實 broker／Selenium 平行抓取仍未啟用；後續須補 owner-approved backup／rollback、technical canary 與真實 broker canary／rate-limit evidence。

@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
 **版本**：v1.4.10
-**最後更新**：2026-08-30
+**最後更新**：2026-09-06
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -31,6 +31,20 @@ storage blocker 已被 8/30 fresh `headroom_ok`（約 338.9 GiB）觀察取代�
 ---
 
 ## 2️⃣ 三層架構導航
+
+### 2026-09-06 八卡閉環入口
+
+| 要核對的契約 | 首要入口 |
+|---|---|
+| 更新／市場日期與品質 DTO | [update_loop_dtos.py](C:/Projects/PythonProjects/technical_analysis/app_module/dtos/update_loop_dtos.py)、[market_loop_dtos.py](C:/Projects/PythonProjects/technical_analysis/app_module/dtos/market_loop_dtos.py)；服務維持舊 API 相容，UI 不查 storage |
+| 推薦決策切片／輸入指紋 | [recommendation_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/recommendation_service.py)；`recommendation-context.v1`、未知因子與歷史產業 PIT 拒用 |
+| T+1 版本撮合／研究成本 | [broker_simulator.py](C:/Projects/PythonProjects/technical_analysis/backtest_module/broker_simulator.py)、[recommendation_portfolio_backtest_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/recommendation_portfolio_backtest_service.py)；v2 與 legacy 隔離 |
+| Registry／Evidence lineage | [research_run_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/research_run_service.py)、[evidence_event_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/evidence_event_service.py)；query 不 reconcile，review 僅提案 |
+| 候選 append 帳本／副本 migration | [portfolio_ledger_repository.py](C:/Projects/PythonProjects/technical_analysis/data_module/portfolio_ledger_repository.py)、[portfolio_ledger_migration.py](C:/Projects/PythonProjects/technical_analysis/data_module/portfolio_ledger_migration.py)；由 PortfolioService 明確注入，正式 JSONL 未切換 |
+| 候選池／Desk 來源鏈 | [watchlist_repository.py](C:/Projects/PythonProjects/technical_analysis/data_module/watchlist_repository.py)、[decision_desk_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/decision_desk_service.py)、[decision_desk_snapshot_repository.py](C:/Projects/PythonProjects/technical_analysis/app_module/decision_desk_snapshot_repository.py)；預設 JSON 未切換，loop payload 保留來源 |
+| Runtime 觀測／取消訂閱 | [event_bus.py](C:/Projects/PythonProjects/technical_analysis/app_module/runtime_services/event_bus.py)、[snapshot_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/runtime_services/snapshot_service.py)；EventBus 非 durable queue，未知不當 IDLE |
+
+中央組裝、完整來源 hydrate、QA inventory 與當輪整合結果見 [TASK-08 交接](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md)；各卡入口由 [文件索引](C:/Projects/PythonProjects/technical_analysis/docs/00_core/DOCUMENTATION_INDEX.md) 導覽。現況／目標差距以 [架構](C:/Projects/PythonProjects/technical_analysis/docs/01_architecture/system_architecture.md) 與 [完整操作手冊](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/APPLICATION_MANUAL.md) 為準。八卡工程不改 V4 Evidence Accumulation／action_required，不啟用正式 writer、scheduler、broker 或 Formal credit。
 
 ### UI Layer（`ui_qt/`、`ui_app/`）
 
@@ -524,3 +538,8 @@ python ui_qt/main.py
 
 資料契約：`c=E` 寫入張數，`c=B` 寫入仟元金額；legacy `buy_qty` 不得當張數。
 
+
+
+## 更新記錄
+
+- 2026-09-06：新增八卡 DTO／服務／儲存與整合交接導航，保持正式資料及 V4 外部 Gate。

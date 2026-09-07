@@ -4,7 +4,7 @@
 > **定位**：本文件描述 baldr 的 Transitional / Target Architecture（過渡／目標架構），不代表目前皆已實作。
 > **目前架構權威**：真實存在的 package、service、DTO、資料流與依賴以 [system_architecture.md](system_architecture.md) 為準。
 > **產品方向**：能力優先序與產品 Gate 以 [PRODUCT_ROADMAP_POST_REFACTOR.md](../00_core/PRODUCT_ROADMAP_POST_REFACTOR.md) 為準。
-> **禁止推論**：本文件提及 `market_module`、`advice_module` 或 `ml_module` 時均為 target-only 候選邊界，不授權立即建立 package。
+> **禁止推論**：`market_module`／`advice_module` 仍是 target-only 候選邊界，不授權立即建立 package。`ml_module` 已有工程實作，其 current 能力與 shadow／Formal 限制以目前架構為準；不得把下列目標職責當成正式模型權限。
 
 ---
 
@@ -52,11 +52,26 @@
 | Position Health & Exit | `CURRENT_ENGINEERING`：thesis contract、state machine、append-only transition、Exit read model | 累積真實 thesis、人工 transition 與 exit outcome | domain reposition候選；不自動平倉 |
 | Data Source Governance | `data_module` registry / policy / candidate readiness | Source Registry、Control Center、quarantine、eligibility port | 所有來源具 PIT、quality、license、missing 與 downstream eligibility；未接受來源無法進 formal layer |
 | Execution Realism | Backtest broker simulator、sandbox trace | 統一 execution assumption / feasibility / rejected taxonomy | 研究撮合與 broker execution port 分離；正式系統仍不提供 broker command |
-| ML Shadow Layer | readiness contract / engineering candidate | Feature / Label / Dataset / Model Registry 與 shadow store | `ml_module` 候選；Challenger 只透過 Promotion Review 影響 formal Advice |
+| ML Shadow Layer | 已存在 `ml_module` 的工程實作；current 能力依目前架構，正式權限仍受 Gate 限制 | Feature / Label / Dataset / Model Registry 與 shadow store 的受治理整合 | Challenger 只透過 Promotion Review 影響 formal Advice；不是本輪八卡啟用項目 |
 | AI Research Copilot | read-only evidence access / MCP | governed retrieval + citation / permission boundary | 只能摘要、比較、提問與找 evidence gap；不成為計算或 action owner |
 | Runtime / Scheduling / Operations | `runtime/`、Windows tasks、dry-run wrappers | 依 job type 區隔 market data write、evidence dry-run、approved evidence write | Scheduler 只執行已核准 application command；不交易、不自動 lifecycle |
 | Storage & Artifact Registry | SQLite、Parquet、JSON、Research Run / Evidence repositories | 統一 artifact identity、hash、status、lineage、backup / rollback | 每個 decision / advice / model / policy / outcome 可重建與稽核 |
 | External Source Adapters | `data_module` fetcher / provider / candidate CLI | 每個 adapter 實作同一 source contract，先 diagnostics / shadow | adapter 可替換；domain 不知道 vendor、HTTP 或 SQLite 細節 |
+
+### 2026-09-06 八卡工程後的剩餘差距
+
+本節校正上表與八卡直接相關的 Current／Transitional 能力，依 [目前架構](C:/Projects/PythonProjects/technical_analysis/docs/01_architecture/system_architecture.md) 與 [TASK-08 整合證據](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md) 判讀；不是 V4 closeout，整體仍 `action_required`／V4 Evidence Accumulation。
+
+| 邊界 | 本輪已落地的工程能力 | 尚需完成的 Target／外部條件 |
+|---|---|---|
+| Data／Market／Recommendation | 更新與市場日期／品質 DTO；`recommendation-context.v1` 保存可得切片、設定、母體、Why Not 與內容指紋 | 正式來源 acceptance、精確 available_at、具 PIT 與版本的產業成分；指標計算版本與市場 context 輸入版本須連貫。缺 PIT membership 前不恢復歷史產業篩選 |
+| Execution／Registry | `next-session-open.v2`、精確帳務、terminal／cancelled 揭露、frozen 成本基準；顯式 writer、實際內容冪等、版本隔離與 hash 驗證 | 固定組合共享現金、正式微結構／成交來源及 production canary。舊 run 不原地重算或升版本；可重跑不等於有效投資證據 |
+| Portfolio／Watchlist | candidate-only append SQLite 帳本、補償事件、精確 read model、候選池副本 repository／migration 與 source_id | 正式 JSONL／JSON 預設切換、真實 Paper fills／cost、thesis／估值與來源接受；目前候選池沒有已刪除項目的歷史 membership |
+| Desk／Workbench | 日期與品質防護、保存推薦／ledger adapter、完整 loop payload、stale callback 隔離；08-B 已接 main 保存推薦與 Workbench 新來源欄位重載 | 其餘 legacy typed sections 的完整 hydration 仍有限；正式來源切換須獨立 Gate，缺輸入不補安全等級 |
+| Evidence | `evidence-lineage.v1` 與唯讀人工 review proposal；outcome 保留事件 tier、run／snapshot／event hash | 真實 producer lineage、自然前瞻時間、具名獨立 review 與 Formal acceptance。declared tier／reviewer 字串不是核准證明；提案不改 credit／lifecycle |
+| Runtime | `runtime-state.v2`、未知來源、取消訂閱與受限 ID 去重；治理／營運兩平面維持分離 | store 讀取原因與 log rotation／generation 契約仍有限；EventBus 不提供 durable dispatch，scheduler／writer 審核仍獨立 |
+
+演進以保存來源與受控 adapter 逐項接線，不建立全域記憶體 SSOT；本輪候選 schema／隔離 fixture 不授權正式 migration、promotion、broker order 或 scheduler。
 
 ## 4. 整體分層架構
 
@@ -178,7 +193,7 @@ stateDiagram-v2
     CLOSED --> [*]
 ```
 
-每次轉移都輸出 source trace、reason category、data quality、review date 與 evidence link。系統只輸出 Candidate advice，不送出 broker order。
+每次轉移都輸出 source trace、reason category、data quality、review date 與 evidence link。系統只輸出 Candidate advice，不送出 broker order。`PositionInvalidationRule` 可明確標示 `reduce` 或 `exit`；只有 hard invalidation 進入 `EXIT_CANDIDATE`，論點弱化先進入 `REDUCE_CANDIDATE`。持有期限只在呼叫端提供完整官方交易日曆且涵蓋 entry／decision 兩端時計數，否則保留 `time_stop_calendar_incomplete`，不猜曆日、不自動交易。
 
 判斷優先序：Hard Risk → Trading Restriction → Entry Thesis → Portfolio Risk → Relative Deterioration → Time Stop → Data Quality。固定 SL/TP、RSI、TotalScore 只作輸入，不單獨壟斷狀態機。
 
@@ -491,5 +506,7 @@ portfolio_advice_eligible
 ---
 
 ## 更新記錄
+
+- 2026-09-06：校正八卡已落地工程與 Current → Target 差距，保留 PIT、真實 fills、自然時間、具名 review、正式 migration／writer 等獨立 Gate。
 
 - 2026-07-11：初版建立 Current → Transitional → Target 架構；定義 15 個產品／領域邊界、6 張核心流程圖、degraded behavior、正式決策權限與不自動交易政策。

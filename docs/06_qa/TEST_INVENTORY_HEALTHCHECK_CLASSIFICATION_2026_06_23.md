@@ -2,34 +2,34 @@
 
 > 目的：盤點 `tests/` 底下所有有效 Python 測試檔，分類哪些可以被非破壞式 Full App Healthcheck Runner 呼叫、哪些只能作 service/oracle 證據、哪些必須保留在一般 pytest 或人工檢查流程。
 
-## 2026-08-30 machine refresh
+## 2026-09-07 machine refresh
 
-- `scripts/audit_test_inventory.py`：overall=`passed`，filesystem／inventory=`662/662`，
-  `3,827 tests collected`。
+- `scripts/audit_test_inventory.py`：overall=`passed`，filesystem／inventory=`679/679`，pytest collection=`4005`。
 - missing inventory paths、stale inventory paths、collection errors、documentation count drift 與
   machine-checkable blockers 均為 `0`。
-- 目前 HEAD 完整 pytest：`3,826 passed / 1 skipped / 26 warnings in 552.80s`；本輪先
-  暴露並修正 2 個 inventory 文件統計問題與 1 個固定過期 approval fixture，修正後無
-  test failure／collection error。警告為 joblib physical-core fallback、既有理想化成交
-  假設與 sandbox `.pytest_cache` 寫入權限。
+- 目前 working tree 完整 pytest：`4,003 passed / 2 skipped / 27 warnings in 558.49s`；
+  本輪修正 inventory 登錄、ML shadow allowlist、保守成交相容邊界、score 缺值相容性、
+  legacy research metadata hash、ephemeral Registry schema probe 與 transient evidence
+  readiness 後，無 test failure／collection error。警告為 joblib physical-core fallback、
+  既有理想化成交假設、Pandas FutureWarning 與 sandbox `.pytest_cache` 寫入權限。
 - 下方 2026-08-28 與更早的 `3,817`、`3,797` 等數字均為歷史 checkpoint，不再作
   current count SSOT。
 
-Current filesystem Python files: `662`
+Current filesystem Python files: `679`
 
 | 分類 | 數量 |
 |---|---:|
 | `general-unit-keep-in-pytest` | 144 |
-| `governance-doc-tooling` | 116 |
+| `governance-doc-tooling` | 120 |
 | `healthcheck-runner-owned` | 29 |
 | `legacy-or-low-priority` | 10 |
 | `manual-only` | 14 |
-| `service-oracle-data-market` | 92 |
-| `service-oracle-portfolio-decision-runtime` | 103 |
-| `service-oracle-recommendation` | 18 |
-| `service-oracle-research-backtest` | 56 |
+| `service-oracle-data-market` | 95 |
+| `service-oracle-portfolio-decision-runtime` | 106 |
+| `service-oracle-recommendation` | 19 |
+| `service-oracle-research-backtest` | 59 |
 | `slow-e2e-or-environment` | 3 |
-| `ui-healthcheck-candidate-bridge` | 22 |
+| `ui-healthcheck-candidate-bridge` | 25 |
 | `ui-healthcheck-direct-bridge` | 12 |
 | `write-risk-dry-run-required` | 43 |
 
