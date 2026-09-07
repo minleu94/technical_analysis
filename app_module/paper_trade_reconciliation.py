@@ -81,6 +81,51 @@ class PaperTradeQuantityReconciliation:
 
 
 @dataclass(frozen=True)
+class PaperTradeCashReconciliation:
+    """Cash conservation check between immutable snapshots and supplied fills."""
+
+    start_cash: Decimal
+    end_cash: Decimal
+    fill_cash_delta: Decimal
+    expected_end_cash: Decimal
+    observed_delta: Decimal
+    difference: Decimal
+    status: str
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "start_cash",
+            "end_cash",
+            "fill_cash_delta",
+            "expected_end_cash",
+            "observed_delta",
+            "difference",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, Decimal) or not value.is_finite():
+                raise ValueError(f"{field_name} must be a finite Decimal")
+        if self.start_cash < 0 or self.end_cash < 0:
+            raise ValueError("snapshot cash cannot be negative")
+        if self.status not in {"matched", "mismatch"}:
+            raise ValueError("status must be matched or mismatch")
+        if self.status == "matched" and self.difference != Decimal("0.00"):
+            raise ValueError("matched cash reconciliation must have zero difference")
+        if self.status == "mismatch" and self.difference == Decimal("0.00"):
+            raise ValueError("mismatch cash reconciliation must have a difference")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "start_cash": str(self.start_cash.quantize(Decimal("0.01"))),
+            "end_cash": str(self.end_cash.quantize(Decimal("0.01"))),
+            "fill_cash_delta": str(self.fill_cash_delta.quantize(Decimal("0.01"))),
+            "expected_end_cash": str(self.expected_end_cash.quantize(Decimal("0.01"))),
+            "observed_delta": str(self.observed_delta.quantize(Decimal("0.01"))),
+            "difference": str(self.difference.quantize(Decimal("0.01"))),
+            "status": self.status,
+        }
+
+
+@dataclass(frozen=True)
 class PaperTradeReconciliationResult:
     """Candidate-only result of Paper fills preflight."""
 
@@ -105,6 +150,8 @@ class PaperTradeReconciliationResult:
     override_event_count: int
     total_cost: Decimal
     total_turnover_bp: int
+    cash_reconciliation: PaperTradeCashReconciliation | None = None
+    cash_reconciliation_required: bool = False
     quantity_reconciliation: tuple[PaperTradeQuantityReconciliation, ...] = ()
     existing_fill_id_collisions: tuple[str, ...] = ()
     blockers: tuple[str, ...] = ()
@@ -174,6 +221,10 @@ class PaperTradeReconciliationResult:
             "override_event_count": self.override_event_count,
             "total_cost": str(self.total_cost.quantize(Decimal("0.01"))),
             "total_turnover_bp": self.total_turnover_bp,
+            "cash_reconciliation": (
+                None if self.cash_reconciliation is None else self.cash_reconciliation.to_dict()
+            ),
+            "cash_reconciliation_required": self.cash_reconciliation_required,
             "quantity_reconciliation": [item.to_dict() for item in self.quantity_reconciliation],
             "existing_fill_id_collisions": list(self.existing_fill_id_collisions),
             "blockers": list(self.blockers),
@@ -215,6 +266,7 @@ class PaperTradeReconciliationService:
         *,
         period_start: str | None = None,
         period_end: str | None = None,
+        require_cash_reconciliation: bool = False,
     ) -> PaperTradeReconciliationResult:
         input_path = Path(source_path).expanduser().resolve()
         try:
@@ -277,12 +329,15 @@ class PaperTradeReconciliationService:
         snapshot_start_id: str | None = None
         snapshot_end_id: str | None = None
         quantity_reconciliation: tuple[PaperTradeQuantityReconciliation, ...] = ()
+        cash_reconciliation: PaperTradeCashReconciliation | None = None
         if resolved_start is not None and resolved_end is not None and not _has_input_error(blockers):
             (
                 snapshot_start_id,
                 snapshot_end_id,
                 start_quantities,
                 end_quantities,
+                start_cash,
+                end_cash,
                 snapshot_blockers,
                 snapshot_diagnostics,
             ) = self._read_snapshot_boundaries(resolved_start, resolved_end)
@@ -296,6 +351,17 @@ class PaperTradeReconciliationService:
                 )
                 if any(item.status == "mismatch" for item in quantity_reconciliation):
                     blockers.append("paper_trade_quantity_reconciliation_mismatch")
+                cash_reconciliation = _reconcile_cash(
+                    start_cash=start_cash,
+                    end_cash=end_cash,
+                    fills=fills,
+                )
+                if cash_reconciliation.status == "mismatch":
+                    if require_cash_reconciliation:
+                        warnings.append("paper_trade_cash_reconciliation_mismatch")
+                        blockers.append("paper_trade_cash_reconciliation_mismatch")
+                    else:
+                        diagnostics.append("paper_trade_cash_reconciliation_mismatch")
 
         existing_collisions = self._read_existing_fill_collisions(
             fills,
@@ -344,6 +410,8 @@ class PaperTradeReconciliationService:
             override_event_count=sum(1 for item in fills if item.override_reason),
             total_cost=sum((item.total_cost for item in fills), Decimal("0")),
             total_turnover_bp=sum(item.turnover_bp or 0 for item in fills),
+            cash_reconciliation=cash_reconciliation,
+            cash_reconciliation_required=bool(require_cash_reconciliation),
             quantity_reconciliation=quantity_reconciliation,
             existing_fill_id_collisions=existing_collisions,
             blockers=tuple(sorted(set(blockers))),
@@ -361,6 +429,8 @@ class PaperTradeReconciliationService:
         str | None,
         dict[str, int],
         dict[str, int],
+        Decimal,
+        Decimal,
         list[str],
         list[str],
     ]:
@@ -368,19 +438,19 @@ class PaperTradeReconciliationService:
         diagnostics: list[str] = []
         if not self.state_db_path.is_file():
             blockers.append("paper_snapshot_db_missing")
-            return None, None, {}, {}, blockers, diagnostics
+            return None, None, {}, {}, Decimal("0.00"), Decimal("0.00"), blockers, diagnostics
         manager = ReadOnlySQLiteManager(self.state_db_path)
         try:
             with manager.connect() as connection:
                 if not _table_exists(connection, "paper_portfolio_snapshots"):
                     blockers.append("paper_snapshot_table_missing")
-                    return None, None, {}, {}, blockers, diagnostics
+                    return None, None, {}, {}, Decimal("0.00"), Decimal("0.00"), blockers, diagnostics
                 if not _table_exists(connection, "paper_portfolio_positions"):
                     blockers.append("paper_snapshot_positions_table_missing")
-                    return None, None, {}, {}, blockers, diagnostics
+                    return None, None, {}, {}, Decimal("0.00"), Decimal("0.00"), blockers, diagnostics
                 rows = connection.execute(
                     """
-                    SELECT snapshot_id, decision_date
+                    SELECT snapshot_id, decision_date, cash
                     FROM paper_portfolio_snapshots
                     WHERE portfolio_id = ? AND decision_date IN (?, ?)
                     ORDER BY decision_date, snapshot_id
@@ -395,20 +465,24 @@ class PaperTradeReconciliationService:
                 if len(by_date.get(period_end, [])) != 1:
                     blockers.append("paper_snapshot_end_boundary_missing_or_ambiguous")
                 if blockers:
-                    return None, None, {}, {}, blockers, diagnostics
+                    return None, None, {}, {}, Decimal("0.00"), Decimal("0.00"), blockers, diagnostics
                 start_row = by_date[period_start][0]
                 end_row = by_date[period_end][0]
                 start_id = str(start_row["snapshot_id"])
                 end_id = str(end_row["snapshot_id"])
                 start_quantities = self._read_snapshot_quantities(connection, start_id, diagnostics)
                 end_quantities = self._read_snapshot_quantities(connection, end_id, diagnostics)
+                start_cash = _snapshot_cash(start_row, start_id, diagnostics)
+                end_cash = _snapshot_cash(end_row, end_id, diagnostics)
                 if any(item.startswith("paper_snapshot_position") for item in diagnostics):
                     blockers.append("paper_snapshot_position_invalid")
-                return start_id, end_id, start_quantities, end_quantities, blockers, diagnostics
+                if any(item.startswith("paper_snapshot_cash") for item in diagnostics):
+                    blockers.append("paper_snapshot_cash_invalid")
+                return start_id, end_id, start_quantities, end_quantities, start_cash, end_cash, blockers, diagnostics
         except (FileNotFoundError, OSError, sqlite3.Error) as exc:
             blockers.append("paper_snapshot_db_unavailable")
             diagnostics.append(f"paper_snapshot_db_error:{type(exc).__name__}")
-            return None, None, {}, {}, blockers, diagnostics
+            return None, None, {}, {}, Decimal("0.00"), Decimal("0.00"), blockers, diagnostics
 
     @staticmethod
     def _read_snapshot_quantities(
@@ -501,6 +575,8 @@ class PaperTradeReconciliationService:
             override_event_count=0,
             total_cost=Decimal("0"),
             total_turnover_bp=0,
+            cash_reconciliation=None,
+            cash_reconciliation_required=False,
             blockers=blockers,
             diagnostics=diagnostics,
         )
@@ -575,6 +651,46 @@ def _reconcile_quantities(
             )
         )
     return tuple(result)
+
+
+def _snapshot_cash(row: sqlite3.Row, snapshot_id: str, diagnostics: list[str]) -> Decimal:
+    try:
+        value = Decimal(str(row["cash"]))
+    except (KeyError, TypeError, ValueError, ArithmeticError):
+        diagnostics.append(f"paper_snapshot_cash_invalid:{snapshot_id}")
+        return Decimal("0.00")
+    if not value.is_finite() or value < 0:
+        diagnostics.append(f"paper_snapshot_cash_invalid:{snapshot_id}")
+        return Decimal("0.00")
+    return value.quantize(Decimal("0.01"))
+
+
+def _reconcile_cash(
+    *,
+    start_cash: Decimal,
+    end_cash: Decimal,
+    fills: tuple[PaperTradeFill, ...],
+) -> PaperTradeCashReconciliation:
+    cash_delta = Decimal("0.00")
+    for fill in fills:
+        gross = fill.gross_amount
+        if fill.side == "buy":
+            cash_delta -= gross + fill.total_cost
+        elif fill.side == "sell":
+            cash_delta += gross - fill.total_cost
+    cash_delta = cash_delta.quantize(Decimal("0.01"))
+    expected_end = (start_cash + cash_delta).quantize(Decimal("0.01"))
+    observed_delta = (end_cash - start_cash).quantize(Decimal("0.01"))
+    difference = (observed_delta - cash_delta).quantize(Decimal("0.01"))
+    return PaperTradeCashReconciliation(
+        start_cash=start_cash.quantize(Decimal("0.01")),
+        end_cash=end_cash.quantize(Decimal("0.01")),
+        fill_cash_delta=cash_delta,
+        expected_end_cash=expected_end,
+        observed_delta=observed_delta,
+        difference=difference,
+        status="matched" if difference == Decimal("0.00") else "mismatch",
+    )
 
 
 def _status_for(
@@ -653,6 +769,7 @@ def render_markdown(result: PaperTradeReconciliationResult) -> str:
         f"- fills: filled=`{result.filled_event_count}`, partial=`{result.partial_fill_event_count}`, rejected/cancelled=`{result.rejected_event_count}`",
         f"- total cost / turnover (bp): `{result.total_cost.quantize(Decimal('0.01'))}` / `{result.total_turnover_bp}`",
         f"- snapshot boundaries: `{result.snapshot_start_id or 'missing'}` → `{result.snapshot_end_id or 'missing'}`",
+        f"- cash reconciliation required: `{str(result.cash_reconciliation_required).lower()}`",
         f"- ledger append allowed: `{str(result.ledger_append_allowed).lower()}`",
         "- candidate only: `true`",
         "- write performed: `false`",
@@ -662,6 +779,20 @@ def render_markdown(result: PaperTradeReconciliationResult) -> str:
         "| Stock | Start | End | Buy filled | Sell filled | Expected Δ | Observed Δ | Status |",
         "|---|---:|---:|---:|---:|---:|---:|---|",
     ]
+    if result.cash_reconciliation is not None:
+        cash = result.cash_reconciliation
+        lines.extend(
+            [
+                "",
+                "## Cash reconciliation",
+                "",
+                f"- status: `{cash.status}`",
+                f"- start / end cash: `{cash.start_cash}` / `{cash.end_cash}`",
+                f"- fill cash delta: `{cash.fill_cash_delta}`",
+                f"- expected end cash: `{cash.expected_end_cash}`",
+                f"- difference (observed - fills): `{cash.difference}`",
+            ]
+        )
     for item in result.quantity_reconciliation:
         lines.append(
             f"| `{item.stock_code}` | {item.start_quantity} | {item.end_quantity} | "
@@ -691,6 +822,7 @@ def render_markdown(result: PaperTradeReconciliationResult) -> str:
 __all__ = [
     "PAPER_TRADE_RECONCILIATION_SCHEMA_VERSION",
     "PaperTradeQuantityReconciliation",
+    "PaperTradeCashReconciliation",
     "PaperTradeReconciliationResult",
     "PaperTradeReconciliationService",
     "render_markdown",

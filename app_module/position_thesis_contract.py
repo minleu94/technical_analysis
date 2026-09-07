@@ -9,6 +9,7 @@ from typing import Any
 
 
 VALID_OPERATORS = frozenset({"gt", "gte", "lt", "lte", "eq"})
+VALID_INVALIDATION_ACTIONS = frozenset({"reduce", "exit"})
 
 
 @dataclass(frozen=True)
@@ -16,12 +17,15 @@ class PositionInvalidationRule:
     metric_id: str
     operator: str
     threshold: Decimal
+    action: str = "exit"
 
     def __post_init__(self) -> None:
         if not self.metric_id:
             raise ValueError("metric_id is required")
         if self.operator not in VALID_OPERATORS:
             raise ValueError("unsupported invalidation operator")
+        if self.action not in VALID_INVALIDATION_ACTIONS:
+            raise ValueError("action must be reduce or exit")
         if isinstance(self.threshold, bool) or not isinstance(self.threshold, Decimal):
             raise ValueError("threshold must be Decimal")
 
@@ -30,6 +34,7 @@ class PositionInvalidationRule:
             "metric_id": self.metric_id,
             "operator": self.operator,
             "threshold": str(self.threshold),
+            "action": self.action,
         }
 
 

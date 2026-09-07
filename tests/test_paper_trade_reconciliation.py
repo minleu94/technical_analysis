@@ -39,7 +39,7 @@ def _write_csv(
     )
 
 
-def _snapshot_db(path: Path) -> None:
+def _snapshot_db(path: Path, *, end_cash: str = "88000.00") -> None:
     repository = PaperPortfolioSnapshotRepository(path)
     repository.append(
         PaperPortfolioSnapshot(
@@ -66,7 +66,7 @@ def _snapshot_db(path: Path) -> None:
             portfolio_id="paper-main",
             decision_date="2026-08-28",
             source_result_id="result-end",
-            cash=Decimal("88000.00"),
+            cash=Decimal(end_cash),
             total_value=Decimal("105000.00"),
             positions=(
                 PaperPortfolioPositionSnapshot(
@@ -100,6 +100,9 @@ def test_reconciliation_matches_snapshot_quantity_delta_without_writing(tmp_path
     assert result.total_cost == Decimal("23.00")
     assert result.quantity_reconciliation[0].status == "matched"
     assert result.quantity_reconciliation[0].observed_delta == 20
+    assert result.cash_reconciliation is not None
+    assert result.cash_reconciliation.status == "mismatch"
+    assert "paper_trade_cash_reconciliation_mismatch" in result.diagnostics
     assert state_db.read_bytes() == before
     assert "外部 CSV 是唯一成交來源" in render_markdown(result)
 
@@ -121,6 +124,44 @@ def test_quantity_mismatch_requires_review_and_is_not_rejected_as_bad_csv(tmp_pa
     assert result.ledger_append_allowed is False
     assert result.quantity_reconciliation[0].expected_delta == 20
     assert result.quantity_reconciliation[0].observed_delta == 15
+
+
+def test_strict_cash_reconciliation_blocks_mismatched_snapshot(tmp_path: Path) -> None:
+    state_db = tmp_path / "paper_portfolio.sqlite"
+    fills_csv = tmp_path / "fills.csv"
+    _snapshot_db(state_db)
+    _write_csv(fills_csv)
+
+    result = PaperTradeReconciliationService(state_db_path=state_db).inspect(
+        fills_csv,
+        period_start="2026-08-24",
+        period_end="2026-08-28",
+        require_cash_reconciliation=True,
+    )
+
+    assert result.status == "needs_review"
+    assert result.cash_reconciliation_required is True
+    assert "paper_trade_cash_reconciliation_mismatch" in result.blockers
+    assert result.ledger_append_allowed is False
+
+
+def test_strict_cash_reconciliation_can_match_exact_fill_cash_delta(tmp_path: Path) -> None:
+    state_db = tmp_path / "paper_portfolio.sqlite"
+    fills_csv = tmp_path / "fills.csv"
+    _snapshot_db(state_db, end_cash="87975.40")
+    _write_csv(fills_csv)
+
+    result = PaperTradeReconciliationService(state_db_path=state_db).inspect(
+        fills_csv,
+        period_start="2026-08-24",
+        period_end="2026-08-28",
+        require_cash_reconciliation=True,
+    )
+
+    assert result.status == "ready"
+    assert result.cash_reconciliation is not None
+    assert result.cash_reconciliation.status == "matched"
+    assert result.cash_reconciliation.difference == Decimal("0.00")
 
 
 def test_invalid_input_and_existing_fill_collision_fail_closed(tmp_path: Path) -> None:

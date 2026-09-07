@@ -1,6 +1,7 @@
 """DTOs for the Phase 4.1 Portfolio & Journal MVP."""
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 
@@ -167,4 +168,157 @@ class PortfolioDTO:
             "total_realized_pnl": self.total_realized_pnl,
             "updated_at": self.updated_at,
             "schema_version": self.schema_version,
+        }
+
+
+@dataclass(frozen=True)
+class LedgerEventDTO:
+    """精確帳本事件的 app boundary；不把 float 帶進 domain。"""
+
+    event_id: str
+    portfolio_id: str
+    source_namespace: str
+    occurred_at: str
+    stock_code: str
+    stock_name: str
+    side: Optional[str]
+    quantity: int
+    price: Decimal
+    fees: Decimal = Decimal("0.00")
+    taxes: Decimal = Decimal("0.00")
+    currency: str = "TWD"
+    source_id: str = ""
+    source_snapshot_hash: str = ""
+    thesis_id: str = ""
+    event_type: str = "trade"
+    reverses_event_id: Optional[str] = None
+    reason: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "portfolio_id": self.portfolio_id,
+            "source_namespace": self.source_namespace,
+            "occurred_at": self.occurred_at,
+            "stock_code": self.stock_code,
+            "stock_name": self.stock_name,
+            "side": self.side,
+            "quantity": self.quantity,
+            "price": str(self.price),
+            "fees": str(self.fees),
+            "taxes": str(self.taxes),
+            "currency": self.currency,
+            "source_id": self.source_id,
+            "source_snapshot_hash": self.source_snapshot_hash,
+            "thesis_id": self.thesis_id,
+            "event_type": self.event_type,
+            "reverses_event_id": self.reverses_event_id,
+            "reason": self.reason,
+            "metadata": dict(self.metadata),
+            "created_at": self.created_at,
+        }
+
+
+@dataclass(frozen=True)
+class LedgerPositionDTO:
+    """精確持倉 projection，供 UI／跨頁 composer 消費。"""
+
+    position_id: str
+    portfolio_id: str
+    stock_code: str
+    stock_name: str
+    quantity: int
+    average_cost: Decimal
+    invested_amount: Decimal
+    realized_pnl: Decimal
+    opened_at: str
+    last_trade_date: str
+    source_type: str
+    source_id: str
+    source_snapshot_hash: str
+    thesis_id: str
+    trade_ids: tuple[str, ...] = ()
+    current_price: Optional[Decimal] = None
+    unrealized_pnl: Optional[Decimal] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "position_id": self.position_id,
+            "portfolio_id": self.portfolio_id,
+            "stock_code": self.stock_code,
+            "stock_name": self.stock_name,
+            "quantity": self.quantity,
+            "average_cost": str(self.average_cost),
+            "invested_amount": str(self.invested_amount),
+            "realized_pnl": str(self.realized_pnl),
+            "opened_at": self.opened_at,
+            "last_trade_date": self.last_trade_date,
+            "source_type": self.source_type,
+            "source_id": self.source_id,
+            "source_snapshot_hash": self.source_snapshot_hash,
+            "thesis_id": self.thesis_id,
+            "trade_ids": list(self.trade_ids),
+            "current_price": None if self.current_price is None else str(self.current_price),
+            "unrealized_pnl": None if self.unrealized_pnl is None else str(self.unrealized_pnl),
+        }
+
+
+@dataclass(frozen=True)
+class LedgerProjectionDTO:
+    portfolio_id: str
+    source_namespace: str
+    positions: tuple[LedgerPositionDTO, ...]
+    cash: Decimal
+    realized_pnl: Decimal
+    event_ids: tuple[str, ...]
+    compensated_event_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "portfolio_id": self.portfolio_id,
+            "source_namespace": self.source_namespace,
+            "positions": [item.to_dict() for item in self.positions],
+            "cash": str(self.cash),
+            "realized_pnl": str(self.realized_pnl),
+            "event_ids": list(self.event_ids),
+            "compensated_event_ids": list(self.compensated_event_ids),
+            "negative_cash": self.cash < 0,
+        }
+
+
+@dataclass(frozen=True)
+class PortfolioLedgerReadModelDTO:
+    """TASK-LOOP-07 可直接消費的日期／品質／來源 ledger read-model。"""
+
+    portfolio_id: str
+    source_namespace: str
+    as_of_date: str
+    quality: str
+    source_ledger_id: str
+    source_ledger_hash: str
+    event_count: int
+    missing_inputs: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    candidate_only: bool = True
+    positions: tuple[LedgerPositionDTO, ...] = ()
+    cash: Optional[Decimal] = None
+    realized_pnl: Optional[Decimal] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "portfolio_id": self.portfolio_id,
+            "source_namespace": self.source_namespace,
+            "as_of_date": self.as_of_date,
+            "quality": self.quality,
+            "source_ledger_id": self.source_ledger_id,
+            "source_ledger_hash": self.source_ledger_hash,
+            "event_count": self.event_count,
+            "missing_inputs": list(self.missing_inputs),
+            "warnings": list(self.warnings),
+            "candidate_only": self.candidate_only,
+            "positions": [item.to_dict() for item in self.positions],
+            "cash": None if self.cash is None else str(self.cash),
+            "realized_pnl": None if self.realized_pnl is None else str(self.realized_pnl),
         }

@@ -1,18 +1,36 @@
 """Thin orchestration service for the Phase 4.1 Portfolio MVP."""
 
 import logging
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 import pandas as pd
 
-from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
+from app_module.dtos.portfolio_dtos import (
+    LedgerEventDTO,
+    LedgerPositionDTO,
+    LedgerProjectionDTO,
+    PortfolioDTO,
+    PortfolioLedgerReadModelDTO,
+    PositionDTO,
+    TradeDTO,
+)
 from app_module.portfolio_store import PortfolioJsonlStore
 from app_module.sqlite_read_only import ReadOnlySQLiteManager
 from data_module.config import TWStockConfig
+from data_module.portfolio_ledger_repository import (
+    PortfolioLedgerEvent,
+    PortfolioLedgerRepository,
+)
 from financial_module.units import quantize_money, to_decimal
 from portfolio_module import PortfolioValidationError, Trade, rebuild_positions, validate_trade
+from portfolio_module.core import (
+    LedgerProjection,
+    ledger_unrealized_pnl,
+    rebuild_ledger_projection,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +41,18 @@ class PortfolioService:
     Trades are append-only source records. Positions are rebuilt from trades.
     """
 
-    def __init__(self, config: TWStockConfig, position_service: object = None):
+    def __init__(
+        self,
+        config: TWStockConfig,
+        position_service: object = None,
+        ledger_repository: Optional[PortfolioLedgerRepository] = None,
+    ):
         self.config = config
         self.position_service = position_service
         self.store = PortfolioJsonlStore(config.output_root)
+        # 只有呼叫者明確注入隔離 repository 才會啟用精確帳本；既有 JSONL
+        # 相容路徑仍由既有測試與 UI 使用，避免偷偷切換正式 writer。
+        self.ledger_repository = ledger_repository
 
     def record_trade(
         self,
@@ -276,3 +302,269 @@ class PortfolioService:
             "unrealized_pnl_pct": unrealized_pnl_pct,
             "schema_version": "4.1"
         })
+
+    def record_precise_trade(
+        self,
+        *,
+        event_id: str,
+        portfolio_id: str,
+        stock_code: str,
+        stock_name: str,
+        side: str,
+        quantity: int,
+        price: Decimal,
+        occurred_at: str,
+        source_namespace: str = "manual",
+        fees: Decimal = Decimal("0.00"),
+        taxes: Decimal = Decimal("0.00"),
+        currency: str = "TWD",
+        source_id: str = "",
+        source_snapshot_hash: str = "",
+        thesis_id: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> LedgerEventDTO:
+        """將精確人工／隔離 paper event 寫入注入的單一 writer。"""
+
+        if source_namespace == "backtest":
+            raise PortfolioValidationError(
+                "backtest results cannot be recorded as portfolio fills"
+            )
+        repository = self._require_ledger_repository()
+        event = PortfolioLedgerEvent(
+            event_id=event_id,
+            portfolio_id=portfolio_id,
+            source_namespace=source_namespace,
+            occurred_at=occurred_at,
+            stock_code=stock_code,
+            stock_name=stock_name,
+            side=side.lower(),
+            quantity=quantity,
+            price=price,
+            fees=fees,
+            taxes=taxes,
+            currency=currency,
+            source_id=source_id,
+            source_snapshot_hash=source_snapshot_hash,
+            thesis_id=thesis_id,
+            metadata=dict(metadata or {}),
+        )
+        existing = repository.get(event.event_id)
+        if existing is not None:
+            raise PortfolioValidationError(f"ledger event already exists: {event.event_id}")
+        repository.append(event)
+        return _ledger_event_to_dto(event)
+
+    def list_ledger_events(
+        self,
+        *,
+        portfolio_id: str,
+        source_namespace: str = "manual",
+        as_of_date: Optional[str] = None,
+    ) -> tuple[LedgerEventDTO, ...]:
+        repository = self._require_ledger_repository()
+        return tuple(
+            _ledger_event_to_dto(event)
+            for event in repository.list_events(
+                portfolio_id=portfolio_id,
+                source_namespace=source_namespace,
+                as_of_date=as_of_date,
+            )
+        )
+
+    def rebuild_from_ledger(
+        self,
+        *,
+        portfolio_id: str,
+        source_namespace: str = "manual",
+        as_of_date: Optional[str] = None,
+        initial_cash: Decimal = Decimal("0.00"),
+        reject_negative_cash: bool = False,
+    ) -> LedgerProjectionDTO:
+        repository = self._require_ledger_repository()
+        events = repository.list_events(
+            portfolio_id=portfolio_id,
+            source_namespace=source_namespace,
+            as_of_date=as_of_date,
+        )
+        projection = rebuild_ledger_projection(
+            events,
+            initial_cash=initial_cash,
+            reject_negative_cash=reject_negative_cash,
+        )
+        return _ledger_projection_to_dto(projection)
+
+    def compensate_ledger_event(
+        self,
+        *,
+        event_id: str,
+        reverses_event_id: str,
+        occurred_at: str,
+        reason: str,
+        source_id: str = "",
+    ) -> LedgerEventDTO:
+        repository = self._require_ledger_repository()
+        event = repository.append_compensation(
+            reverses_event_id,
+            event_id=event_id,
+            occurred_at=occurred_at,
+            reason=reason,
+            source_id=source_id,
+        )
+        return _ledger_event_to_dto(event)
+
+    def build_ledger_read_model(
+        self,
+        *,
+        portfolio_id: str,
+        source_namespace: str = "manual",
+        as_of_date: str,
+        market_prices: Optional[Dict[str, Decimal]] = None,
+        source_ledger_id: Optional[str] = None,
+        initial_cash: Decimal = Decimal("0.00"),
+        reject_negative_cash: bool = False,
+    ) -> PortfolioLedgerReadModelDTO:
+        """建立日期／品質／來源 hash read-model，供決策台只讀消費。"""
+
+        repository = self._require_ledger_repository()
+        events = repository.list_events(
+            portfolio_id=portfolio_id,
+            source_namespace=source_namespace,
+            as_of_date=as_of_date,
+        )
+        missing: list[str] = []
+        warnings: list[str] = []
+        projection_dto: Optional[LedgerProjectionDTO] = None
+        if any(not event.source_id for event in events):
+            warnings.append("source_id_missing")
+        if any(event.event_type == "trade" and not event.thesis_id for event in events):
+            warnings.append("thesis_missing")
+        if events:
+            try:
+                projection = rebuild_ledger_projection(
+                    events,
+                    initial_cash=initial_cash,
+                    reject_negative_cash=reject_negative_cash,
+                )
+                projection_dto = _ledger_projection_to_dto(projection)
+            except PortfolioValidationError as exc:
+                missing.append("ledger_replay")
+                warnings.append(f"ledger_replay_rejected:{type(exc).__name__}")
+                projection = None
+            if projection is not None and projection.positions:
+                if market_prices is None:
+                    missing.append("market_prices")
+                else:
+                    missing.extend(
+                        f"market_price:{position.stock_code}"
+                        for position in projection.positions
+                        if position.stock_code not in market_prices
+                    )
+                    if projection_dto is not None:
+                        projection_dto = LedgerProjectionDTO(
+                            portfolio_id=projection_dto.portfolio_id,
+                            source_namespace=projection_dto.source_namespace,
+                            positions=tuple(
+                                replace(
+                                    item,
+                                    current_price=market_prices.get(item.stock_code),
+                                    unrealized_pnl=(
+                                        ledger_unrealized_pnl(core_position, market_prices[item.stock_code])
+                                        if item.stock_code in market_prices
+                                        else None
+                                    ),
+                                )
+                                for item, core_position in zip(
+                                    projection_dto.positions, projection.positions
+                                )
+                            ),
+                            cash=projection_dto.cash,
+                            realized_pnl=projection_dto.realized_pnl,
+                            event_ids=projection_dto.event_ids,
+                            compensated_event_ids=projection_dto.compensated_event_ids,
+                        )
+        model = repository.read_model(
+            portfolio_id=portfolio_id,
+            source_namespace=source_namespace,
+            as_of_date=as_of_date,
+            source_ledger_id=source_ledger_id,
+            missing_inputs=tuple(dict.fromkeys(missing)),
+            warnings=tuple(dict.fromkeys(warnings)),
+        )
+        return PortfolioLedgerReadModelDTO(
+            portfolio_id=model.portfolio_id,
+            source_namespace=model.source_namespace,
+            as_of_date=model.as_of_date,
+            quality=model.quality,
+            source_ledger_id=model.source_ledger_id,
+            source_ledger_hash=model.source_ledger_hash,
+            event_count=model.event_count,
+            missing_inputs=model.missing_inputs,
+            warnings=model.warnings,
+            candidate_only=model.candidate_only,
+            positions=() if projection_dto is None else projection_dto.positions,
+            cash=None if projection_dto is None else projection_dto.cash,
+            realized_pnl=None if projection_dto is None else projection_dto.realized_pnl,
+        )
+
+    def _require_ledger_repository(self) -> PortfolioLedgerRepository:
+        if self.ledger_repository is None:
+            raise PortfolioValidationError(
+                "precise ledger requires an explicitly injected isolated repository"
+            )
+        return self.ledger_repository
+
+
+def _ledger_event_to_dto(event: PortfolioLedgerEvent) -> LedgerEventDTO:
+    return LedgerEventDTO(
+        event_id=event.event_id,
+        portfolio_id=event.portfolio_id,
+        source_namespace=event.source_namespace,
+        occurred_at=event.occurred_at,
+        stock_code=event.stock_code,
+        stock_name=event.stock_name,
+        side=event.side,
+        quantity=event.quantity,
+        price=event.price,
+        fees=event.fees,
+        taxes=event.taxes,
+        currency=event.currency,
+        source_id=event.source_id,
+        source_snapshot_hash=event.source_snapshot_hash,
+        thesis_id=event.thesis_id,
+        event_type=event.event_type,
+        reverses_event_id=event.reverses_event_id,
+        reason=event.reason,
+        metadata=dict(event.metadata),
+        created_at=event.created_at,
+    )
+
+
+def _ledger_projection_to_dto(projection: LedgerProjection) -> LedgerProjectionDTO:
+    return LedgerProjectionDTO(
+        portfolio_id=projection.portfolio_id,
+        source_namespace=projection.source_namespace,
+        positions=tuple(
+            LedgerPositionDTO(
+                position_id=position.position_id,
+                portfolio_id=position.portfolio_id,
+                stock_code=position.stock_code,
+                stock_name=position.stock_name,
+                quantity=position.quantity,
+                average_cost=position.average_cost,
+                invested_amount=position.invested_amount,
+                realized_pnl=position.realized_pnl,
+                opened_at=position.opened_at,
+                last_trade_date=position.last_trade_date,
+                source_type=position.source_type,
+                source_id=position.source_id,
+                source_snapshot_hash=position.source_snapshot_hash,
+                thesis_id=position.thesis_id,
+                trade_ids=position.trade_ids,
+            )
+            for position in projection.positions
+        ),
+        cash=projection.cash,
+        realized_pnl=projection.realized_pnl,
+        event_ids=projection.event_ids,
+        compensated_event_ids=projection.compensated_event_ids,
+    )

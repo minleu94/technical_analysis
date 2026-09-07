@@ -28,6 +28,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--portfolio-id", default="paper-main")
     parser.add_argument("--period-start")
     parser.add_argument("--period-end")
+    parser.add_argument(
+        "--require-cash-reconciliation",
+        action="store_true",
+        help="將 snapshot 現金守恆不符列為 needs_review；預設只顯示警告。",
+    )
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     args = parser.parse_args(argv)
 
@@ -39,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.input_csv,
         period_start=args.period_start,
         period_end=args.period_end,
+        require_cash_reconciliation=args.require_cash_reconciliation,
     )
     payload: dict[str, Any] = result.to_dict()
     if args.format == "markdown":
