@@ -269,6 +269,36 @@ class ScoringEngine:
         """
         scores = []
         tech_config = config.get('technical', {})
+        known = pd.Series(True, index=df.index)
+
+        def require_observed(*aliases: str) -> None:
+            nonlocal known
+            column = next((name for name in aliases if name in df.columns), None)
+            if column is None:
+                # Raw/direct callers may omit derived indicator columns.  In
+                # that case the individual kernel decides whether it can
+                # produce a score; an explicitly present non-finite column is
+                # the condition that must propagate an unknown value.
+                return
+            else:
+                known &= pd.to_numeric(df[column], errors="coerce").replace([np.inf, -np.inf], np.nan).notna()
+
+        # 已啟用但沒有可得值的因子是未知；不得落入個別計分器的中性預設。
+        required_columns = (
+            ("momentum", "rsi", (("RSI", "rsi", "RSI_14"),)),
+            ("momentum", "macd", (("MACD", "macd"), ("MACD_Signal", "macd_signal", "Signal"))),
+            ("momentum", "kd", (("slowk", "K", "k"), ("slowd", "D", "d"))),
+            ("trend", "adx", (("ADX", "adx"),)),
+            ("volatility", "bollinger", (("upperband", "upper_band", "BB_upper"), ("lowerband", "lower_band", "BB_lower"), ("收盤價", "Close", "close"))),
+        )
+        for group, name, columns in required_columns:
+            if tech_config.get(group, {}).get(name, {}).get("enabled", False):
+                for aliases in columns:
+                    require_observed(*aliases)
+        ma_config = tech_config.get("trend", {}).get("ma", {})
+        if ma_config.get("enabled", False):
+            for window in ma_config.get("windows", [5, 10, 20, 60]):
+                require_observed(f"MA{window}", f"SMA{window}", f"MA_{window}")
         
         # RSI 分數
         if tech_config.get('momentum', {}).get('rsi', {}).get('enabled', False):
@@ -310,7 +340,7 @@ class ScoringEngine:
         use_deviation_weighted = config.get('use_deviation_weighted', False) or config.get('signals', {}).get('use_deviation_weighted', False)
         
         if len(scores) == 0:
-            return pd.Series(50.0, index=df.index)  # 預設中性分數
+            return pd.Series(Decimal("50"), index=df.index).where(known)  # 未啟用指標才沿用中性預設
         
         indicator_scores = pd.concat(scores, axis=1)
         
@@ -323,10 +353,10 @@ class ScoringEngine:
             
             final_dev = np.where(weights_sum > 0, weighted_dev_sum / weights_sum, 0.0)
             final_score = 50.0 + final_dev
-            return pd.Series(final_score, index=df.index).clip(0, 100)
+            return pd.Series(final_score, index=df.index).clip(0, 100).where(known)
         else:
             # 算術平均（傳統行為）
-            return indicator_scores.mean(axis=1)
+            return indicator_scores.mean(axis=1, skipna=False).where(known)
     
     def _calculate_rsi_score(self, df: pd.DataFrame, regime: str = None) -> Optional[pd.Series]:
         """計算 RSI 分數（0-100），根據 Regime 調整邏輯
