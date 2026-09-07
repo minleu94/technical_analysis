@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Slot
 from app_module.dtos.runtime_dtos import (
     RuntimeEventDTO,
     RuntimeStateSnapshotDTO,
@@ -26,11 +26,27 @@ class QtRuntimeBridge(QObject):
         self._event_bus = event_bus
         
         # Subscribe pure Python callbacks to the EventBus
-        self._event_bus.subscribe_events(self._on_event_received)
-        self._event_bus.subscribe_state(self._on_state_updated)
-        self._event_bus.subscribe_health(self._on_health_updated)
-        self._event_bus.subscribe_scheduled_operations(self._on_scheduled_operations_updated)
-        self._event_bus.subscribe_environment_readiness(self._on_environment_readiness_updated)
+        self._unsubscribers = [
+            self._event_bus.subscribe_events(self._on_event_received),
+            self._event_bus.subscribe_state(self._on_state_updated),
+            self._event_bus.subscribe_health(self._on_health_updated),
+            self._event_bus.subscribe_scheduled_operations(self._on_scheduled_operations_updated),
+            self._event_bus.subscribe_environment_readiness(self._on_environment_readiness_updated),
+        ]
+        # destroyed 回呼只保留取消句柄；不在 Qt 物件銷毀後呼叫其方法。
+        unsubscribers = self._unsubscribers
+
+        def release_subscriptions(*_args) -> None:
+            while unsubscribers:
+                unsubscribers.pop()()
+
+        self.destroyed.connect(release_subscriptions)
+
+    @Slot()
+    def dispose(self) -> None:
+        """停止後續通知；已排入 Qt 佇列的訊號仍遵循 Qt 連線生命週期。"""
+        while self._unsubscribers:
+            self._unsubscribers.pop()()
         
     def _on_event_received(self, dto: RuntimeEventDTO) -> None:
         """Convert pure callback to Qt Signal emission"""

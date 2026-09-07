@@ -46,6 +46,9 @@ class DecisionDeskView(QWidget):
         self._auto_refresh_pending = auto_refresh
         self._last_snapshot: DecisionDeskSnapshot | None = None
         self._refresh_worker: TaskWorker | None = None
+        self._refresh_generation = 0
+        self._worker_generation = 0
+        self._refresh_pending = False
 
         self._setup_ui()
         self._display_pending_snapshot()
@@ -252,6 +255,7 @@ class DecisionDeskView(QWidget):
         return row
 
     def refresh_snapshot(self):
+        self._refresh_generation += 1
         if self.async_refresh:
             self._start_refresh_worker()
         else:
@@ -302,13 +306,18 @@ class DecisionDeskView(QWidget):
 
     def _start_refresh_worker(self) -> None:
         if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            self._refresh_pending = True
             return
+        self._refresh_pending = False
         self._display_loading_snapshot()
-        worker = TaskWorker(self.decision_desk_builder.build_snapshot, self.as_of_date)
+        request_date = self.as_of_date
+        generation = self._refresh_generation
+        self._worker_generation = generation
+        worker = TaskWorker(self.decision_desk_builder.build_snapshot, request_date)
         self._refresh_worker = worker
-        worker.finished.connect(self._on_refresh_worker_finished)
-        worker.error.connect(self._on_refresh_worker_error)
-        worker.cancelled.connect(self._on_refresh_worker_cancelled)
+        worker.finished.connect(lambda snapshot: self._on_refresh_worker_finished(snapshot, generation, request_date))
+        worker.error.connect(lambda error: self._on_refresh_worker_error(error, generation, request_date))
+        worker.cancelled.connect(lambda: self._on_refresh_worker_cancelled(generation))
         worker.start()
 
     def _release_refresh_worker(self) -> None:
@@ -317,20 +326,32 @@ class DecisionDeskView(QWidget):
         self._refresh_worker = None
         if worker is not None:
             worker.deleteLater()
+        if self._refresh_pending:
+            self._start_refresh_worker()
 
-    def _on_refresh_worker_finished(self, snapshot: DecisionDeskSnapshot) -> None:
-        self._last_snapshot = snapshot
-        self._render_snapshot(snapshot)
+    def _on_refresh_worker_finished(self, snapshot: DecisionDeskSnapshot, generation: int | None = None, request_date: date | None = None) -> None:
+        if generation is not None and generation != self._worker_generation:
+            return
+        if (generation is None or generation == self._refresh_generation) and (request_date is None or request_date == self.as_of_date):
+            self._last_snapshot = snapshot
+            self._render_snapshot(snapshot)
         self._release_refresh_worker()
 
-    def _on_refresh_worker_error(self, error_message: str) -> None:
-        self._display_exception_snapshot(error_message)
+    def _on_refresh_worker_error(self, error_message: str, generation: int | None = None, request_date: date | None = None) -> None:
+        if generation is not None and generation != self._worker_generation:
+            return
+        if (generation is None or generation == self._refresh_generation) and (request_date is None or request_date == self.as_of_date):
+            self._display_exception_snapshot(error_message)
         self._release_refresh_worker()
 
-    def _on_refresh_worker_cancelled(self) -> None:
+    def _on_refresh_worker_cancelled(self, generation: int | None = None) -> None:
+        if generation is not None and generation != self._worker_generation:
+            return
         self._release_refresh_worker()
 
     def closeEvent(self, event) -> None:
+        self._refresh_generation += 1
+        self._refresh_pending = False
         if self._refresh_worker is not None and self._refresh_worker.isRunning():
             self._refresh_worker.cancel(cooperative=True, wait=False)
             event.ignore()
@@ -346,14 +367,16 @@ class DecisionDeskView(QWidget):
             badge.set_quality(self._quality_token(quality))
 
     def _refresh_snapshot(self) -> None:
+        request_date = self.as_of_date
         try:
-            snapshot = self.decision_desk_builder.build_snapshot(self.as_of_date)
+            snapshot = self.decision_desk_builder.build_snapshot(request_date)
         except Exception as exc:
             self._display_exception_snapshot(str(exc))
             return
 
-        self._last_snapshot = snapshot
-        self._render_snapshot(snapshot)
+        if self.as_of_date == request_date:
+            self._last_snapshot = snapshot
+            self._render_snapshot(snapshot)
 
     def _render_snapshot(self, snapshot: DecisionDeskSnapshot) -> None:
         self._render_answer_first_dashboard(snapshot)
@@ -366,6 +389,9 @@ class DecisionDeskView(QWidget):
         self.generated_at_card.value_label.setText(snapshot.generated_at.strftime("%H:%M:%S"))
 
         warning_lines = [self._humanize_warning_token(item) for item in snapshot.warnings]
+        if snapshot.recommendations is not None:
+            recommendation = snapshot.recommendations
+            warning_lines.append(f"已保存推薦：{', '.join(recommendation.stock_codes) or '無候選'}；來源 {recommendation.result_id or '缺漏'}；資料日 {recommendation.as_of_date or '未知'}；{self._quality_label(recommendation.quality)}")
         self.warning_list.set_warnings(warning_lines)
 
         self._set_section_quality(self.market_regime_status, snapshot.market_regime.quality)
@@ -405,7 +431,7 @@ class DecisionDeskView(QWidget):
 
         self._set_section_quality(self.watchlist_triggers_status, snapshot.watchlist_triggers.quality)
         self.watchlist_triggers_value.setText(
-            f"觸發數：{snapshot.watchlist_triggers.trigger_count or 0}；"
+            f"觸發數：{snapshot.watchlist_triggers.trigger_count if snapshot.watchlist_triggers.trigger_count is not None else '未知'}；"
             f"代碼：{', '.join(snapshot.watchlist_triggers.triggered_codes) if snapshot.watchlist_triggers.triggered_codes else '無'}；"
             f"訊號：{snapshot.watchlist_triggers.top_signal or '無'}"
         )
@@ -413,9 +439,9 @@ class DecisionDeskView(QWidget):
         self._set_section_quality(self.portfolio_alerts_status, snapshot.portfolio_alerts.quality)
         portfolio_attribution_text = self._format_portfolio_attributions(getattr(snapshot.portfolio_alerts, "attributions", ()))
         self.portfolio_alerts_value.setText(
-            f"警示數：{snapshot.portfolio_alerts.alert_count or 0}；"
+            f"警示數：{snapshot.portfolio_alerts.alert_count if snapshot.portfolio_alerts.alert_count is not None else '未知'}；"
             f"持倉代碼：{', '.join(snapshot.portfolio_alerts.alert_codes) if snapshot.portfolio_alerts.alert_codes else '無'}；"
-            f"等級：{snapshot.portfolio_alerts.alert_level or '無'}；"
+            f"等級：{snapshot.portfolio_alerts.alert_level or '未知'}；"
             f"來源歸因：{portfolio_attribution_text}"
         )
 

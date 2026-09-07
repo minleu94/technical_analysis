@@ -42,6 +42,8 @@ class WorkbenchReadOnlyComposer:
         advice_dashboard: AdviceDashboardDTO | None = None,
     ) -> WorkbenchDashboardDTO:
         warnings = self._warnings(readiness_report, agent_report_sample, historical_replay_summary, source_diagnostics)
+        if decision_snapshot is not None:
+            warnings.extend(item for item in decision_snapshot.warnings if item not in warnings)
         review_items = self._review_items(decision_snapshot, readiness_report)
         daily_checklist = self._daily_checklist(decision_snapshot, readiness_report)
         background_evidence_feed = self._background_evidence_feed(
@@ -601,6 +603,8 @@ class WorkbenchReadOnlyComposer:
             "market_breadth": decision_snapshot.market_breadth.to_dict(),
             "sector_rotation": decision_snapshot.sector_rotation.to_dict(),
             "relative_strength_liquidity": decision_snapshot.relative_strength_liquidity.to_dict(),
+            "recommendations": decision_snapshot.recommendations.to_dict() if decision_snapshot.recommendations else None,
+            "source_lineage": decision_snapshot.source_lineage,
         }
 
     def _portfolio_watchlist_summary(self, decision_snapshot: DecisionDeskSnapshot | None) -> dict[str, Any]:

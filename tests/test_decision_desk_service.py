@@ -207,6 +207,8 @@ def test_decision_desk_builder_uses_fake_provider_to_build_complete_snapshot():
         "sector_focus",
         "stock_focus",
         "market_data_visibility",
+        "recommendations",
+        "source_lineage",
     }
     assert payload["portfolio_alerts"]["alert_level"] == "low"
     assert payload["action_summary"]["action_level"] in {"積極研究", "正常研究", "保守觀察", "暫停新進場"}

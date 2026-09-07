@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from copy import deepcopy
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
@@ -434,6 +435,23 @@ class DecisionDeskStockFocus:
 
 
 @dataclass(frozen=True)
+class RecommendationDeskSummary:
+    as_of_date: date | None
+    quality: DecisionDeskQuality
+    warnings: tuple[str, ...] = ()
+    result_id: str = ""
+    stock_codes: tuple[str, ...] = ()
+    profile_id: str = ""
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"as_of_date": self.as_of_date.isoformat() if self.as_of_date else None,
+                "quality": self.quality.value, "warnings": list(self.warnings),
+                "result_id": self.result_id, "stock_codes": list(self.stock_codes),
+                "profile_id": self.profile_id, "context": deepcopy(self.context)}
+
+
+@dataclass(frozen=True)
 class DecisionDeskSnapshot:
     as_of_date: date
     generated_at: datetime
@@ -451,6 +469,8 @@ class DecisionDeskSnapshot:
     stock_focus: DecisionDeskStockFocus | None = None
     market_data_visibility: MarketDataVisibilitySummary | None = None
     warnings: tuple[str, ...] = ()
+    recommendations: RecommendationDeskSummary | None = None
+    source_lineage: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.schema_version <= 0:
@@ -490,4 +510,6 @@ class DecisionDeskSnapshot:
                 if self.market_data_visibility is not None
                 else None
             ),
+            "recommendations": self.recommendations.to_dict() if self.recommendations else None,
+            "source_lineage": deepcopy(self.source_lineage),
         }

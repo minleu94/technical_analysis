@@ -6,6 +6,8 @@
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from enum import Enum
+from copy import deepcopy
+from decimal import Decimal
 import pandas as pd
 
 from app_module.dtos.portfolio_dtos import (
@@ -28,7 +30,7 @@ class RecommendationDTO:
     """股票推薦數據傳輸對象"""
     stock_code: str
     stock_name: str
-    close_price: float
+    close_price: float | Decimal
     price_change: float  # 漲幅百分比
     total_score: float
     indicator_score: float
@@ -102,7 +104,7 @@ class RecommendationDTO:
         return cls(
             stock_code=str(stock_code),
             stock_name=str(stock_name),
-            close_price=float(close_price),
+            close_price=Decimal(str(close_price)),
             price_change=float(price_change),
             total_score=float(total_score),
             indicator_score=float(indicator_score),
@@ -154,6 +156,13 @@ class RecommendationResultDTO:
     liquidity_gate_payload_json: List[Dict[str, Any]] = field(default_factory=list)
     exclusion_quality: Optional[str] = None
     exclusion_warnings_json: List[str] = field(default_factory=list)
+    run_context: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """相容既有保存協調器，以 config 接點接收完整執行快照。"""
+        self.config = deepcopy(self.config)
+        supplied_context = self.config.pop("_recommendation_run_context", {})
+        self.run_context = deepcopy(self.run_context or supplied_context)
 
     def to_dict(self) -> dict:
         """轉換為字典"""
@@ -170,7 +179,8 @@ class RecommendationResultDTO:
             'why_not_payload_json': self.why_not_payload_json,
             'liquidity_gate_payload_json': self.liquidity_gate_payload_json,
             'exclusion_quality': self.exclusion_quality,
-            'exclusion_warnings_json': self.exclusion_warnings_json
+            'exclusion_warnings_json': self.exclusion_warnings_json,
+            'run_context': deepcopy(self.run_context),
         }
     
     @classmethod
@@ -193,7 +203,8 @@ class RecommendationResultDTO:
             why_not_payload_json=list(data.get('why_not_payload_json') or []),
             liquidity_gate_payload_json=list(data.get('liquidity_gate_payload_json') or []),
             exclusion_quality=data.get('exclusion_quality'),
-            exclusion_warnings_json=[str(item) for item in (data.get('exclusion_warnings_json') or [])]
+            exclusion_warnings_json=[str(item) for item in (data.get('exclusion_warnings_json') or [])],
+            run_context=deepcopy(data.get('run_context') or {}),
         )
 
 

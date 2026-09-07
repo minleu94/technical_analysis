@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import date
+from dataclasses import replace
+from copy import deepcopy
+from contextlib import closing
 from pathlib import Path
 import json
 import os
 import sqlite3
 from typing import Any
 
-from app_module.decision_desk_dtos import DecisionDeskSnapshot
+from app_module.decision_desk_dtos import DecisionDeskSnapshot, DecisionDeskQuality, RecommendationDeskSummary
 from app_module.decision_desk_snapshot_storage_dtos import StoredDecisionDeskSnapshot
 from app_module.pre_v2_readiness_service import (
     DEFAULT_MIN_DRY_RUN_DAYS,
@@ -84,7 +87,7 @@ class WorkbenchSourceService:
         today = taiwan_market_today()
         cutoff_date, requested_future_date = _bounded_decision_date(decision_date, today)
         try:
-            with _connect_read_only(self.evidence_db_path) as conn:
+            with closing(_connect_read_only(self.evidence_db_path)) as conn:
                 if not _table_exists(conn, "decision_desk_snapshots"):
                     diagnostics.append("decision_desk_snapshots_table_missing")
                     return None, diagnostics
@@ -129,7 +132,31 @@ class WorkbenchSourceService:
             diagnostics.append("decision_desk_snapshot_missing")
             return None, diagnostics
         try:
-            return _row_to_stored_snapshot(dict(row)).to_decision_desk_snapshot(), diagnostics
+            stored = _row_to_stored_snapshot(dict(row))
+            snapshot = stored.to_decision_desk_snapshot()
+            payload = stored.metadata_json.get("loop_snapshot")
+            if payload is not None:
+                if not isinstance(payload, dict):
+                    raise ValueError("loop_snapshot 必須為 object")
+                recommendation = payload.get("recommendations")
+                summary = None
+                if recommendation is not None:
+                    if not isinstance(recommendation, dict):
+                        raise ValueError("recommendations 必須為 object")
+                    recommendation_date = date.fromisoformat(recommendation["as_of_date"]) if recommendation.get("as_of_date") else None
+                    if recommendation_date is not None and recommendation_date > snapshot.as_of_date:
+                        raise ValueError("保存推薦日期晚於快照決策日")
+                    summary = RecommendationDeskSummary(
+                        as_of_date=recommendation_date, quality=DecisionDeskQuality(recommendation["quality"]),
+                        warnings=tuple(recommendation.get("warnings", ())), result_id=str(recommendation.get("result_id", "")),
+                        stock_codes=tuple(recommendation.get("stock_codes", ())), profile_id=str(recommendation.get("profile_id", "")),
+                        context=deepcopy(recommendation.get("context", {})),
+                    )
+                lineage = payload.get("source_lineage", {})
+                if not isinstance(lineage, dict):
+                    raise ValueError("source_lineage 必須為 object")
+                snapshot = replace(snapshot, recommendations=summary, source_lineage=deepcopy(lineage))
+            return snapshot, diagnostics
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             diagnostics.append(f"decision_desk_snapshot_degraded:{exc}")
             return None, diagnostics

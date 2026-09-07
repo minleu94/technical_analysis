@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import html
 import json
 from typing import Optional, Type
 
 import pandas as pd
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QLabel, QToolButton, QVBoxLayout, QWidget
 
 from ui_qt.widgets.chart_payloads import (
     build_drawdown_chart_payload,
@@ -41,15 +43,47 @@ class _FastCanvasChartWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        self.numeric_toggle = QToolButton(self)
+        self.numeric_toggle.setText("顯示數值")
+        self.numeric_toggle.setCheckable(True)
+        self.numeric_toggle.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.numeric_toggle.setAccessibleName("顯示圖表文字數值")
+        self.numeric_toggle.setToolTip("展開可讀的日期、數值與區間筆數。")
+        layout.addWidget(self.numeric_toggle)
+
+        self.numeric_text = QLabel(self)
+        self.numeric_text.setObjectName("chartNumericAlternative")
+        self.numeric_text.setWordWrap(True)
+        self.numeric_text.setTextInteractionFlags(
+            Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard
+        )
+        self.numeric_text.setAccessibleName("圖表文字數值替代")
+        self.numeric_text.setAccessibleDescription(
+            "圖表的日期、數值或區間筆數文字替代；可使用鍵盤選取。"
+        )
+        self.numeric_text.setVisible(False)
+        layout.addWidget(self.numeric_text)
+        self.numeric_toggle.toggled.connect(self.numeric_text.setVisible)
+
         if not HAS_QTWEBENGINE:
             self.web_view = None
-            self.fallback_label = QLabel("Fast chart unavailable: QtWebEngine is not installed.")
+            self.fallback_label = QLabel(
+                "快速圖表目前無法載入（未安裝 QtWebEngine）；請展開下方數值資料。"
+            )
             self.fallback_label.setStyleSheet("color: #666; padding: 12px;")
+            self.fallback_label.setWordWrap(True)
+            self.fallback_label.setAccessibleName("快速圖表替代訊息")
             layout.addWidget(self.fallback_label)
+            self._set_payload(self.empty_payload())
             return
 
         self.web_view = QWebEngineView(self)
         self.web_view.setMinimumSize(400, 300)
+        self.web_view.setFocusPolicy(Qt.StrongFocus)
+        self.web_view.setAccessibleName("快速圖表")
+        self.web_view.setAccessibleDescription(
+            "可使用方向鍵、Home、End 瀏覽圖表資料；也可展開下方文字數值。"
+        )
         layout.addWidget(self.web_view)
         self._set_payload(self.empty_payload())
 
@@ -57,10 +91,16 @@ class _FastCanvasChartWidget(QWidget):
         return {"kind": "empty", "title": "Chart"}
 
     def _set_payload(self, payload: dict):
+        self._update_numeric_alternative(payload)
         if self.web_view is None:
-            self.fallback_label.setText("Fast chart unavailable: QtWebEngine is not installed.")
+            self.fallback_label.setText(
+                "快速圖表目前無法載入（未安裝 QtWebEngine）；請展開下方數值資料。"
+            )
             return
         self.web_view.setHtml(_build_html(payload))
+
+    def _update_numeric_alternative(self, payload: dict) -> None:
+        self.numeric_text.setText(_numeric_alternative_text(payload))
 
 
 class FastEquityCurveWidget(_FastCanvasChartWidget):
@@ -170,8 +210,107 @@ def select_holding_days_histogram_widget_class(
     return HoldingDaysHistogramWidget
 
 
+def _format_chart_value(value) -> str:
+    """以不改變原始值的方式，呈現文字替代所需的數字。"""
+
+    if value is None:
+        return "N/A"
+    if isinstance(value, bool):
+        return str(value)
+    try:
+        if isinstance(value, int):
+            return f"{value:,}"
+        rendered = f"{value:,.6g}"
+        return rendered
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _numeric_alternative_text(payload: dict, max_rows: int = 200) -> str:
+    """建立 canvas 圖表的可選取文字數值替代。
+
+    圖表本身仍由 canvas 繪製；此摘要將同一份 payload 的日期、數值、
+    histogram 區間與筆數提供給鍵盤及螢幕閱讀器使用者。大量資料只截取
+    前 ``max_rows`` 筆，並明確標示省略數量。
+    """
+
+    if not isinstance(payload, dict):
+        return "圖表文字數值替代\n目前沒有可顯示的資料。"
+
+    title = str(payload.get("title") or "圖表")
+    lines = [f"{title}｜文字數值替代"]
+    limit = max(1, int(max_rows))
+    rendered_rows = 0
+
+    bins = payload.get("bins") or []
+    if bins:
+        lines.append(f"區間數：{len(bins)}；格式：區間｜筆數")
+        for item in bins[:limit]:
+            if not isinstance(item, dict):
+                continue
+            label = item.get("label")
+            if not label:
+                label = (
+                    f"{_format_chart_value(item.get('start'))}–"
+                    f"{_format_chart_value(item.get('end'))}"
+                )
+            lines.append(f"{label}｜{_format_chart_value(item.get('count'))}")
+            rendered_rows += 1
+        if len(bins) > rendered_rows:
+            lines.append(f"（其餘 {len(bins) - rendered_rows} 個區間略）")
+    else:
+        series_groups = []
+        if payload.get("equity"):
+            series_groups.append(("策略淨值", payload.get("equity") or []))
+            if payload.get("benchmark"):
+                series_groups.append(("基準", payload.get("benchmark") or []))
+        elif payload.get("series"):
+            series_groups.append((str(payload.get("yLabel") or "數值"), payload.get("series") or []))
+
+        if series_groups:
+            total_points = sum(len(points) for _, points in series_groups)
+            lines.append(f"資料點數：{total_points}；格式：日期｜數值")
+            remaining = limit
+            for name, points in series_groups:
+                if not points or remaining <= 0:
+                    continue
+                lines.append(f"{name}：")
+                for point in points[:remaining]:
+                    if not isinstance(point, dict):
+                        continue
+                    time_label = str(point.get("time") or "未標示日期")
+                    lines.append(f"{time_label}｜{_format_chart_value(point.get('value'))}")
+                    rendered_rows += 1
+                    remaining -= 1
+            if total_points > rendered_rows:
+                lines.append(f"（其餘 {total_points - rendered_rows} 個資料點略）")
+        else:
+            lines.append("目前沒有可顯示的數值資料。")
+
+    markers = payload.get("markers") or []
+    marker_lines = []
+    for marker in markers[:limit]:
+        if not isinstance(marker, dict):
+            continue
+        label = str(marker.get("label") or marker.get("time") or "標記")
+        value = marker.get("value")
+        if value is None:
+            marker_lines.append(label)
+        else:
+            marker_lines.append(f"{label}：{_format_chart_value(value)}")
+    if marker_lines:
+        lines.append("標記：" + "；".join(marker_lines))
+
+    return "\n".join(lines)
+
+
 def _build_html(payload: dict) -> str:
     payload_json = json.dumps(payload, ensure_ascii=False)
+    title = html.escape(str(payload.get("title") or "圖表"), quote=True)
+    chart_aria_label = (
+        f"{title}；可使用方向鍵、Home、End 瀏覽資料，"
+        "或展開下方文字數值替代"
+    )
     return f"""<!doctype html>
 <html>
 <head>
@@ -209,11 +348,28 @@ def _build_html(payload: dict) -> str:
       box-shadow: 0 8px 20px rgba(0,0,0,0.28);
       white-space: pre;
     }}
+    .sr-only {{
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }}
+    canvas:focus {{
+      outline: 2px solid #60a5fa;
+      outline-offset: -2px;
+    }}
   </style>
 </head>
 <body>
   <div id="wrap">
-    <canvas id="chart"></canvas>
+    <canvas id="chart" tabindex="0" role="img" aria-label="{chart_aria_label}"
+      aria-describedby="chart-data-summary" aria-keyshortcuts="ArrowLeft ArrowRight Home End"></canvas>
+    <div id="chart-data-summary" class="sr-only">圖表資料已同步至外部文字數值替代；請展開「顯示數值」。</div>
     <div id="tooltip"></div>
   </div>
   <script>
@@ -576,6 +732,38 @@ def _build_html(payload: dict) -> str:
       hoverX = null;
       tooltip.style.display = 'none';
       draw();
+    }});
+    function keyboardSeries() {{
+      return payload.equity || payload.series || [];
+    }}
+    function setKeyboardPoint(index) {{
+      const series = keyboardSeries();
+      const points = allPoints();
+      if (!series.length || !points.length) return false;
+      const area = plotArea();
+      const range = ranges(points);
+      if (!range) return false;
+      const bounded = Math.max(0, Math.min(series.length - 1, index));
+      hoverX = xForIndex(bounded, area, range);
+      draw();
+      return true;
+    }}
+    canvas.addEventListener('keydown', event => {{
+      const series = keyboardSeries();
+      if (!series.length) return;
+      const area = plotArea();
+      const range = ranges(allPoints());
+      if (!range) return;
+      const current = hoverX === null
+        ? 0
+        : Math.round((hoverX - area.left) / (area.right - area.left) * range.maxX);
+      let next = current;
+      if (event.key === 'ArrowLeft') next = current - 1;
+      else if (event.key === 'ArrowRight') next = current + 1;
+      else if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = series.length - 1;
+      else return;
+      if (setKeyboardPoint(next)) event.preventDefault();
     }});
     window.addEventListener('resize', resize);
     resize();

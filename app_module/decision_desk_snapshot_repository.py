@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from copy import deepcopy
+from contextlib import closing
+from datetime import date
 import json
 from pathlib import Path
 import sqlite3
@@ -9,6 +12,8 @@ from typing import Any
 from app_module.decision_desk_snapshot_storage_dtos import StoredDecisionDeskSnapshot
 from app_module.research_run_dtos import canonical_json
 from app_module.evidence_event_service import utc_timestamp
+from app_module.decision_desk_dtos import DecisionDeskSnapshot, RecommendationDeskSummary, DecisionDeskQuality
+from app_module.decision_desk_snapshot_storage_dtos import build_stored_decision_desk_snapshot
 
 
 class DecisionDeskSnapshotRepository:
@@ -29,7 +34,7 @@ class DecisionDeskSnapshotRepository:
             self.ensure_schema()
 
     def ensure_schema(self) -> None:
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS schema_version (
@@ -92,7 +97,7 @@ class DecisionDeskSnapshotRepository:
 
         created_at = snapshot.created_at or utc_timestamp()
         row_snapshot = replace(snapshot, created_at=created_at, snapshot_status="active")
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             conn.execute(
                 """
                 UPDATE decision_desk_snapshots
@@ -112,6 +117,45 @@ class DecisionDeskSnapshotRepository:
         if saved is None:
             raise RuntimeError(f"decision desk snapshot not found after insert: {row_snapshot.snapshot_id}")
         return saved
+
+    def save_loop_snapshot(self, snapshot: DecisionDeskSnapshot) -> StoredDecisionDeskSnapshot:
+        """沿用既有 schema 保存完整閉環 payload，不新增第二個資料庫權威。"""
+        payload = snapshot.to_dict()
+        payload.pop("generated_at", None)
+        stored = build_stored_decision_desk_snapshot(
+            snapshot, source_version="decision-loop.v1", builder_version="DecisionDeskSnapshotBuilder:loop-v1",
+            metadata={"loop_snapshot": payload},
+        )
+        return self.save_snapshot(stored)
+
+    def load_loop_snapshot_payload(self, snapshot_id: str) -> dict[str, Any] | None:
+        stored = self.get_snapshot(snapshot_id)
+        if stored is None:
+            return None
+        payload = stored.metadata_json.get("loop_snapshot")
+        if not isinstance(payload, dict):
+            return None
+        result = deepcopy(payload)
+        result["generated_at"] = stored.metadata_json.get("generated_at")
+        return result
+
+    def load_loop_snapshot(self, snapshot_id: str) -> DecisionDeskSnapshot | None:
+        stored = self.get_snapshot(snapshot_id)
+        if stored is None:
+            return None
+        snapshot = stored.to_decision_desk_snapshot()
+        payload = stored.metadata_json.get("loop_snapshot") or {}
+        recommendation = payload.get("recommendations")
+        summary = None
+        if isinstance(recommendation, dict):
+            summary = RecommendationDeskSummary(
+                as_of_date=date.fromisoformat(recommendation["as_of_date"]) if recommendation.get("as_of_date") else None,
+                quality=DecisionDeskQuality(recommendation["quality"]),
+                warnings=tuple(recommendation.get("warnings", ())), result_id=recommendation.get("result_id", ""),
+                stock_codes=tuple(recommendation.get("stock_codes", ())), profile_id=recommendation.get("profile_id", ""),
+                context=deepcopy(recommendation.get("context", {})),
+            )
+        return replace(snapshot, recommendations=summary, source_lineage=deepcopy(payload.get("source_lineage", {})))
 
     def get_snapshot(self, snapshot_id: str) -> StoredDecisionDeskSnapshot | None:
         return self._fetch_one("snapshot_id = ?", (snapshot_id,))
@@ -153,7 +197,7 @@ class DecisionDeskSnapshotRepository:
     def archive(self, snapshot_id: str) -> bool:
         if self.read_only:
             raise RuntimeError("read-only decision desk snapshot repository cannot archive snapshots")
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn, conn:
             cursor = conn.execute(
                 "UPDATE decision_desk_snapshots SET snapshot_status = 'archived' WHERE snapshot_id = ?",
                 (snapshot_id,),
@@ -172,7 +216,7 @@ class DecisionDeskSnapshotRepository:
             conn = sqlite3.connect(f"file:{uri_path}?mode=ro", uri=True)
         else:
             conn = sqlite3.connect(self.db_path)
-        with conn:
+        with closing(conn), conn:
             conn.row_factory = sqlite3.Row
             try:
                 rows = conn.execute(sql, params).fetchall()

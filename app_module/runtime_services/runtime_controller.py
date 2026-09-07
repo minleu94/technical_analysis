@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections import OrderedDict
+from dataclasses import asdict
+import json
 import time
 from typing import Callable
 
@@ -16,7 +19,7 @@ from app_module.runtime_services.snapshot_service import RuntimeSnapshotService
 from app_module.runtime_services.environment_readiness_service import (
     EnvironmentReadinessService,
 )
-from app_module.dtos.runtime_dtos import EnvironmentReadinessSnapshotDTO
+from app_module.dtos.runtime_dtos import EnvironmentReadinessSnapshotDTO, RuntimeEventDTO
 from runtime.interfaces.store_interface import RuntimeEventCursor
 from runtime.store.local_file_store import LocalFileStore
 
@@ -50,6 +53,7 @@ class RuntimeController:
         self._last_environment_poll_at: float | None = None
         self._environment_poll_interval_seconds = 30.0
         self.runtime_event_diagnostics: list[str] = []
+        self._recent_event_payloads: OrderedDict[str, str] = OrderedDict()
 
     def poll_updates(self) -> None:
         """由 Qt timer 觸發；不寫入 Runtime、排程、DB 或任何資料來源。"""
@@ -63,6 +67,7 @@ class RuntimeController:
         update = self.event_stream_service.read_new_events(self._event_cursor, limit=50)
         if update.cursor_reset:
             self._record_diagnostic("runtime_event_cursor_reset")
+            self._recent_event_payloads.clear()
         if update.invalid_line_count:
             self._record_diagnostic(
                 f"runtime_event_invalid_lines:{update.invalid_line_count}"
@@ -73,8 +78,26 @@ class RuntimeController:
             )
 
         for event in update.events:
-            self.event_bus.publish_event(event)
+            if self._remember_event(event):
+                self.event_bus.publish_event(event)
         self._event_cursor = update.next_cursor
+
+    def _remember_event(self, event: RuntimeEventDTO) -> bool:
+        if not event.event_id:
+            return True
+        payload = json.dumps(asdict(event), sort_keys=True, ensure_ascii=False, default=str)
+        previous = self._recent_event_payloads.get(event.event_id)
+        if previous == payload:
+            self._recent_event_payloads.move_to_end(event.event_id)
+            return False
+        if previous is not None:
+            self._record_diagnostic(f"runtime_event_id_conflict:{event.event_id}")
+        self._recent_event_payloads[event.event_id] = payload
+        self._recent_event_payloads.move_to_end(event.event_id)
+        # 只保存本次 observer 最近 2,000 個 ID；不聲稱 durable exactly-once。
+        if len(self._recent_event_payloads) > 2000:
+            self._recent_event_payloads.popitem(last=False)
+        return True
 
     def _publish_scheduled_operations_if_due(self) -> None:
         if self.scheduled_operations_service is None:

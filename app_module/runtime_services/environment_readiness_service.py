@@ -178,6 +178,9 @@ class EnvironmentReadinessService:
                 registry_repository = ResearchRunRepository(
                     SimpleNamespace(research_run_db_file=database_path)
                 )
+                # Repository construction is intentionally read-only; the
+                # probe must opt into schema creation on this disposable DB.
+                registry_repository.ensure_schema()
                 # ResearchRunRepository's schema bootstrap is intentionally
                 # kept outside the production path.  Release its bootstrap
                 # connection before Windows removes the ephemeral directory.

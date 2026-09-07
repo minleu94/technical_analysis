@@ -3,7 +3,7 @@
     QTextEdit, QLabel, QListWidget, QGroupBox, QListWidgetItem, QSizePolicy,
     QScrollArea, QFrame
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.theme_widgets import EmptyStatePanel
@@ -320,18 +320,28 @@ class RuntimeView(QWidget):
             splitter.setOrientation(desired_orientation)
             splitter.updateGeometry()
 
+    @Slot(RuntimeStateSnapshotDTO)
     def on_state_updated(self, dto: RuntimeStateSnapshotDTO) -> None:
         """Pure rendering slot for State Snapshot DTO"""
         objective = dto.task_objective
         if not objective or objective == "No task assigned":
             objective = "尚未指派治理任務"
-        status = STATE_LABELS.get(str(dto.task_status), str(dto.task_status))
+        status = "未知（來源未確認）" if dto.task_status == "UNKNOWN" else STATE_LABELS.get(str(dto.task_status), str(dto.task_status))
         self.objective_label.setText(f"目前治理目標：{objective}")
         self.status_label.setText(f"任務流程狀態：{status}")
+        self.status_label.setToolTip(
+            f"task_read_state: {dto.task_read_state}\n"
+            f"raw_status: {dto.raw_task_status or dto.task_status}\n"
+            + "\n".join(dto.diagnostics)
+        )
 
         ctx_text = "目前上下文檔案：\n" + "\n".join(dto.active_context_files)
+        if dto.context_read_state != "observed":
+            ctx_text += "\n上下文來源未確認，不能視為已載入。"
         self.context_text.setText(ctx_text)
+        self.context_text.setToolTip("\n".join(dto.diagnostics))
 
+    @Slot(RuntimeHealthSnapshotDTO)
     def on_health_updated(self, dto: RuntimeHealthSnapshotDTO) -> None:
         """Pure rendering slot for Health Analytics DTO"""
         if dto.observation_scope != "current":
@@ -367,6 +377,7 @@ class RuntimeView(QWidget):
         else:
             self.last_violation_label.setText("最近重大違規：無")
 
+    @Slot(ScheduledOperationsSnapshotDTO)
     def on_scheduled_operations_updated(self, dto: ScheduledOperationsSnapshotDTO) -> None:
         """純渲染已保存的日常營運狀態；不呼叫排程或資料更新。"""
         overall_label = "正常" if dto.overall_state == "operational" else "需要注意"
@@ -398,6 +409,7 @@ class RuntimeView(QWidget):
             )
             self.operations_list.addItem(item)
 
+    @Slot(EnvironmentReadinessSnapshotDTO)
     def on_environment_readiness_updated(
         self,
         dto: EnvironmentReadinessSnapshotDTO,
@@ -479,6 +491,7 @@ class RuntimeView(QWidget):
         else:
             self.last_violation_label.setText("最近歷史重大違規：無")
 
+    @Slot(RuntimeEventDTO)
     def on_event_received(self, dto: RuntimeEventDTO) -> None:
         """Pure rendering slot for appending event logs"""
         self.event_empty_state.hide()

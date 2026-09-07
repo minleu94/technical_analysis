@@ -145,3 +145,8 @@ class RuntimeStateSnapshotDTO:
     task_status: str
     active_context_files: List[str]
     recent_transitions: List[RuntimeTransitionDTO] = field(default_factory=list)
+    task_read_state: str = "observed"
+    context_read_state: str = "observed"
+    raw_task_status: str = ""
+    diagnostics: tuple[str, ...] = ()
+    schema_version: str = "runtime-state.v2"
