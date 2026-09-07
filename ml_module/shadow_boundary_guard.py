@@ -32,6 +32,15 @@ ALLOWED_READ_ONLY_PRODUCTION_ML_IMPORTS = {
     "app_module/portfolio_allocation_service.py": frozenset(
         {"ml_module.allocation_validation"}
     ),
+    # Release adapter is the single, hash-verified application boundary for
+    # optional shadow allocation inference.  It may import only the immutable
+    # release and row contracts; production decisions remain fail-closed.
+    "app_module/allocation_release_adapter.py": frozenset(
+        {
+            "ml_module.allocation_contracts",
+            "ml_module.allocation_release_contract",
+        }
+    ),
 }
 FORBIDDEN_TRUE_FLAGS = frozenset(
     {

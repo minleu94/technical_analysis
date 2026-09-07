@@ -63,7 +63,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=8_192)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--memory-budget-mb", type=int, default=4_096)
-    parser.add_argument("--temporary-storage-budget-bytes", type=int)
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+    )
+    parser.add_argument("--safety-reserve-bytes", type=int)
     parser.add_argument("--poll-seconds", type=int, default=15)
     parser.add_argument("--status-path", type=Path)
     parser.add_argument(
@@ -377,6 +389,17 @@ def _direct_build_command(args: argparse.Namespace) -> list[str]:
                 "--temporary-storage-budget-bytes",
                 str(args.temporary_storage_budget_bytes),
             ]
+        )
+    if getattr(args, "persistent_storage_budget_bytes", None) is not None:
+        command.extend(
+            [
+                "--persistent-storage-budget-bytes",
+                str(args.persistent_storage_budget_bytes),
+            ]
+        )
+    if getattr(args, "safety_reserve_bytes", None) is not None:
+        command.extend(
+            ["--safety-reserve-bytes", str(args.safety_reserve_bytes)]
         )
     return command
 

@@ -670,10 +670,30 @@ def _run_inference(
     policy_hash: str,
     expected_universe_hash: str,
 ) -> Mapping[str, Any]:
+    # 新 release manifest 存在時走 hash-bound adapter；舊 training manifest
+    # 測試／歷史輸出沒有 release contract 時維持相容的 immutable artifact path。
+    # 這個判斷不會自動把舊 artifact 升格；若 manifest 存在但驗證失敗，
+    # adapter 例外會讓整個 ML stage fail closed。
+    if (release.release_root / "release_manifest.json").is_file():
+        return _infer_ml_allocation(
+            artifact_path=None,
+            expected_artifact_hash=None,
+            expected_dataset_id=None,
+            release_root=release.release_root,
+            input_path=input_path,
+            model_id=model_id,
+            universe_id=universe_id,
+            policy_id=policy_id,
+            policy_hash=policy_hash,
+            expected_universe_hash=expected_universe_hash,
+            proposal_output=proposal_output,
+            audit_output=audit_output,
+        )
     return _infer_ml_allocation(
         artifact_path=release.artifact_path,
         expected_artifact_hash=release.artifact_hash,
         expected_dataset_id=release.dataset_id,
+        release_root=None,
         input_path=input_path,
         model_id=model_id,
         universe_id=universe_id,

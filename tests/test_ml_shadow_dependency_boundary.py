@@ -75,6 +75,22 @@ def test_guard_allows_portfolio_consumer_side_promotion_verifier(
     assert report.violations == ()
 
 
+def test_guard_allows_only_hash_verified_release_adapter_contracts(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "app_module").mkdir()
+    (tmp_path / "ml_module").mkdir()
+    (tmp_path / "app_module" / "allocation_release_adapter.py").write_text(
+        "from ml_module.allocation_contracts import PortfolioMLDatasetRow\n"
+        "from ml_module.allocation_release_contract import AllocationReleaseManifest\n",
+        encoding="utf-8",
+    )
+
+    report = MLShadowBoundaryGuard(tmp_path).inspect()
+
+    assert report.violations == ()
+
+
 def test_guard_detects_ml_import_of_production_decision_path(tmp_path: Path) -> None:
     (tmp_path / "ml_module").mkdir()
     (tmp_path / "ml_module" / "bad.py").write_text(

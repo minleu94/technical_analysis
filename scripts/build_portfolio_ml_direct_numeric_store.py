@@ -36,7 +36,23 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=8_192)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--memory-budget-mb", type=int, default=4_096)
-    parser.add_argument("--temporary-storage-budget-bytes", type=int)
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+    )
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        dest="safety_reserve_bytes",
+        type=int,
+    )
     parser.add_argument("--no-resume", action="store_true")
     return parser
 
@@ -69,6 +85,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 temporary_storage_budget_bytes=(
                     args.temporary_storage_budget_bytes
                 ),
+                persistent_storage_budget_bytes=(
+                    args.persistent_storage_budget_bytes
+                ),
+                safety_reserve_bytes=args.safety_reserve_bytes,
                 resume=not args.no_resume,
             )
         )

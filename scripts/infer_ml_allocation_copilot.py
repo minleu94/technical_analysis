@@ -2,7 +2,9 @@
 
 輸入只能是顯式 ``allocation-inference-input-v2`` JSON／JSON.GZ；每列都必須
 是沒有 teacher targets 的 ``PortfolioMLDatasetRow``。模型 artifact 會先以呼叫端
-提供的 SHA-256 驗證，通過後才允許 joblib 反序列化。
+提供的 SHA-256 驗證，通過後才允許 joblib 反序列化。若提供 ``--release-root``，
+則由 ``AllocationReleaseAdapter`` 一次驗證 release manifest、前處理、校準器、
+feature order、missing policy 與 lineage，再執行相同的唯讀推論。
 
 本入口只產生不可執行的 ML proposal 與 replay audit。輸出固定
 ``formal_oos_allowed=false``、``production_action_allowed=false``、
@@ -28,6 +30,9 @@ if str(ROOT) not in sys.path:
 
 from app_module.ml_allocation_inference_service import (  # noqa: E402
     MLAllocationInferenceService,
+)
+from app_module.allocation_release_adapter import (  # noqa: E402
+    AllocationReleaseAdapter,
 )
 from ml_module.allocation_contracts import (  # noqa: E402
     AllocationWeightContract,
@@ -86,18 +91,26 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--artifact",
         type=Path,
-        required=True,
-        help="由受控訓練流程產生的 immutable joblib artifact",
+        required=False,
+        help="由受控訓練流程產生的 immutable joblib artifact；使用 --release-root 時可省略",
     )
     parser.add_argument(
         "--artifact-hash",
-        required=True,
+        required=False,
         help="受控 training manifest 中的 sha256:<64 hex>",
     )
     parser.add_argument(
         "--dataset-id",
-        required=True,
+        required=False,
         help="受控 training manifest 中的 frozen dataset id",
+    )
+    parser.add_argument(
+        "--release-root",
+        type=Path,
+        help=(
+            "選用的 immutable allocation release root；會由 "
+            "AllocationReleaseAdapter 驗證 manifest、artifact、前處理與校準器"
+        ),
     )
     parser.add_argument(
         "--input",
@@ -118,11 +131,33 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_standard_streams_utf8()
     args = _parser().parse_args(argv)
+    if args.release_root is None and (
+        args.artifact is None
+        or args.artifact_hash is None
+        or args.dataset_id is None
+    ):
+        print(
+            json.dumps(
+                {
+                    "status": "blocked",
+                    "message": "請提供 --release-root，或同時提供 --artifact、--artifact-hash、--dataset-id",
+                    "formal_oos_allowed": False,
+                    "production_action_allowed": False,
+                    "production_blend_alpha_bp": 0,
+                    "broker_order_allowed": False,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return 2
     try:
         summary = _run(
             artifact_path=args.artifact,
             expected_artifact_hash=args.artifact_hash,
             expected_dataset_id=args.dataset_id,
+            release_root=args.release_root,
             input_path=args.input,
             model_id=args.model_id,
             universe_id=args.universe_id,
@@ -167,9 +202,10 @@ def _configure_standard_streams_utf8() -> None:
 
 def _run(
     *,
-    artifact_path: Path,
-    expected_artifact_hash: str,
-    expected_dataset_id: str,
+    artifact_path: Path | None,
+    expected_artifact_hash: str | None,
+    expected_dataset_id: str | None,
+    release_root: Path | None = None,
     input_path: Path,
     model_id: str,
     universe_id: str,
@@ -179,26 +215,46 @@ def _run(
     proposal_output: Path,
     audit_output: Path,
 ) -> dict[str, Any]:
+    if release_root is not None:
+        release = AllocationReleaseAdapter().load(release_root)
+        artifact_for_paths = release_root / release.manifest.artifact_file
+    else:
+        if artifact_path is None or expected_artifact_hash is None or expected_dataset_id is None:
+            raise ValueError(
+                "artifact_path、expected_artifact_hash 與 expected_dataset_id 必須同時提供"
+            )
+        artifact_for_paths = artifact_path
+        release = None
     _validate_distinct_paths(
-        artifact_path=artifact_path,
+        artifact_path=artifact_for_paths,
         input_path=input_path,
         proposal_output=proposal_output,
         audit_output=audit_output,
     )
-    service = MLAllocationInferenceService.from_artifact_path(
-        artifact_path,
-        expected_artifact_hash=expected_artifact_hash,
-        expected_dataset_id=expected_dataset_id,
-    )
     rows = _load_rows(input_path)
-    result = service.infer(
-        rows=rows,
-        model_id=model_id,
-        universe_id=universe_id,
-        policy_id=policy_id,
-        policy_hash=policy_hash,
-        expected_universe_hash=expected_universe_hash,
-    )
+    if release is not None:
+        result = release.infer(
+            rows=rows,
+            model_id=model_id,
+            universe_id=universe_id,
+            policy_id=policy_id,
+            policy_hash=policy_hash,
+            expected_universe_hash=expected_universe_hash,
+        )
+    else:
+        service = MLAllocationInferenceService.from_artifact_path(
+            artifact_for_paths,
+            expected_artifact_hash=expected_artifact_hash,
+            expected_dataset_id=expected_dataset_id,
+        )
+        result = service.infer(
+            rows=rows,
+            model_id=model_id,
+            universe_id=universe_id,
+            policy_id=policy_id,
+            policy_hash=policy_hash,
+            expected_universe_hash=expected_universe_hash,
+        )
     proposal_payload = {
         "schema_version": PROPOSAL_SCHEMA_VERSION,
         "status": "inference_completed",

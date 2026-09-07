@@ -19,7 +19,7 @@ import hashlib
 from io import BytesIO
 import json
 from pathlib import Path
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Callable, Mapping, Sequence, cast
 from zoneinfo import ZoneInfo
 
 import joblib
@@ -175,6 +175,7 @@ class MLAllocationInferenceService:
         artifact_bytes: bytes,
         expected_artifact_hash: str,
         expected_dataset_id: str,
+        probability_calibrator: Callable[[int], int] | None = None,
     ) -> None:
         if not isinstance(artifact_bytes, bytes) or not artifact_bytes:
             raise TypeError("artifact_bytes must be non-empty bytes")
@@ -199,6 +200,7 @@ class MLAllocationInferenceService:
 
         self._artifact_hash = actual_hash
         self._artifact = artifact
+        self._probability_calibrator = probability_calibrator
 
     @classmethod
     def from_artifact_path(
@@ -207,6 +209,7 @@ class MLAllocationInferenceService:
         *,
         expected_artifact_hash: str,
         expected_dataset_id: str,
+        probability_calibrator: Callable[[int], int] | None = None,
     ) -> "MLAllocationInferenceService":
         path = Path(artifact_path)
         if not path.is_file():
@@ -215,6 +218,7 @@ class MLAllocationInferenceService:
             artifact_bytes=path.read_bytes(),
             expected_artifact_hash=expected_artifact_hash,
             expected_dataset_id=expected_dataset_id,
+            probability_calibrator=probability_calibrator,
         )
 
     @property
@@ -666,10 +670,6 @@ class MLAllocationInferenceService:
                     matrix,
                     field_name=f"{expert_key}.{head_id}",
                 )
-                head_values[head_id] = tuple(
-                    _quantize_probability_bp(value)
-                    for value in raw_probability
-                )
                 if head_id == "downside_probability_bp":
                     uncalibrated_probability = (
                         _predict_uncalibrated_probability_array(
@@ -679,11 +679,35 @@ class MLAllocationInferenceService:
                                 f"{expert_key}."
                                 "uncalibrated_downside_probability_bp"
                             ),
+                            allow_raw_fallback=(
+                                self._probability_calibrator is not None
+                            ),
                         )
                     )
                     uncalibrated_downside_values = tuple(
                         _quantize_probability_bp(value)
                         for value in uncalibrated_probability
+                    )
+                    if self._probability_calibrator is not None:
+                        head_values[head_id] = tuple(
+                            _calibrate_probability_bp(
+                                self._probability_calibrator,
+                                value,
+                                field_name=(
+                                    f"{expert_key}.{head_id}"
+                                ),
+                            )
+                            for value in uncalibrated_downside_values
+                        )
+                    else:
+                        head_values[head_id] = tuple(
+                            _quantize_probability_bp(value)
+                            for value in raw_probability
+                        )
+                else:
+                    head_values[head_id] = tuple(
+                        _quantize_probability_bp(value)
+                        for value in raw_probability
                     )
 
             quantized_expected = tuple(
@@ -1455,10 +1479,17 @@ def _predict_uncalibrated_probability_array(
     matrix: NDArray[np.float64],
     *,
     field_name: str,
+    allow_raw_fallback: bool = False,
 ) -> NDArray[np.float64]:
     """重播 calibrated classifier 內各 fold 的原始 estimator 機率。"""
 
     calibrated_folds = getattr(model, "calibrated_classifiers_", None)
+    if calibrated_folds is None and allow_raw_fallback:
+        # OOC release models expose their raw probability predictor directly;
+        # direct sklearn artifacts expose calibrated_classifiers_ and continue
+        # through the fold replay path below.  Keeping this fallback opt-in at
+        # the predictor boundary preserves the historical direct behavior.
+        return _predict_probability_array(model, matrix, field_name=field_name)
     if not isinstance(calibrated_folds, list) or not calibrated_folds:
         raise ValueError(
             f"{field_name} uncalibrated fold estimators are unavailable"
@@ -1482,6 +1513,29 @@ def _predict_uncalibrated_probability_array(
         axis=0,
         dtype=float,  # numeric-boundary: analytics
     )
+
+
+def _calibrate_probability_bp(
+    calibrator: Callable[[int], int],
+    raw_probability_bp: int,
+    *,
+    field_name: str,
+) -> int:
+    """套用 release-bound integer calibrator 並重新檢查 bp 邊界。"""
+
+    try:
+        calibrated = calibrator(raw_probability_bp)
+    except Exception as exc:
+        raise ValueError(f"{field_name} calibration failed") from exc
+    if (
+        isinstance(calibrated, bool)
+        or not isinstance(calibrated, int)
+        or not 0 <= calibrated <= 10_000
+    ):
+        raise ValueError(
+            f"{field_name} calibrated probability must be integer bp"
+        )
+    return calibrated
 
 
 def _rank_bp(

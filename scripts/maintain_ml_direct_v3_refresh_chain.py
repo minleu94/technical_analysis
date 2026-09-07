@@ -118,7 +118,19 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=8_192)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--memory-budget-mb", type=int, default=4_096)
-    parser.add_argument("--temporary-storage-budget-bytes", type=int)
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+    )
+    parser.add_argument("--safety-reserve-bytes", type=int)
     parser.add_argument("--poll-seconds", type=int, default=30)
     parser.add_argument("--retry-delay-seconds", type=int, default=30)
     parser.add_argument(
@@ -1013,7 +1025,15 @@ def _continuation_command(
             if formal_rule_champion_history is None
             else formal_rule_champion_history,
         ),
-        ("--temporary-storage-budget-bytes", args.temporary_storage_budget_bytes),
+        (
+            "--temporary-storage-budget-bytes",
+            getattr(args, "temporary_storage_budget_bytes", None),
+        ),
+        (
+            "--persistent-storage-budget-bytes",
+            getattr(args, "persistent_storage_budget_bytes", None),
+        ),
+        ("--safety-reserve-bytes", getattr(args, "safety_reserve_bytes", None)),
     )
     for flag, value in optional:
         if value is not None:

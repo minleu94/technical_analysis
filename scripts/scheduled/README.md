@@ -9,7 +9,7 @@ These wrappers are intentionally conservative. They use CMD files and Windows bu
 | `baldr-data-update-quick-daily` | enabled after register | daily local time 04:20 | Runs the non-UI quick data update path for the recent weekday window. Writes market data CSV / SQLite updates plus status and logs under `OUTPUT_ROOT/scheduled/data_update_quick/`. If TPEX has failed dates, the task continues later steps and writes `passed_with_warnings`. |
 | `baldr-official-market-events-daily` | enabled after register | daily local time 04:50 | 以官方來源建立 append-only market-event vintages；無公告／生效／修訂時間的事件 fail closed，不反推歷史可得時間。若 verified latest publication 的歷史起點被縮窄，task 會自動切換到 2014–當年度做 recovery；coverage 完整後才恢復兩年增量，避免 pointer 長期遺失歷史。 |
 | `baldr-data-freshness-check-daily` | enabled after register | daily local time 05:00 | Read-only SQLite / `DATA_ROOT` freshness check. Also verifies raw TWSE / TPEX daily price files for the latest SQLite daily date. Writes only status and logs under `OUTPUT_ROOT/scheduled/data_freshness/`. |
-| `baldr-ml-raw-pit-refresh-daily` | enabled after register | daily local time 05:05 | 先讀取 data-update quick 的 terminal freshness proof；daily／technical core date 就緒且輸出磁碟通過唯讀 20 GiB headroom preflight 時，以 SQLite `mode=ro/query_only` 建立全市場 immutable raw PIT publication。空間不足只寫 `blocked_insufficient_storage`，不啟動 builder；既有同 cutoff 且較新的 publication 會跳過，不寫回來源 SQLite、不改變 formal gate；完成後由 Direct/OOC maintenance watcher 依 pointer/hash 自動接續。 |
+| `baldr-ml-raw-pit-refresh-daily` | enabled after register | daily local time 05:05 | 先讀取 data-update quick 的 terminal freshness proof；daily／technical core date 就緒且輸出磁碟通過唯讀容量 preflight 時，以 SQLite `mode=ro/query_only` 建立全市場 immutable raw PIT publication。相容預設仍為 20 GiB，但要保留日常更新與額外餘裕，應由 owner 明確傳入 125 GiB safety reserve，使全鏈 required headroom 達 200 GiB。空間不足只寫 `blocked_insufficient_storage`，不啟動 builder；既有同 cutoff 且較新的 publication 會跳過，不寫回來源 SQLite、不改變 formal gate；完成後由 Direct/OOC maintenance watcher 依 pointer/hash 自動接續。 |
 | `baldr-recommendation-snapshot-daily` | enabled after register | daily local time 05:10 | Runs the research-only recommendation snapshot path after freshness. Saves one recommendation result under `OUTPUT_ROOT/recommendation/runs/` and writes status/logs under `OUTPUT_ROOT/scheduled/recommendation_snapshot/`. It does not write the production evidence DB, does not confirm evidence, does not change portfolio state, and does not automate trading. |
 | `baldr-evidence-pipeline-dry-run-daily` | enabled after register | daily local time 05:15 | Runs `scripts/run_evidence_pipeline.py` with `--dry-run` and forwards the resolved `DATA_ROOT` / `OUTPUT_ROOT` explicitly. Writes only report, status, and logs under `OUTPUT_ROOT/scheduled/evidence_pipeline_dry_run/`. Scheduled status inherits freshness and pipeline overall status: missing / stale / blocking data is `degraded`, while complete observed-or-estimated MoneyDJ provenance is `ready_with_advisories`. |
 | `baldr-ml-promotion-evidence-daily` | enabled after register | daily local time 05:17 | 固定 discovery 並重驗 formal OOC v5、雙 replay、Shadow outcome、逐 horizon calibration／drift 與 hash custody。證據不完整時只寫 blocked status，不更新 compatible pointer；若 OOC readiness 不足，blocker 會附上 `formal_ooc_dataset_full_market_not_ready:<readiness_check,...>` 的具體檢查名；若 direct store 落後最新 verified official market-event publication，會輸出 `formal_ooc_corporate_action_custody_stale:<field,...>`；完整時也只發布 unsigned evidence。 |
@@ -37,12 +37,17 @@ dataset safety、`decision_at` 與 official market-event custody，再把已驗�
 immutable manifest 傳給既有 Direct → OOC maintainer。它不建立 raw data、不改寫
 來源 SQLite、不建立歷史 sector membership，也不把 `companies.csv` 當成 PIT sidecar。
 
-wrapper 在取得 immutable input 後、啟動 maintainer 前會做唯讀 filesystem
-headroom preflight。預設要求輸出所在磁碟至少保留 20 GiB；不足時只寫
-`status=blocked_insufficient_storage` 與 `storage_preflight`（含 total／used／free
-bytes），不建立 Direct/OOC worker、不進入 retry loop，也不刪除既有 run。可用
-`--minimum-free-space-bytes` 在受控環境調整門檻；這個門檻不是 Formal／promotion
-gate，實際 owner 仍須依 raw shard 估算與 rollback 空間確認容量。
+wrapper 在取得 immutable input 後、啟動 maintainer 前會做唯讀三段 filesystem
+capacity preflight。Direct chain 相容預設檢查 35 GiB 持久新增、40 GiB 暫存峰值與 20 GiB
+安全保留；raw PIT wrapper 預設檢查 35 GiB 持久新增與 20 GiB 安全保留。任一項不足時只寫
+`status=blocked_insufficient_storage` 與 `storage_preflight.capacity_budget`（含
+total／used／free bytes 與 blockers），不建立 Direct/OOC worker、不進入 retry loop，也不
+刪除既有 run。可用 `--persistent-storage-budget-bytes`、`--temporary-storage-budget-bytes`
+與 `--safety-reserve-bytes` 在受控環境調整；舊的 `--minimum-free-space-bytes` 仍作相容安全
+保留門檻。全鏈啟動前建議以 `--safety-reserve-bytes 134217728000`（125 GiB）搭配
+35 GiB 持久新增與 40 GiB 暫存峰值，將 required headroom 固定為 200 GiB；先用
+`--preflight-only` 驗證，再由 owner 依 raw shard 估算與 rollback 空間確認容量。這個容量政策
+不是 Formal／promotion gate。
 
 狀態寫入：
 
@@ -172,6 +177,12 @@ the raw base vector consumed by the meta allocator. A later training manifest
 may therefore replace `classifier_calibration_not_cross_fitted` with
 `classifier_calibration_not_attached_to_ooc_model`; that remains a fail-closed
 shadow boundary until a calibration artifact is attached to OOC inference.
+
+若要先做成本後增益的低複雜度 shadow，可直接執行
+`scripts\train_ml_allocation_out_of_core.py --profile minimal_linear_shadow --algorithm ridge_logistic --horizon <H>`；
+這個 profile 強制單一 Ridge／Logistic 與單一明確 horizon，缺少恰好一個 horizon 或指定
+HGB 會停止。`full_shadow` 才是既有多 horizon／Ridge+HGB 研究流程；兩者均不授予
+Formal OOS、非零 alpha 或 broker 權限。
 
 `scripts\continue_ml_direct_ooc_after_store.py` 啟動時會先將 `continuation_status.json` 寫成 `waiting_for_direct_store`，避免沿用上一輪的 terminal `blocked` 診斷；direct store 完成後才會驗證 custody 並啟動 OOC。所有新版 waiting、custody、training heartbeat、complete 與 blocked status 都明列 `formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。若舊版 helper 完成時缺少這三個欄位，已結束 OOC helper 的 release coordinator 會自動補寫 fail-closed 欄位；明確的 true／非零值則直接阻擋，不以缺欄位或不安全值放行。Direct numeric v4 會把官方 halt/resume timeline 以 decision-time `effective_at`／`available_at` 寫入 replay source；舊 direct run 不會被原地改寫，續接流程會以新的 immutable custody 重新發布。接著 `scripts\continue_ml_release_after_ooc.py` 必須先觀察到 PID 與命令列均相符的 OOC helper，再等待其結束；之後才確認 training `latest_manifest.json`、continuation status 與兩者 manifest hash 完整一致，並依序執行 promotion evidence、promotion authority 與 daily ML copilot。任何缺件、hash 不一致或非零 exit code 都只寫 `blocked`，它不取代 Windows Task Scheduler，也不修改正式 market SQLite。
 
@@ -432,7 +443,7 @@ ML allocation Production Co-pilot：
 <OUTPUT_ROOT>/scheduled/ml_allocation_copilot/sidecar/YYYYMMDD_<hash>_shadow.json
 ```
 
-排程入口是 `scripts/run_daily_ml_allocation_orchestration.py`。它先用官方交易日曆求 strict T-1，再從正式 SQLite 以 `mode=ro/query_only` 發布固定 11 檔、730 日 causal lookback 的 immutable `all_field_enriched` raw snapshot；只在 post-freeze input 與 ML allocation inference 都成功後才呼叫 promotion evaluator。`<run_hash>` 綁定決策時間、raw publication、凍結 training manifest、模型 artifact 與 policy；相同輸入冪等重跑，不同 custody 版本不覆蓋舊輸出。凍結 release 預設為 `DATA_ROOT/output/release_v4/ml_allocation_bounded_v4_operational`，可用 `BALDR_ML_RELEASE_ROOT` 覆寫。
+排程入口是 `scripts/run_daily_ml_allocation_orchestration.py`。它先用官方交易日曆求 strict T-1，再從正式 SQLite 以 `mode=ro/query_only` 發布固定 11 檔、730 日 causal lookback 的 immutable `all_field_enriched` raw snapshot；只在 post-freeze input 與 ML allocation inference 都成功後才呼叫 promotion evaluator。`<run_hash>` 綁定決策時間、raw publication、凍結 training manifest、模型 artifact 與 policy；相同輸入冪等重跑，不同 custody 版本不覆蓋舊輸出。凍結 release 預設為 `DATA_ROOT/output/release_v4/ml_allocation_bounded_v4_operational`，可用 `BALDR_ML_RELEASE_ROOT` 覆寫。新增的 `AllocationReleaseAdapter` 會在 daily consumer 載入前重驗 release manifest、artifact／preprocessor／calibrator hash、feature order、missing policy 與 dataset lineage；同一批 frozen rows 可執行 OOC→release parity，任何 mismatch 直接停止 ML path。校準 mapping 僅接受跨 fold 的單調整數 bp artifact，未附正式校準器時仍回退既有未校準輸出並保留 Rule-only 邊界。
 
 任何 release、官方日曆、strict T-1、raw publication、post-freeze input 或 inference 缺件都會留下 `passed_rule_only`、`alpha=0`、`formal_oos_allowed=false`、`broker_order_allowed=false`，且不呼叫 promotion evaluator，因此不會新增假的 shadow sidecar。`latest_status.json` 明列 `post_freeze_input_status`、`inference_status`、`promotion_status`，以及 raw manifest、input、兩份 audit、proposal、replay 與 promotion 的 domain/file hashes。完成 inference 後產生的 sidecar 只代表一筆 observation；每日編排器固定輸出 `shadow_day_credit_allowed=false`，是否能列入 20 個真實交易日由後續 evidence collector 依完整性另行判定，不在此處自行加總。
 

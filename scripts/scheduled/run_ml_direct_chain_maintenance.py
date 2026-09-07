@@ -22,12 +22,20 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
+from data_module.ml_storage_capacity import (
+    BYTES_PER_GIB,
+    MLStorageCapacityBudget,
+    directory_size_bytes,
+    evaluate_capacity,
+)
 from scripts import maintain_ml_direct_v3_refresh_chain as maintenance
 
 
 _DEFAULT_DATA_ROOT = Path(r"D:\Min\Python\Project\FA_Data")
 _RAW_ROOT_NAME = "ml_pit_year_shards"
 _DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
+_DEFAULT_DIRECT_PERSISTENT_STORAGE_BUDGET_BYTES = 35 * BYTES_PER_GIB
+_DEFAULT_DIRECT_TEMPORARY_STORAGE_BUDGET_BYTES = 40 * BYTES_PER_GIB
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -52,6 +60,33 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+        default=_DEFAULT_DIRECT_PERSISTENT_STORAGE_BUDGET_BYTES,
+        help=(
+            "maximum bytes of new persistent Direct/OOC artifacts for one "
+            "chain"
+        ),
+    )
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+        default=_DEFAULT_DIRECT_TEMPORARY_STORAGE_BUDGET_BYTES,
+        help=(
+            "maximum Direct temporary workspace peak; explicitly forwarded "
+            "to the Direct child"
+        ),
+    )
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        type=int,
+        help="filesystem bytes that must remain free after the chain",
+    )
+    parser.add_argument(
         "--preflight-only",
         action="store_true",
         help=(
@@ -74,6 +109,33 @@ def _required_sha256(value: object, field_name: str) -> str:
         raise ValueError(f"invalid {field_name}")
     return maintenance.ooc_continuation._required_sha256_text(
         value, field_name
+    )
+
+
+def _capacity_budget_from_args(args: argparse.Namespace) -> MLStorageCapacityBudget:
+    """將新容量參數與舊 headroom 參數組合成單一政策。"""
+
+    reserve = getattr(args, "safety_reserve_bytes", None)
+    if reserve is None:
+        reserve = getattr(
+            args,
+            "minimum_free_space_bytes",
+            _DEFAULT_MINIMUM_FREE_SPACE_BYTES,
+        )
+    if isinstance(reserve, bool) or not isinstance(reserve, int):
+        raise TypeError("safety_reserve_bytes must be integer")
+    return MLStorageCapacityBudget(
+        persistent_new_bytes_budget=getattr(
+            args,
+            "persistent_storage_budget_bytes",
+            None,
+        ),
+        temporary_peak_bytes_budget=getattr(
+            args,
+            "temporary_storage_budget_bytes",
+            None,
+        ),
+        safety_reserve_bytes=reserve,
     )
 
 
@@ -256,6 +318,22 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[list[str], dict[str, Any]
         str(args.retry_delay_seconds),
         "--watch-formal-inputs",
     ]
+    for flag, value in (
+        (
+            "--persistent-storage-budget-bytes",
+            getattr(args, "persistent_storage_budget_bytes", None),
+        ),
+        (
+            "--temporary-storage-budget-bytes",
+            getattr(args, "temporary_storage_budget_bytes", None),
+        ),
+        (
+            "--safety-reserve-bytes",
+            getattr(args, "safety_reserve_bytes", None),
+        ),
+    ):
+        if value is not None:
+            command.extend([flag, str(value)])
     if corporate_action_manifest is not None:
         command.extend(["--corporate-action-manifest", str(corporate_action_manifest)])
     if sector_membership is not None:
@@ -276,6 +354,7 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[list[str], dict[str, Any]
         "formal_oos_allowed": False,
         "production_alpha_bp": 0,
         "broker_order_allowed": False,
+        "capacity_budget": _capacity_budget_from_args(args).as_dict(),
     }
     return command, metadata
 
@@ -382,6 +461,36 @@ def main(argv: list[str] | None = None) -> int:
             minimum_free_space_bytes=args.minimum_free_space_bytes,
         )
         metadata["storage_preflight"] = storage_preflight
+        capacity_budget = _capacity_budget_from_args(args)
+        metadata["capacity_budget"] = capacity_budget.as_dict()
+        persistent_roots = [training_output_dir]
+        store_output_value = metadata.get("store_output_dir")
+        if isinstance(store_output_value, str) and store_output_value.strip():
+            persistent_roots.append(Path(store_output_value))
+        capacity_usage = dict(storage_preflight)
+        # Keep compatibility with tests/embedding callers that supplied the
+        # previous three-field preflight mapping.
+        capacity_usage.setdefault("used_bytes", 0)
+        capacity_usage.setdefault(
+            "total_bytes",
+            int(capacity_usage["free_bytes"])
+            + int(capacity_usage["used_bytes"]),
+        )
+        capacity_result = evaluate_capacity(
+            budget=capacity_budget,
+            usage=capacity_usage,
+            stage="scheduled_direct_chain_bootstrap",
+            persistent_existing_bytes=sum(
+                directory_size_bytes(path) for path in persistent_roots
+            ),
+            # Before a child is launched the exact output size is unknown;
+            # reserve the configured chain budget itself as the worst case.
+            persistent_new_bytes_estimate=(
+                capacity_budget.persistent_new_bytes_budget or 0
+            ),
+            temporary_peak_bytes_observed=0,
+        )
+        metadata["capacity_preflight"] = capacity_result.as_dict()
         if bool(getattr(args, "preflight_only", False)):
             _write_status(
                 status_path,
@@ -394,7 +503,10 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
             return 0
-        if not storage_preflight["within_minimum_free_space"]:
+        if (
+            not storage_preflight["within_minimum_free_space"]
+            or not capacity_result.within_budget
+        ):
             _write_status(
                 status_path,
                 {
@@ -405,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
                     "error_type": "InsufficientFreeSpace",
                     "error": (
                         "output filesystem free space is below the "
-                        "configured Direct/OOC preflight threshold"
+                        "configured Direct/OOC capacity policy"
                     ),
                 },
             )

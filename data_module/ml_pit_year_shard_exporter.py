@@ -23,10 +23,15 @@ from pathlib import Path
 import shutil
 import sqlite3
 import tempfile
-from typing import Any, Iterable, Literal, Mapping, Sequence
+from typing import Any, Callable, Iterable, Literal, Mapping, Sequence
 import uuid
 from zoneinfo import ZoneInfo
 
+from data_module.ml_storage_capacity import (
+    MLStorageCapacityBudget,
+    directory_size_bytes,
+    preflight_capacity,
+)
 from ml_module.feature_eligibility import (
     ALL_FIELD_SOURCE_TABLES,
     FeatureEligibilityManifest,
@@ -88,6 +93,14 @@ class PITYearShardBuildRequest:
     industry_index_names: tuple[str, ...] = ()
     batch_size: int = 2_048
     compression_level: int = 6
+    # Capacity policy additions are optional to preserve the previous
+    # positional/API contract.  Both persistent names are accepted as
+    # compatibility aliases; the canonical value is the ``persistent_new``
+    # budget used by the shared capacity contract.
+    temporary_storage_budget_bytes: int | None = None
+    persistent_storage_budget_bytes: int | None = None
+    persistent_new_bytes_budget: int | None = None
+    safety_reserve_bytes: int | None = None
 
     def __post_init__(self) -> None:
         if not str(self.decision_at).strip():
@@ -114,6 +127,31 @@ class PITYearShardBuildRequest:
             "industry_index_names",
             _normalized_texts(self.industry_index_names),
         )
+        aliases = (
+            self.persistent_storage_budget_bytes,
+            self.persistent_new_bytes_budget,
+        )
+        if (
+            aliases[0] is not None
+            and aliases[1] is not None
+            and aliases[0] != aliases[1]
+        ):
+            raise ValueError(
+                "persistent_storage_budget_bytes and "
+                "persistent_new_bytes_budget must match"
+            )
+        for field_name, value in (
+            ("temporary_storage_budget_bytes", self.temporary_storage_budget_bytes),
+            ("persistent_storage_budget_bytes", self.persistent_storage_budget_bytes),
+            ("persistent_new_bytes_budget", self.persistent_new_bytes_budget),
+            ("safety_reserve_bytes", self.safety_reserve_bytes),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{field_name} must be integer or None")
+            if value <= 0:
+                raise ValueError(f"{field_name} must be positive")
 
 
 @dataclass(frozen=True)
@@ -137,6 +175,24 @@ class PITYearShardPublication:
         for count in (self.shard_count, self.row_count):
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError("publication counts must be non-negative integers")
+
+
+def _capacity_budget_for_request(
+    request: PITYearShardBuildRequest,
+) -> MLStorageCapacityBudget:
+    persistent_budget = request.persistent_storage_budget_bytes
+    if persistent_budget is None:
+        persistent_budget = request.persistent_new_bytes_budget
+    safety_reserve = request.safety_reserve_bytes
+    if safety_reserve is None:
+        # Keep the old builder callable without capacity arguments, while
+        # applying the shared default reserve to new standalone invocations.
+        safety_reserve = 20 * 1024**3
+    return MLStorageCapacityBudget(
+        persistent_new_bytes_budget=persistent_budget,
+        temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
+        safety_reserve_bytes=safety_reserve,
+    )
 
 
 @dataclass(frozen=True)
@@ -418,8 +474,17 @@ class PITYearShardExporter:
         if not database_path.is_file():
             raise FileNotFoundError(database_path)
         output_root = request.output_root.resolve()
+        capacity_budget = _capacity_budget_for_request(request)
+        # The first check must happen before mkdir/tempfile so a low-capacity
+        # invocation is read-only and fail-closed at the process boundary.
+        initial_capacity = preflight_capacity(
+            probe_path=output_root,
+            budget=capacity_budget,
+            stage="raw_before_output",
+        )
         output_root.mkdir(parents=True, exist_ok=True)
         runs_root = output_root / "runs"
+        persistent_baseline_bytes = directory_size_bytes(runs_root)
         runs_root.mkdir(parents=True, exist_ok=True)
         decision = _decision_datetime(request.decision_at)
         history_start = _date_value(request.history_start_date)
@@ -429,6 +494,44 @@ class PITYearShardExporter:
             raise ValueError("requested shard year must not exceed decision year")
 
         source_stat_before = database_path.stat()
+        staging: Path | None = None
+        peak_temporary_bytes = 0
+        last_capacity_preflight = initial_capacity.as_dict()
+        capacity_checkpoint_count = 0
+        capacity_last_stage = "raw_before_output"
+
+        def capacity_checkpoint(
+            stage: str,
+            *,
+            additional_persistent_bytes: int = 0,
+        ) -> None:
+            """Recheck persistent delta and staging bytes without writing data."""
+
+            nonlocal capacity_checkpoint_count, capacity_last_stage
+            nonlocal last_capacity_preflight, peak_temporary_bytes
+            temporary_roots = () if staging is None else (staging,)
+            persistent_now = directory_size_bytes(runs_root)
+            persistent_new = max(
+                0,
+                persistent_now - persistent_baseline_bytes,
+            ) + additional_persistent_bytes
+            result = preflight_capacity(
+                probe_path=output_root,
+                budget=capacity_budget,
+                stage=stage,
+                persistent_roots=(runs_root,),
+                persistent_new_bytes_estimate=persistent_new,
+                temporary_roots=temporary_roots,
+                temporary_peak_bytes_observed=peak_temporary_bytes,
+            )
+            peak_temporary_bytes = max(
+                peak_temporary_bytes,
+                result.temporary_peak_bytes_observed,
+            )
+            last_capacity_preflight = result.as_dict()
+            capacity_checkpoint_count += 1
+            capacity_last_stage = stage
+
         staging = Path(
             tempfile.mkdtemp(prefix=".pit-shards-", dir=str(output_root))
         ).resolve()
@@ -444,6 +547,7 @@ class PITYearShardExporter:
         connection: sqlite3.Connection | None = None
         transaction_started = False
         try:
+            capacity_checkpoint("raw_staging_created")
             connection = _connect_read_only(database_path)
             connection.row_factory = sqlite3.Row
             data_version_before = _pragma_int(connection, "data_version")
@@ -454,6 +558,7 @@ class PITYearShardExporter:
             table_results: list[dict[str, Any]] = []
             query_count = 0
             for table_name in ALL_FIELD_SOURCE_TABLES:
+                capacity_checkpoint(f"raw_table_{table_name}_start")
                 if table_name in eligibility.missing_tables:
                     table_results.append(
                         {
@@ -468,6 +573,7 @@ class PITYearShardExporter:
                             "diagnostics": ["optional_source_table_missing"],
                         }
                     )
+                    capacity_checkpoint(f"raw_table_{table_name}_complete")
                     continue
                 table_result = self._stream_table(
                     connection=connection,
@@ -481,9 +587,11 @@ class PITYearShardExporter:
                     years=request.years,
                     industry_index_names=request.industry_index_names,
                     batch_size=request.batch_size,
+                    capacity_checkpoint=capacity_checkpoint,
                 )
                 table_results.append(table_result)
                 query_count += 1
+                capacity_checkpoint(f"raw_table_{table_name}_complete")
             data_version_after = _pragma_int(connection, "data_version")
             if data_version_after != data_version_before:
                 raise RuntimeError(
@@ -525,6 +633,7 @@ class PITYearShardExporter:
                 requested_years=request.years,
                 eligibility_manifest_hash=eligibility.manifest_hash,
                 source_fingerprint=source_fingerprint,
+                capacity_checkpoint=capacity_checkpoint,
             )
             content_identity = {
                 "decision_at": decision.isoformat(),
@@ -612,6 +721,15 @@ class PITYearShardExporter:
                     "query_count": query_count,
                     "parquet_dependency_added": False,
                     "production_action_allowed": False,
+                    "capacity_budget": capacity_budget.as_dict(),
+                    # Runtime free/used bytes and the last checkpoint stage
+                    # are deliberately kept out of the immutable publication
+                    # manifest; replaying the same source must retain the
+                    # same manifest hash even when filesystem telemetry has
+                    # changed.  The budget and enforcement contract are
+                    # deterministic and therefore safe to retain here.
+                    "capacity_policy_schema": "ml-storage-capacity.v1",
+                    "capacity_quota_enforced_during_stages": True,
                 },
                 "training_adapter": {
                     "direct_training_input": False,
@@ -639,6 +757,7 @@ class PITYearShardExporter:
                 publication_manifest
             )
             _write_json(staging / "manifest.json", publication_manifest)
+            capacity_checkpoint("raw_manifest_written")
 
             publication_directory = runs_root / publication_id
             if publication_directory.exists():
@@ -648,9 +767,23 @@ class PITYearShardExporter:
                     raise RuntimeError(
                         "publication identity collision with different manifest"
                     )
+                # The publication already exists, so this replay has no new
+                # persistent bytes.  Check the remaining staging peak before
+                # removing it; a post-remove check would only add another
+                # failure point without protecting the atomic publication.
+                capacity_checkpoint("raw_publication_existing_ready")
                 _safe_remove_staging(staging, output_root)
             else:
+                # Validate the projected persistent delta while the staging
+                # tree is still present.  If this check fails, the existing
+                # exception path removes only staging and leaves no orphan
+                # publication behind.
+                capacity_checkpoint(
+                    "raw_publication_ready",
+                    additional_persistent_bytes=directory_size_bytes(staging),
+                )
                 os.replace(staging, publication_directory)
+                staging = None
 
             latest_manifest_path = output_root / "latest_manifest.json"
             pointer = {
@@ -689,7 +822,7 @@ class PITYearShardExporter:
                     except sqlite3.Error:
                         pass
                 connection.close()
-            if staging.exists():
+            if staging is not None and staging.exists():
                 _safe_remove_staging(staging, output_root)
             raise
 
@@ -707,6 +840,7 @@ class PITYearShardExporter:
         years: tuple[int, ...],
         industry_index_names: tuple[str, ...],
         batch_size: int,
+        capacity_checkpoint: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         table_manifest_records = manifest.for_table(table_name)
         column_names = {record.column_name for record in table_manifest_records}
@@ -906,10 +1040,12 @@ class PITYearShardExporter:
         blocked_atr_adx_count = 0
         technical_states: dict[str, _CausalWilder14State] = {}
         cursor = connection.execute(query, tuple(parameters))
+        batch_number = 0
         while True:
             batch = cursor.fetchmany(batch_size)
             if not batch:
                 break
+            batch_number += 1
             for row in batch:
                 source_row_count += 1
                 event_date = _optional_date(row["__event_at"])
@@ -1115,6 +1251,15 @@ class PITYearShardExporter:
                         blocked_missing_availability_rows += 1
                     if year_filtered_this_source_row:
                         filtered_year_rows += 1
+            # A bounded cadence avoids scanning the staging tree on every row
+            # while still stopping a long table before its next table boundary.
+            if (
+                capacity_checkpoint is not None
+                and batch_number % 128 == 0
+            ):
+                capacity_checkpoint(
+                    f"raw_table_{table_name}_batch_{batch_number}"
+                )
         cursor.close()
 
         unreviewed = tuple(
@@ -1178,10 +1323,16 @@ class PITYearShardExporter:
         requested_years: tuple[int, ...],
         eligibility_manifest_hash: str,
         source_fingerprint: str,
+        capacity_checkpoint: Callable[[str], None] | None = None,
     ) -> dict[DatasetId, dict[str, Any]]:
         result: dict[DatasetId, dict[str, Any]] = {}
         for dataset_id in _DATASET_IDS:
             dataset_records = records[dataset_id]
+            for writer in writers.for_dataset(dataset_id):
+                if capacity_checkpoint is not None:
+                    capacity_checkpoint(
+                        f"raw_dataset_{dataset_id}_year_{writer.year}"
+                    )
             shard_payloads = [
                 writer.manifest_payload(staging=staging)
                 for writer in writers.for_dataset(dataset_id)

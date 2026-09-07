@@ -27,6 +27,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
+from data_module.ml_storage_capacity import (
+    BYTES_PER_GIB,
+    MLStorageCapacityBudget,
+    evaluate_capacity,
+)
 from scripts.scheduled.scheduled_clock import scheduled_now
 
 
@@ -37,6 +42,7 @@ _POINTER_SCHEMA_VERSION = "ml-pit-year-shards-pointer.v1"
 _DATASET_SCHEMA_VERSION = "ml-pit-year-shard-dataset.v1"
 _RAW_ROOT_NAME = "ml_pit_year_shards"
 _DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
+_DEFAULT_RAW_PERSISTENT_STORAGE_BUDGET_BYTES = 35 * BYTES_PER_GIB
 _ALLOWED_DATA_UPDATE_STATUSES = frozenset(
     {"passed", "passed_with_warnings"}
 )
@@ -82,6 +88,26 @@ def _parser() -> argparse.ArgumentParser:
             "fail closed before launching the raw PIT builder when the "
             "output filesystem has less free space than this threshold"
         ),
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+        default=_DEFAULT_RAW_PERSISTENT_STORAGE_BUDGET_BYTES,
+        help="raw PIT 本次持久 publication 新增 bytes 上限",
+    )
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+        help="raw PIT publication 暫存峰值 bytes 上限（供容量 preflight）",
+    )
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        type=int,
+        help="publication 完成後必須保留的 filesystem bytes",
     )
     parser.add_argument("--status-path", type=Path)
     parser.add_argument("--log-path", type=Path)
@@ -224,6 +250,33 @@ def _required_sha256(value: object, *, field_name: str) -> str:
     if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
         raise ValueError(f"{field_name} must be sha256")
     return value
+
+
+def _capacity_budget_from_args(args: argparse.Namespace) -> MLStorageCapacityBudget:
+    """將舊 headroom threshold 映射到全鏈容量政策。"""
+
+    reserve = getattr(args, "safety_reserve_bytes", None)
+    if reserve is None:
+        reserve = getattr(
+            args,
+            "minimum_free_space_bytes",
+            _DEFAULT_MINIMUM_FREE_SPACE_BYTES,
+        )
+    if isinstance(reserve, bool) or not isinstance(reserve, int):
+        raise TypeError("safety_reserve_bytes must be integer")
+    return MLStorageCapacityBudget(
+        persistent_new_bytes_budget=getattr(
+            args,
+            "persistent_storage_budget_bytes",
+            None,
+        ),
+        temporary_peak_bytes_budget=getattr(
+            args,
+            "temporary_storage_budget_bytes",
+            None,
+        ),
+        safety_reserve_bytes=reserve,
+    )
 
 
 def _latest_raw_publication(raw_root: Path) -> _RawPublication | None:
@@ -395,8 +448,11 @@ def _builder_command(
     history_start_date: str,
     batch_size: int,
     compression_level: int,
+    persistent_storage_budget_bytes: int | None = None,
+    temporary_storage_budget_bytes: int | None = None,
+    safety_reserve_bytes: int | None = None,
 ) -> list[str]:
-    return [
+    command = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "build_ml_pit_year_shards.py"),
         "--database",
@@ -413,6 +469,23 @@ def _builder_command(
         "--compression-level",
         str(compression_level),
     ]
+    if persistent_storage_budget_bytes is not None:
+        command.extend(
+            [
+                "--persistent-storage-budget-bytes",
+                str(persistent_storage_budget_bytes),
+            ]
+        )
+    if temporary_storage_budget_bytes is not None:
+        command.extend(
+            [
+                "--temporary-storage-budget-bytes",
+                str(temporary_storage_budget_bytes),
+            ]
+        )
+    if safety_reserve_bytes is not None:
+        command.extend(["--safety-reserve-bytes", str(safety_reserve_bytes)])
+    return command
 
 
 def _base_status(
@@ -530,7 +603,35 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raw_root,
                 minimum_free_space_bytes=args.minimum_free_space_bytes,
             )
-            if not storage_preflight["within_minimum_free_space"]:
+            capacity_budget = _capacity_budget_from_args(args)
+            capacity_usage = dict(storage_preflight)
+            # 舊 embedding caller 可能只回傳 free／minimum 欄位；補齊
+            # 供共用容量 contract 使用的非金融整數欄位。
+            capacity_usage.setdefault("used_bytes", 0)
+            capacity_usage.setdefault(
+                "total_bytes",
+                int(capacity_usage["free_bytes"])
+                + int(capacity_usage["used_bytes"]),
+            )
+            capacity_preflight = evaluate_capacity(
+                budget=capacity_budget,
+                usage=capacity_usage,
+                stage="scheduled_raw_pit_bootstrap",
+                # Raw exporter 在啟動前尚未知道本次各 shard 的精確
+                # 寫入量；以設定的持久上限作最壞情況 headroom 預留。
+                persistent_new_bytes_estimate=(
+                    capacity_budget.persistent_new_bytes_budget or 0
+                ),
+                temporary_peak_bytes_observed=0,
+            )
+            storage_preflight["capacity_budget"] = capacity_budget.as_dict()
+            storage_preflight["capacity_preflight"] = (
+                capacity_preflight.as_dict()
+            )
+            if (
+                not storage_preflight["within_minimum_free_space"]
+                or not capacity_preflight.within_budget
+            ):
                 payload = _base_status(
                     status="blocked_insufficient_storage",
                     output_root=output_root,
@@ -550,7 +651,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     error_type="InsufficientFreeSpace",
                     error=(
                         "raw PIT output filesystem free space is below the "
-                        "configured preflight threshold"
+                        "configured capacity policy"
                     ),
                 )
                 _write_json(status_path, payload)
@@ -564,6 +665,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 history_start_date=args.history_start_date,
                 batch_size=args.batch_size,
                 compression_level=args.compression_level,
+                persistent_storage_budget_bytes=(
+                    capacity_budget.persistent_new_bytes_budget
+                ),
+                temporary_storage_budget_bytes=(
+                    capacity_budget.temporary_peak_bytes_budget
+                ),
+                safety_reserve_bytes=capacity_budget.safety_reserve_bytes,
             )
             _append_log(log_path, json.dumps({"event": "builder_start", "command": command}, ensure_ascii=False))
             completed = subprocess.run(
@@ -607,6 +715,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 publication_manifest_path=str(published.publication_manifest_path),
                 dataset_manifest_path=str(published.dataset_manifest_path),
                 builder_returncode=completed.returncode,
+                storage_preflight=storage_preflight,
             )
             _write_json(status_path, payload)
             return 0

@@ -28,6 +28,12 @@ import numpy as np
 
 from data_module import portfolio_ml_dataset_assembler as legacy
 from data_module import portfolio_ml_out_of_core_store as store_module
+from data_module.ml_storage_capacity import (
+    MLStorageCapacityBudget,
+    StorageCapacityError,
+    directory_size_bytes as capacity_directory_size_bytes,
+    preflight_capacity,
+)
 from ml_module.allocation_training_service import AllocationTrainingSample
 
 
@@ -79,6 +85,11 @@ class PortfolioMLDirectNumericRequest:
     memory_budget_mb: int = 4_096
     temporary_storage_budget_bytes: int | None = None
     resume: bool = True
+    # Capacity policy additions are optional so callers using the previous
+    # direct request contract continue to work unchanged.
+    persistent_storage_budget_bytes: int | None = None
+    persistent_new_bytes_budget: int | None = None
+    safety_reserve_bytes: int | None = None
 
     def __post_init__(self) -> None:
         legacy.PortfolioMLDatasetAssemblyRequest(
@@ -120,6 +131,38 @@ class PortfolioMLDirectNumericRequest:
                 raise ValueError(
                     "temporary_storage_budget_bytes must be positive"
                 )
+        aliases = (
+            self.persistent_storage_budget_bytes,
+            self.persistent_new_bytes_budget,
+        )
+        if (
+            aliases[0] is not None
+            and aliases[1] is not None
+            and aliases[0] != aliases[1]
+        ):
+            raise ValueError(
+                "persistent_storage_budget_bytes and "
+                "persistent_new_bytes_budget must match"
+            )
+        for field_name, value in zip(
+            (
+                "persistent_storage_budget_bytes",
+                "persistent_new_bytes_budget",
+            ),
+            aliases,
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{field_name} must be integer or None")
+            if value <= 0:
+                raise ValueError(f"{field_name} must be positive")
+        if self.safety_reserve_bytes is not None:
+            value = self.safety_reserve_bytes
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError("safety_reserve_bytes must be integer or None")
+            if value <= 0:
+                raise ValueError("safety_reserve_bytes must be positive")
         if not isinstance(self.resume, bool):
             raise TypeError("resume must be bool")
 
@@ -473,6 +516,23 @@ class PortfolioMLDirectNumericStoreBuilder:
             feature_count=len(discovery.feature_ids),
             budget_bytes=request.temporary_storage_budget_bytes,
         )
+        capacity_budget = _capacity_budget_for_request(request)
+        capacity_preflight = preflight_capacity(
+            probe_path=output_root,
+            budget=capacity_budget,
+            stage="direct_before_checkpoint",
+            persistent_roots=(run_directory,),
+            persistent_new_bytes_estimate=(
+                _estimate_persistent_new_bytes(
+                    shards=tuple(discovery.shard_by_year.values()),
+                    feature_count=len(discovery.feature_ids),
+                    horizon_count=len(legacy.SUPPORTED_HORIZONS),
+                )
+            ),
+            temporary_peak_bytes_observed=int(
+                temporary_preflight["estimated_peak_bytes"]
+            ),
+        )
         checkpoint_path = run_directory / "checkpoint.json"
         checkpoint = _load_checkpoint(
             path=checkpoint_path,
@@ -494,6 +554,41 @@ class PortfolioMLDirectNumericStoreBuilder:
         peak_temporary_bytes = int(
             checkpoint.get("peak_temporary_bytes", 0)
         )
+        last_capacity_preflight: dict[str, Any] = (
+            capacity_preflight.as_dict()
+        )
+
+        def capacity_checkpoint(
+            stage: str,
+            temporary_roots: Sequence[Path] = (),
+        ) -> dict[str, Any]:
+            """在每個階段與年度 checkpoint 重新量測容量。
+
+            這個 callback 只讀取 output filesystem。若新資料或暫存峰值
+            超過政策，``preflight_capacity`` 會拋出例外，年度 builder
+            會清掉未封存 workspace，而 outer checkpoint 仍保留可續跑的
+            已完成年度。
+            """
+
+            nonlocal last_capacity_preflight, peak_temporary_bytes
+            result = preflight_capacity(
+                probe_path=output_root,
+                budget=capacity_budget,
+                stage=stage,
+                persistent_roots=(run_directory,),
+                persistent_new_bytes_estimate=capacity_directory_size_bytes(
+                    run_directory
+                ),
+                temporary_roots=tuple(temporary_roots),
+                temporary_peak_bytes_observed=peak_temporary_bytes,
+            )
+            peak_temporary_bytes = max(
+                peak_temporary_bytes,
+                result.temporary_peak_bytes_observed,
+            )
+            last_capacity_preflight = result.as_dict()
+            return last_capacity_preflight
+
         total_corporate_exclusions = 0
         total_teacher_incomplete = 0
         total_trade_restriction_unknown = 0
@@ -508,6 +603,35 @@ class PortfolioMLDirectNumericStoreBuilder:
             completed_years=tuple(sorted(completed)),
         )
         for ordinal, year in enumerate(years):
+            try:
+                capacity_checkpoint(
+                    f"year_{year}_before_checkpoint",
+                    (run_directory / f".work-year-{year:04d}",),
+                )
+            except StorageCapacityError as exc:
+                _write_incomplete_checkpoint(
+                    checkpoint_path=checkpoint_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    completed=completed,
+                    peak_temporary_bytes=peak_temporary_bytes,
+                    capacity_preflight=exc.preflight,
+                    failure={
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                )
+                _write_heartbeat(
+                    path=heartbeat_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    status="blocked_capacity",
+                    stage=f"year_{year}_before_checkpoint_capacity_blocked",
+                    completed_years=tuple(sorted(completed)),
+                    current_year=year,
+                    year_ordinal=ordinal,
+                )
+                raise
             year_directory = run_directory / f"year={year:04d}"
             existing_year = completed.get(year)
             if (
@@ -568,6 +692,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                     raw_manifest_hash=str(raw_manifest["manifest_hash"]),
                     completed=completed,
                     peak_temporary_bytes=peak_temporary_bytes,
+                    capacity_preflight=last_capacity_preflight,
                 )
                 _write_heartbeat(
                     path=heartbeat_path,
@@ -623,32 +748,82 @@ class PortfolioMLDirectNumericStoreBuilder:
                     year_ordinal=ordinal,
                 )
 
-            year_manifest, carry, temp_bytes = self._build_year(
-                request=request,
-                run_directory=run_directory,
-                raw_manifest_path=raw_path,
-                raw_manifest=raw_manifest,
-                discovery=discovery,
-                year=year,
-                year_ordinal=ordinal,
-                cutoff=cutoff,
-                source_manifest_hashes=source_manifest_hashes,
-                dataset_identity_hash=dataset_identity_hash,
-                feature_registry_hash=feature_registry_hash,
-                portfolio_replay=portfolio_replay,
-                corporate_custody=corporate_custody,
-                carry=carry,
-                memory_guard=memory_guard,
-                heartbeat=_report_year_stage,
-            )
+            try:
+                year_manifest, carry, temp_bytes = self._build_year(
+                    request=request,
+                    run_directory=run_directory,
+                    raw_manifest_path=raw_path,
+                    raw_manifest=raw_manifest,
+                    discovery=discovery,
+                    year=year,
+                    year_ordinal=ordinal,
+                    cutoff=cutoff,
+                    source_manifest_hashes=source_manifest_hashes,
+                    dataset_identity_hash=dataset_identity_hash,
+                    feature_registry_hash=feature_registry_hash,
+                    portfolio_replay=portfolio_replay,
+                    corporate_custody=corporate_custody,
+                    carry=carry,
+                    memory_guard=memory_guard,
+                    heartbeat=_report_year_stage,
+                    capacity_checkpoint=capacity_checkpoint,
+                )
+            except StorageCapacityError as exc:
+                _write_incomplete_checkpoint(
+                    checkpoint_path=checkpoint_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    completed=completed,
+                    peak_temporary_bytes=peak_temporary_bytes,
+                    capacity_preflight=exc.preflight,
+                    failure={
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                )
+                _write_heartbeat(
+                    path=heartbeat_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    status="blocked_capacity",
+                    stage=f"year_{year}_capacity_blocked",
+                    completed_years=tuple(sorted(completed)),
+                    current_year=year,
+                    year_ordinal=ordinal,
+                )
+                raise
             peak_temporary_bytes = max(
                 peak_temporary_bytes,
                 temp_bytes,
             )
-            _enforce_temporary_budget(
-                observed_bytes=peak_temporary_bytes,
-                budget_bytes=request.temporary_storage_budget_bytes,
-            )
+            try:
+                capacity_checkpoint(
+                    f"year_{year}_checkpoint",
+                )
+            except StorageCapacityError as exc:
+                _write_incomplete_checkpoint(
+                    checkpoint_path=checkpoint_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    completed=completed,
+                    peak_temporary_bytes=peak_temporary_bytes,
+                    capacity_preflight=exc.preflight,
+                    failure={
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    },
+                )
+                _write_heartbeat(
+                    path=heartbeat_path,
+                    run_id=run_id,
+                    raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    status="blocked_capacity",
+                    stage=f"year_{year}_checkpoint_capacity_blocked",
+                    completed_years=tuple(sorted(completed)),
+                    current_year=year,
+                    year_ordinal=ordinal,
+                )
+                raise
             year_manifests.append(year_manifest)
             total_corporate_exclusions += int(
                 year_manifest[
@@ -672,6 +847,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                 raw_manifest_hash=str(raw_manifest["manifest_hash"]),
                 completed=completed,
                 peak_temporary_bytes=peak_temporary_bytes,
+                capacity_preflight=last_capacity_preflight,
             )
             _write_heartbeat(
                 path=heartbeat_path,
@@ -693,6 +869,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             stage="building_fold_indexes",
             completed_years=tuple(sorted(completed)),
         )
+        capacity_checkpoint("fold_indexes_start")
         fold_manifests = (
             store_module.PortfolioMLOutOfCoreStoreBuilder()
             ._build_fold_indexes(
@@ -705,6 +882,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                 batch_size=request.batch_size,
             )
         )
+        capacity_checkpoint("fold_indexes_complete")
         portfolio_state_policy = portfolio_replay.custody_payload()
         official_trade_restriction_timeline_present = bool(
             corporate_custody.official_trade_restriction_timeline_present
@@ -857,9 +1035,18 @@ class PortfolioMLDirectNumericStoreBuilder:
                 "temporary_storage_budget_bytes": (
                     request.temporary_storage_budget_bytes
                 ),
+                "persistent_storage_budget_bytes": (
+                    capacity_budget.persistent_new_bytes_budget
+                ),
+                "persistent_new_bytes_budget": (
+                    capacity_budget.persistent_new_bytes_budget
+                ),
+                "safety_reserve_bytes": capacity_budget.safety_reserve_bytes,
                 "temporary_storage_preflight": temporary_preflight,
                 "temporary_storage_quota_enforced_during_workspace": True,
                 "peak_temporary_bytes": peak_temporary_bytes,
+                "capacity_budget": capacity_budget.as_dict(),
+                "capacity_preflight": last_capacity_preflight,
             },
             "safety": {
                 "pit_contract_revalidated_per_row": True,
@@ -913,6 +1100,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                     completed[key] for key in sorted(completed)
                 ],
                 "peak_temporary_bytes": peak_temporary_bytes,
+                "capacity_budget": capacity_budget.as_dict(),
+                "capacity_preflight": last_capacity_preflight,
                 "complete": True,
                 "manifest_hash": manifest["manifest_hash"],
                 "manifest_file_hash": manifest_file_hash,
@@ -958,6 +1147,9 @@ class PortfolioMLDirectNumericStoreBuilder:
         carry: Any,
         memory_guard: _MemoryBudgetGuard,
         heartbeat: Callable[[str], None],
+        capacity_checkpoint: Callable[
+            [str, Sequence[Path]], dict[str, Any]
+        ],
     ) -> tuple[dict[str, Any], Any, int]:
         work = run_directory / f".work-year-{year:04d}"
         if work.exists():
@@ -973,6 +1165,23 @@ class PortfolioMLDirectNumericStoreBuilder:
         connection.row_factory = sqlite3.Row
         legacy._initialize_spool(connection)
         try:
+            def report_stage(stage: str) -> None:
+                # Capacity is checked before publishing the heartbeat so an
+                # operator never sees a stage as healthy after its budget was
+                # already exceeded.
+                capacity_stages = {
+                    f"year_{year}_start",
+                    f"year_{year}_raw_spool_complete",
+                    f"year_{year}_labels_complete",
+                    f"year_{year}_assembly_complete",
+                    f"year_{year}_artifacts_complete",
+                    f"year_{year}_directory_finalized",
+                }
+                if stage in capacity_stages:
+                    capacity_checkpoint(stage, (work, staging))
+                heartbeat(stage)
+
+            report_stage(f"year_{year}_start")
             shards = [dict(discovery.shard_by_year[year])]
             if year + 1 in discovery.shard_by_year:
                 shards.append(dict(discovery.shard_by_year[year + 1]))
@@ -989,9 +1198,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 definitions=spool_definitions,
                 source_digest=hashlib.sha256(),
                 batch_size=request.batch_size,
-                progress_callback=heartbeat,
+                progress_callback=report_stage,
             )
-            heartbeat("year_raw_spool_complete")
+            report_stage("year_raw_spool_complete")
             memory_guard.observe(stage=f"year_{year}_raw_spool_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
@@ -1012,9 +1221,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 corporate_action_effective_dates=(
                     corporate_custody.effective_dates_by_symbol
                 ),
-                progress_callback=heartbeat,
+                progress_callback=report_stage,
             )
-            heartbeat("year_labels_complete")
+            report_stage("year_labels_complete")
             memory_guard.observe(stage=f"year_{year}_labels_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
@@ -1077,10 +1286,10 @@ class PortfolioMLDirectNumericStoreBuilder:
                     years=(year,),
                     batch_size=request.batch_size,
                     initial_current_feature_cache=carry,
-                    progress_callback=heartbeat,
+                    progress_callback=report_stage,
                 )
             )
-            heartbeat("year_assembly_complete")
+            report_stage("year_assembly_complete")
             memory_guard.observe(stage=f"year_{year}_assembly_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
@@ -1194,7 +1403,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             }
             year_manifest["manifest_hash"] = _sha256_json(year_manifest)
             _write_json(staging / "manifest.json", year_manifest)
-            heartbeat("year_artifacts_complete")
+            report_stage("year_artifacts_complete")
             memory_guard.observe(stage=f"year_{year}_artifacts_complete")
             connection.close()
             temp_bytes = _directory_size_bytes(work) + _directory_size_bytes(
@@ -1207,7 +1416,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             final_directory = run_directory / f"year={year:04d}"
             _replace_directory_with_retry(staging, final_directory)
             _safe_remove_tree(work, run_directory)
-            heartbeat("year_directory_finalized")
+            report_stage("year_directory_finalized")
             return year_manifest, carry, temp_bytes
         except Exception:
             connection.close()
@@ -2332,19 +2541,26 @@ def _write_incomplete_checkpoint(
     raw_manifest_hash: str,
     completed: Mapping[int, Mapping[str, Any]],
     peak_temporary_bytes: int,
+    capacity_preflight: Mapping[str, Any] | None = None,
+    failure: Mapping[str, Any] | None = None,
 ) -> None:
+    payload: dict[str, Any] = {
+        "schema_version": DIRECT_CHECKPOINT_SCHEMA_VERSION,
+        "run_id": run_id,
+        "raw_manifest_hash": raw_manifest_hash,
+        "completed_years": [
+            dict(completed[key]) for key in sorted(completed)
+        ],
+        "peak_temporary_bytes": peak_temporary_bytes,
+        "complete": False,
+    }
+    if capacity_preflight is not None:
+        payload["capacity_preflight"] = dict(capacity_preflight)
+    if failure is not None:
+        payload["failure"] = dict(failure)
     _atomic_write_json(
         checkpoint_path,
-        {
-            "schema_version": DIRECT_CHECKPOINT_SCHEMA_VERSION,
-            "run_id": run_id,
-            "raw_manifest_hash": raw_manifest_hash,
-            "completed_years": [
-                dict(completed[key]) for key in sorted(completed)
-            ],
-            "peak_temporary_bytes": peak_temporary_bytes,
-            "complete": False,
-        },
+        payload,
     )
 
 
@@ -2428,6 +2644,53 @@ def _preflight_temporary_budget(
             f"(peak year {peak['year']})"
         )
     return payload
+
+
+def _capacity_budget_for_request(
+    request: PortfolioMLDirectNumericRequest,
+) -> MLStorageCapacityBudget:
+    persistent_budget = request.persistent_storage_budget_bytes
+    if persistent_budget is None:
+        persistent_budget = request.persistent_new_bytes_budget
+    # The old direct builder had no filesystem reserve argument. Retain its
+    # callable shape while making the new standalone path safe by default;
+    # wrappers may explicitly lower/raise the reserve for an isolated drive.
+    safety_reserve = request.safety_reserve_bytes
+    if safety_reserve is None:
+        safety_reserve = 20 * 1024**3
+    return MLStorageCapacityBudget(
+        persistent_new_bytes_budget=persistent_budget,
+        temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
+        safety_reserve_bytes=safety_reserve,
+    )
+
+
+def _estimate_persistent_new_bytes(
+    *,
+    shards: Sequence[Mapping[str, Any]],
+    feature_count: int,
+    horizon_count: int,
+) -> int:
+    """保守估算一個 direct run 會新增的持久 artifacts 大小。
+
+    估算只使用 raw shard manifest 的整數 row／byte 計數，不讀取或修改
+    正式資料。完成後每年會再以實際 run directory 大小重新 preflight。
+    """
+
+    if feature_count < 0 or horizon_count < 0:
+        raise ValueError("feature_count and horizon_count must be non-negative")
+    rows = sum(int(item.get("row_count", 0)) for item in shards)
+    compressed = sum(int(item.get("compressed_bytes", 0)) for item in shards)
+    # values/masks/targets/labels/row custody 的固定 dtype 空間，再加上
+    # SQLite 與 manifest/carry 的寬裕；所有係數刻意取整數保守上估。
+    numeric_bytes_per_row = (
+        feature_count * (8 + 1)
+        + 6 * 4
+        + horizon_count * 9 * 4
+        + 256
+    )
+    metadata_margin = max(16 * 1024 * 1024, compressed // 10)
+    return rows * numeric_bytes_per_row + metadata_margin
 
 
 def _temporary_year_estimate(

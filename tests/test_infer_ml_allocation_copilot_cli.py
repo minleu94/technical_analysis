@@ -11,10 +11,12 @@ from app_module.ml_allocation_inference_service import (
     _feature_snapshot_hash,
     _sha256_json,
 )
+from ml_module.allocation_release_contract import MissingPolicyBinding
 from scripts.infer_ml_allocation_copilot import (
     INPUT_SCHEMA_VERSION,
     main,
 )
+from tests.test_allocation_release_adapter import _write_release
 from tests.test_ml_allocation_inference_service import _inference_rows
 from tests.test_ml_allocation_training_service import (  # noqa: F401
     folds,
@@ -234,3 +236,56 @@ def test_cli_refuses_to_overwrite_different_immutable_output(
     assert proposal_output.read_bytes() == b"different"
     assert not audit_output.exists()
     assert list(tmp_path.glob(".*.staged")) == []
+
+
+def test_cli_can_use_hash_bound_release_root(
+    tmp_path: Path,
+    training_result,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    manifest = _write_release(tmp_path, training_result)
+    input_path = tmp_path / "current_rows.json.gz"
+    proposal_output = tmp_path / "proposal.json"
+    audit_output = tmp_path / "audit.json"
+    _write_input(input_path)
+    rows = tuple(sorted(_inference_rows(), key=lambda row: row.symbol))
+    universe_hash = _sha256_json(
+        [
+            {
+                "row_id": row.row_id,
+                "symbol": row.symbol,
+                "feature_snapshot_hash": _feature_snapshot_hash(row),
+            }
+            for row in rows
+        ]
+    )
+
+    assert (
+        main(
+            [
+                "--release-root",
+                str(tmp_path / "release"),
+                "--input",
+                str(input_path),
+                "--model-id",
+                manifest.model_id,
+                "--universe-id",
+                "pit-universe-test",
+                "--policy-id",
+                manifest.missing_policy.policy_id,
+                "--policy-hash",
+                MissingPolicyBinding.create(policy_id="balanced-v1").policy_hash,
+                "--expected-universe-hash",
+                universe_hash,
+                "--proposal-output",
+                str(proposal_output),
+                "--audit-output",
+                str(audit_output),
+            ]
+        )
+        == 0
+    )
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["status"] == "inference_completed"
+    assert summary["formal_oos_allowed"] is False
+    assert json.loads(proposal_output.read_text(encoding="utf-8"))["broker_order_allowed"] is False

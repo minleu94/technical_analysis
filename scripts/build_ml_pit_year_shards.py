@@ -89,6 +89,25 @@ def build_parser() -> argparse.ArgumentParser:
         choices=range(0, 10),
         metavar="0..9",
     )
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+        help="raw PIT staging 暫存峰值 bytes 上限",
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+        help="raw PIT publication 本次持久新增 bytes 上限",
+    )
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        type=int,
+        help="publication 執行後必須保留的 filesystem bytes",
+    )
     parser.add_argument("--pretty", action="store_true")
     return parser
 
@@ -107,6 +126,9 @@ def main(argv: list[str] | None = None) -> int:
             industry_index_names=tuple(args.industry_index_names),
             batch_size=args.batch_size,
             compression_level=args.compression_level,
+            temporary_storage_budget_bytes=args.temporary_storage_budget_bytes,
+            persistent_storage_budget_bytes=args.persistent_storage_budget_bytes,
+            safety_reserve_bytes=args.safety_reserve_bytes,
         )
     )
     payload = {

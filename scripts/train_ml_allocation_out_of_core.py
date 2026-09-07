@@ -48,6 +48,34 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--logistic-iterations", type=int, default=6)
     parser.add_argument("--hgb-max-iter", type=int, default=100)
     parser.add_argument("--hgb-max-fit-rows", type=int, default=250_000)
+    parser.add_argument(
+        "--temporary-storage-budget-bytes",
+        "--temporary-peak-bytes-budget",
+        dest="temporary_storage_budget_bytes",
+        type=int,
+        help="OOC workspace 暫存峰值 bytes 上限",
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+        help="OOC run 本次持久新增 bytes 上限",
+    )
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        type=int,
+        help="OOC 執行後必須保留的 filesystem bytes",
+    )
+    parser.add_argument(
+        "--profile",
+        choices=("full_shadow", "minimal_linear_shadow"),
+        default="full_shadow",
+        help=(
+            "訓練複雜度政策。minimal_linear_shadow 僅允許單一 "
+            "ridge/logistic algorithm 與一個明確 horizon，供成本後增益前的 shadow 比較。"
+        ),
+    )
     parser.add_argument("--no-resume", action="store_true")
     return parser
 
@@ -60,6 +88,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         or ("ridge_logistic", "hist_gradient_boosting")
     )
     horizons = tuple(args.horizons or ())
+    if args.profile == "minimal_linear_shadow":
+        if args.algorithms and tuple(args.algorithms) != ("ridge_logistic",):
+            raise SystemExit(
+                "minimal_linear_shadow 只允許 --algorithm ridge_logistic"
+            )
+        if len(horizons) != 1:
+            raise SystemExit(
+                "minimal_linear_shadow 必須明確提供恰好一個 --horizon"
+            )
+        algorithms = ("ridge_logistic",)
+    complexity_policy = {
+        "algorithm_count": len(algorithms),
+        "horizon_count": len(horizons) if horizons else None,
+        "formal_oos_allowed": False,
+        "production_alpha_bp": 0,
+    }
     try:
         publication = AllocationOutOfCoreTrainingService().train(
             AllocationOutOfCoreTrainingRequest(
@@ -75,6 +119,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 hgb_max_iter=args.hgb_max_iter,
                 hgb_max_fit_rows=args.hgb_max_fit_rows,
                 resume=not args.no_resume,
+                temporary_storage_budget_bytes=(
+                    args.temporary_storage_budget_bytes
+                ),
+                persistent_storage_budget_bytes=(
+                    args.persistent_storage_budget_bytes
+                ),
+                safety_reserve_bytes=args.safety_reserve_bytes,
+                training_profile=args.profile,
+                complexity_policy=complexity_policy,
             )
         )
     except (
@@ -127,6 +180,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     else str(replay_inputs.manifest_path)
                 ),
                 "replay_input_manifest_hash": replay_inputs.manifest_hash,
+                "training_profile": args.profile,
+                "complexity_policy": complexity_policy,
             },
             ensure_ascii=False,
             sort_keys=True,

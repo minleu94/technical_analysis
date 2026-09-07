@@ -41,6 +41,13 @@ from data_module.portfolio_ml_out_of_core_store import (
     STORE_SCHEMA_VERSION,
     TARGET_FIELDS,
 )
+from data_module.ml_storage_capacity import (
+    DEFAULT_SAFETY_RESERVE_BYTES,
+    MLStorageCapacityBudget,
+    StorageCapacityError,
+    directory_size_bytes as capacity_directory_size_bytes,
+    preflight_capacity,
+)
 from ml_module.allocation_training_service import (
     CLASSIFICATION_EXPERT_HEADS,
     EXPERT_HEAD_IDS,
@@ -88,6 +95,15 @@ class AllocationOutOfCoreTrainingRequest:
     hgb_max_iter: int = 100
     hgb_max_fit_rows: int = 250_000
     resume: bool = True
+    # Optional capacity policy additions preserve the prior request/API
+    # contract while allowing a long OOC run to enforce persistent and
+    # temporary bytes at resumable checkpoints.
+    temporary_storage_budget_bytes: int | None = None
+    persistent_storage_budget_bytes: int | None = None
+    persistent_new_bytes_budget: int | None = None
+    safety_reserve_bytes: int | None = None
+    training_profile: str = "full_shadow"
+    complexity_policy: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -130,6 +146,61 @@ class AllocationOutOfCoreTrainingRequest:
             raise ValueError("hgb_max_fit_rows must not exceed 2000000")
         if not isinstance(self.resume, bool):
             raise TypeError("resume must be bool")
+        aliases = (
+            self.persistent_storage_budget_bytes,
+            self.persistent_new_bytes_budget,
+        )
+        if (
+            aliases[0] is not None
+            and aliases[1] is not None
+            and aliases[0] != aliases[1]
+        ):
+            raise ValueError(
+                "persistent_storage_budget_bytes and "
+                "persistent_new_bytes_budget must match"
+            )
+        for field_name, value in (
+            ("temporary_storage_budget_bytes", self.temporary_storage_budget_bytes),
+            ("persistent_storage_budget_bytes", self.persistent_storage_budget_bytes),
+            ("persistent_new_bytes_budget", self.persistent_new_bytes_budget),
+            ("safety_reserve_bytes", self.safety_reserve_bytes),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{field_name} must be integer or None")
+            if value <= 0:
+                raise ValueError(f"{field_name} must be positive")
+        if self.training_profile not in {
+            "full_shadow",
+            "minimal_linear_shadow",
+        }:
+            raise ValueError("unsupported training profile")
+        if self.training_profile == "minimal_linear_shadow":
+            if self.algorithms != ("ridge_logistic",):
+                raise ValueError(
+                    "minimal_linear_shadow requires ridge_logistic only"
+                )
+            if len(self.horizons) != 1:
+                raise ValueError(
+                    "minimal_linear_shadow requires exactly one horizon"
+                )
+            if self.complexity_policy is None:
+                raise ValueError(
+                    "minimal_linear_shadow requires complexity policy"
+                )
+        if self.complexity_policy is not None:
+            _validate_complexity_policy(
+                self.complexity_policy,
+                algorithms=self.algorithms,
+                horizons=self.horizons,
+            )
+
+    @property
+    def profile(self) -> str:
+        """向 CLI／測試提供簡短的相容 profile alias。"""
+
+        return self.training_profile
 
 
 @dataclass(frozen=True)
@@ -144,6 +215,23 @@ class AllocationOutOfCoreTrainingPublication:
     meta_fold_count: int
     production_alpha_bp: int = 0
     formal_oos_allowed: bool = False
+
+
+def _capacity_budget_for_request(
+    request: AllocationOutOfCoreTrainingRequest,
+) -> MLStorageCapacityBudget:
+    persistent_budget = request.persistent_storage_budget_bytes
+    if persistent_budget is None:
+        persistent_budget = request.persistent_new_bytes_budget
+    return MLStorageCapacityBudget(
+        persistent_new_bytes_budget=persistent_budget,
+        temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
+        safety_reserve_bytes=(
+            request.safety_reserve_bytes
+            if request.safety_reserve_bytes is not None
+            else DEFAULT_SAFETY_RESERVE_BYTES
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -662,6 +750,13 @@ class AllocationOutOfCoreTrainingService:
         self,
         request: AllocationOutOfCoreTrainingRequest,
     ) -> AllocationOutOfCoreTrainingPublication:
+        capacity_budget = _capacity_budget_for_request(request)
+        output_root = request.output_root.resolve()
+        initial_capacity = preflight_capacity(
+            probe_path=output_root,
+            budget=capacity_budget,
+            stage="ooc_before_output",
+        )
         monitor = _PeakRSSMonitor(
             memory_budget_mb=request.memory_budget_mb
         )
@@ -683,7 +778,6 @@ class AllocationOutOfCoreTrainingService:
             "hgb_max_fit_rows": request.hgb_max_fit_rows,
         }
         run_id = "allocation-ooc-" + _sha256_json(run_identity)[7:31]
-        output_root = request.output_root.resolve()
         output_root.mkdir(parents=True, exist_ok=True)
         runs_root = output_root / "runs"
         runs_root.mkdir(parents=True, exist_ok=True)
@@ -731,6 +825,68 @@ class AllocationOutOfCoreTrainingService:
         work_root = run_directory / "work"
         artifacts_root.mkdir(parents=True, exist_ok=True)
         work_root.mkdir(parents=True, exist_ok=True)
+        capacity_checkpoint_path = run_directory / "capacity_checkpoint.json"
+        peak_capacity_temporary_bytes = 0
+        last_capacity_preflight = initial_capacity.as_dict()
+        capacity_checkpoint_count = 0
+
+        def _write_capacity_checkpoint(
+            *,
+            status: str,
+            stage: str,
+            preflight: Mapping[str, Any],
+            error: str | None = None,
+        ) -> None:
+            payload: dict[str, Any] = {
+                "schema_version": "allocation-ooc-capacity-checkpoint.v1",
+                "run_id": run_id,
+                "status": status,
+                "stage": stage,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "capacity_budget": capacity_budget.as_dict(),
+                "preflight": dict(preflight),
+                "peak_temporary_bytes": peak_capacity_temporary_bytes,
+                "checkpoint_count": capacity_checkpoint_count,
+                "resume_supported": True,
+            }
+            if error is not None:
+                payload["error"] = error
+            _atomic_write_json(capacity_checkpoint_path, payload)
+
+        def capacity_checkpoint(
+            stage: str,
+            temporary_roots: Sequence[Path] = (work_root,),
+        ) -> dict[str, Any]:
+            """Read-only quota check persisted before the next OOC stage."""
+
+            nonlocal peak_capacity_temporary_bytes
+            nonlocal last_capacity_preflight, capacity_checkpoint_count
+            result = preflight_capacity(
+                probe_path=output_root,
+                budget=capacity_budget,
+                stage=stage,
+                persistent_roots=(run_directory,),
+                # A run directory is dedicated to this deterministic run id;
+                # counting it on every resume makes persistent quota cumulative.
+                persistent_new_bytes_estimate=capacity_directory_size_bytes(
+                    run_directory
+                ),
+                temporary_roots=tuple(temporary_roots),
+                temporary_peak_bytes_observed=peak_capacity_temporary_bytes,
+            )
+            peak_capacity_temporary_bytes = max(
+                peak_capacity_temporary_bytes,
+                result.temporary_peak_bytes_observed,
+            )
+            last_capacity_preflight = result.as_dict()
+            capacity_checkpoint_count += 1
+            _write_capacity_checkpoint(
+                status="ok",
+                stage=stage,
+                preflight=last_capacity_preflight,
+            )
+            return last_capacity_preflight
+
         base_artifacts: list[dict[str, Any]] = []
         effective_batch_size = _effective_batch_size(
             requested=request.batch_size,
@@ -748,13 +904,15 @@ class AllocationOutOfCoreTrainingService:
 
         # 只有完成 manifest／output／audit 等 preflight 後才啟動 polling thread；
         # fail-closed 驗證例外不應在 pytest 或長駐程序留下背景 thread。
-        monitor.start()
         try:
+            capacity_checkpoint("ooc_workspace_ready")
+            monitor.start()
             for fold in store.folds:
                 fold_id = _required_text(
                     fold.get("fold_id"),
                     field_name="fold_id",
                 )
+                capacity_checkpoint(f"ooc_fold_{fold_id}_start")
                 label_maturity_cutoff_exclusive = _required_text(
                     fold.get("test_start"),
                     field_name="test_start",
@@ -799,9 +957,16 @@ class AllocationOutOfCoreTrainingService:
                                 algorithms=request.algorithms,
                             )
                         )
+                        capacity_checkpoint(
+                            f"ooc_fold_{fold_id}_pack_{pack_id}_reused",
+                            temporary_roots=(),
+                        )
                         continue
                     pack_work = work_root / f"fold={fold_id}" / f"pack={pack_id}"
                     _prepare_clean_work_directory(pack_work, work_root)
+                    capacity_checkpoint(
+                        f"ooc_fold_{fold_id}_pack_{pack_id}_workspace_ready"
+                    )
                     positions = store.feature_positions_for_pack(pack)
                     train_matrix_path = pack_work / "train.raw.f32"
                     test_matrix_path = pack_work / "test.raw.f32"
@@ -818,6 +983,9 @@ class AllocationOutOfCoreTrainingService:
                         positions=positions,
                         path=test_matrix_path,
                         batch_size=effective_batch_size,
+                    )
+                    capacity_checkpoint(
+                        f"ooc_fold_{fold_id}_pack_{pack_id}_matrices_ready"
                     )
                     for horizon in selected_horizons:
                         for algorithm in request.algorithms:
@@ -859,15 +1027,31 @@ class AllocationOutOfCoreTrainingService:
                                 natural_key=_expert_natural_key(artifact),
                                 payload=artifact,
                             )
+                            capacity_checkpoint(
+                                "ooc_fold_"
+                                f"{fold_id}_pack_{pack_id}_"
+                                f"horizon_{horizon}_algorithm_{algorithm}_complete"
+                            )
+                    capacity_checkpoint(
+                        f"ooc_fold_{fold_id}_pack_{pack_id}_workspace_peak"
+                    )
                     _close_memmap(train_matrix)
                     _close_memmap(test_matrix)
                     del train_matrix, test_matrix
                     _safe_remove_tree(pack_work, work_root)
+                    capacity_checkpoint(
+                        f"ooc_fold_{fold_id}_pack_{pack_id}_workspace_released",
+                        temporary_roots=(),
+                    )
                     monitor.assert_within_budget(
                         stage=f"base_fold_{fold_id}_pack_{pack_id}"
                     )
                 _close_memmap(test_refs)
                 del train_refs, test_refs
+                capacity_checkpoint(
+                    f"ooc_fold_{fold_id}_complete",
+                    temporary_roots=(),
+                )
 
             expected_base_count = (
                 len(store.folds)
@@ -891,8 +1075,10 @@ class AllocationOutOfCoreTrainingService:
                 batch_size=effective_batch_size,
                 audit=audit,
             )
+            capacity_checkpoint("ooc_final_base_complete", temporary_roots=())
             monitor.assert_within_budget(stage="final_base_experts")
 
+            capacity_checkpoint("ooc_meta_folds_start")
             meta_artifacts = self._train_meta_folds(
                 request=request,
                 store=store,
@@ -904,6 +1090,8 @@ class AllocationOutOfCoreTrainingService:
                 batch_size=effective_batch_size,
                 audit=audit,
             )
+            capacity_checkpoint("ooc_meta_folds_complete", temporary_roots=())
+            capacity_checkpoint("ooc_final_meta_start")
             final_meta = self._train_final_meta(
                 request=request,
                 store=store,
@@ -915,6 +1103,7 @@ class AllocationOutOfCoreTrainingService:
                 batch_size=effective_batch_size,
                 audit=audit,
             )
+            capacity_checkpoint("ooc_final_meta_complete", temporary_roots=())
             monitor.assert_within_budget(stage="final_meta")
             calibration = _calibration_summary(
                 store=store,
@@ -1014,6 +1203,12 @@ class AllocationOutOfCoreTrainingService:
                     "resume_supported": True,
                     "feature_pack_at_a_time": True,
                     "head_model_serialized_immediately": True,
+                    "capacity_budget": capacity_budget.as_dict(),
+                    "capacity_policy_schema": "ml-storage-capacity.v1",
+                    "capacity_checkpoint_path": (
+                        capacity_checkpoint_path.name
+                    ),
+                    "capacity_quota_enforced_during_checkpoints": True,
                 },
                 "validation": {
                     "pit_violation_count": 0,
@@ -1040,6 +1235,7 @@ class AllocationOutOfCoreTrainingService:
             }
             manifest["manifest_hash"] = _sha256_json(manifest)
             _write_json(manifest_path, manifest)
+            capacity_checkpoint("ooc_manifest_written", temporary_roots=())
             manifest_file_hash = _file_sha256(manifest_path)
             _append_event(
                 audit,
@@ -1067,6 +1263,21 @@ class AllocationOutOfCoreTrainingService:
                 latest_manifest_path=latest_manifest_path,
                 manifest=manifest,
             )
+        except StorageCapacityError as exc:
+            try:
+                _write_capacity_checkpoint(
+                    status="blocked_capacity",
+                    stage=str(exc.preflight.get("stage", "capacity_blocked")),
+                    preflight=exc.preflight,
+                    error=str(exc),
+                )
+            except OSError:
+                # If the filesystem is already full, the failure checkpoint
+                # itself may be impossible; the exception remains fail-closed.
+                pass
+            monitor.stop(enforce=False)
+            audit.close()
+            raise
         except Exception:
             monitor.stop(enforce=False)
             audit.close()
@@ -3911,6 +4122,42 @@ def _request_payload(
     payload["store_manifest_path"] = str(request.store_manifest_path)
     payload["output_root"] = str(request.output_root)
     return payload
+
+
+def _validate_complexity_policy(
+    policy: Mapping[str, object],
+    *,
+    algorithms: Sequence[str],
+    horizons: Sequence[int],
+) -> None:
+    expected_fields = {
+        "algorithm_count",
+        "horizon_count",
+        "formal_oos_allowed",
+        "production_alpha_bp",
+    }
+    if set(policy) != expected_fields:
+        raise ValueError("complexity policy fields are incompatible")
+    algorithm_count = policy.get("algorithm_count")
+    if (
+        isinstance(algorithm_count, bool)
+        or not isinstance(algorithm_count, int)
+        or algorithm_count != len(algorithms)
+    ):
+        raise ValueError("complexity policy algorithm count mismatch")
+    horizon_count = policy.get("horizon_count")
+    expected_horizon_count = len(horizons) if horizons else None
+    if horizon_count != expected_horizon_count:
+        raise ValueError("complexity policy horizon count mismatch")
+    if policy.get("formal_oos_allowed") is not False:
+        raise ValueError("complexity policy cannot authorize formal OOS")
+    production_alpha_bp = policy.get("production_alpha_bp")
+    if (
+        isinstance(production_alpha_bp, bool)
+        or not isinstance(production_alpha_bp, int)
+        or production_alpha_bp != 0
+    ):
+        raise ValueError("complexity policy alpha must remain zero")
 
 
 def _training_publication(
