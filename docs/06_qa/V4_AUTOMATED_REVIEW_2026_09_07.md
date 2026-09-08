@@ -2114,3 +2114,128 @@ source 與正式 resolver/acceptance readback 證據，不是 Rule capture 已�
 Formal 三項 `3/3`，也不是排程自然成功。仍待自然 Rule window 及 causal Paper
 ledger／PIT formal consumer 各自取得真實來源後，才可取得相應正式信用；缺件、晚到、
 hash 漂移與不一致 identity 會保留具體 machine blocker。
+
+## Task 3 最終 readback：Formal／Paper／frozen inference（2026-09-08）
+
+本節是 Task 3 的最終機器 readback，不重跑既有 immutable block、PIT publication、
+官方價格 overlay 或 bounded union；所有上游產物均保留原路徑、原 manifest 與原 hash。
+容量保護沿用並驗證既有收緊後政策：heavy chain safety reserve 至少 `200 GiB`，
+scheduled raw／Direct 的 `35 GiB` persistent + `40 GiB` temporary 需要 `275 GiB`
+headroom，standalone PIT／Direct／raw-to-OOC／OOC 各為 `1/1 GiB`；canonical OS lock、
+preflight、取鎖後重查與 checkpoint／summary encoded-size projection 均 fail-closed。
+本次沒有為驗證而重建 v2，也沒有放寬容量或自動清理既有 artifact。
+
+### 上游 v2 既有成功產物重用與 24 檔排除判定
+
+從 `output/v4_ml_research_shadow_union_bounded_20260907_v2/qa/` 的既有 QA 產物獨立
+讀回結果如下：
+
+- `overlay_readback_20260520_final_v4.json`（檔案 hash
+  `sha256:9d22b05fe9202a3737b83dac1d49ed46941780fbdd255adb8c29193d3dc7d031`）確認官方
+  價格 overlay `33/33`、PIT overlay `33 symbols / 99 rows`，但
+  `pit_available_before_decision_row_count=0`；union 交集 `9/33`、direct 交集
+  `1/33`，且 `selected_source_manifests_readback_complete=true`。
+- `union_coverage_20260520_v2.json`（檔案 hash
+  `sha256:6f690ba0806332ac33bff7b70c5add0585c0d18e1592ebcb37d716fa13aa8d38`）確認
+  union sample 缺少 `24` 檔。`cause_contract` 綁定
+  `data_module/portfolio_ml_dataset_assembler.py` 的
+  `_corporate_action_effective_date_in_horizon`／`_labels_for_decision`，排除區間是
+  `[decision_date, 60-trading-day horizon end]`，每一檔都因官方結果型除權息事件
+  使完整四 horizon tuple 不成立；這不是宣稱 raw price rows 不存在，也不是以空列補齊。
+- 因此 24 檔的排除規則判定為「合理且保守」：它避免把除權息後結果資訊帶進當期
+  label／sample，並可由事件檔 hash、union manifest hash 與 assembler code evidence
+  重播。`union_coverage` 的 `historical_pit_backfill_claimed=false`、
+  `formal_training_allowed=false`、`production_alpha_bp=0` 仍有效。
+
+### Frozen inference 最終公開入口 readback
+
+- `frozen_inference_audit_final_v4.json`（檔案 hash
+  `sha256:4fb68c157acaa9f45e59d2daf7c2076f14991b16390eafdce2da8de0390091cd`）為
+  `independent_v3_release_audit_passed`／`verified_after_publish`，11 rows 完整對讀；
+  `formal_oos_allowed=false`、`production_action_allowed=false`、
+  `broker_order_allowed=false`、`production_alpha_bp=0`、`promotion_eligible=false`。
+- `frozen_inference_readback_final_v4.json` 的
+  `inference_readback_mode=post_freeze_research_shadow`、`fallback_reason=null`；
+  未執行 promotion authorization、rule weight blend、portfolio risk projection、
+  advice composition 與 broker routing。此 readback 是 frozen inference 的研究影子
+  驗證，不是正式績效或可下單證明。
+
+### 當日公開入口與真實自然時間狀態
+
+觀測時間為台北 `2026-09-08 12:58` 左右；當日所有 wrapper 均使用自然 clock，沒有
+`--now`、事後補造 clock 或重新 fetch 舊來源。
+
+- `run_formal_input_producer_daily.cmd` 修正混合換行後，以 `cmd.exe` 實跑的 outer
+  與 inner exit 均為 `2`，不再出現 batch parser 噪音或 exit code 不一致。最新 durable
+  status `output/formal_daily_publications/scheduler/latest_status.json` 的檔案 hash
+  為 `sha256:663a5c63cf8c4126a51e9d4c71687892be74d7f1a40a3366ee8ed2cd014b6e50`，
+  `status=candidate_only`、`formal_ready_input_count=1/3`、
+  `formal_consumer_compatible_count=1/3`、`machine_candidate_input_count=2`、
+  `formal_oos=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。唯一取得
+  Formal-ready／consumer-compatible 的是 Rule history；PIT 仍是 machine candidate，
+  causal Paper ledger／sector formal source 仍缺件，因此不升格為 3/3。
+- PIT sidecar public entry `scripts/scheduled/run_formal_pit_sidecar_postcutoff.cmd`
+  實跑 exit `2`。`output/formal_daily_publications/scheduler/pit_sidecar/latest_status.json`
+  hash 為 `sha256:912af781495a294d2d0541fbbc96d6f104a3b1597d35a57e19e08ad8c0c592e0`，
+  `status=blocked`，保留 `pit_formal_calendar_unknown:2026-09-08`、同日多重 capture
+  與 `pit_formal_required_trading_dates_empty`；沒有把候選 archive 轉成 Formal credit。
+- Paper isolated public entry
+  `scripts/scheduled/run_paper_execution_daily_isolated.cmd` 實跑 exit `0`，新增的
+  durable receipt 為
+  `output/paper_execution_eod_replay/receipts/paper_execution_2026-09-08_9330c91d89344056_20260908T045711848641Z.json`
+  （檔案 hash `sha256:829749629505fefc5e76c2aad87182a423b47b31ec236469347ee398bfc1bc53`）。
+  receipt 的 candidate content hash 是
+  `sha256:eac06b94fc209fb3535f688456ade527d3db8297bd8401a565bd39fca3a50839`，
+  candidate file hash 是 `sha256:08f0c5b3c56f37bca0952da6e37b9caab652553d7e6a09db6dbda62d88a99d16`，
+  狀態為 `waiting_for_execution_source`，`execution_source_available_after=15:00`
+  （台北）、`ledger=null`、`formal_credit=false`、`broker_execution=false`。這證明
+  Paper 入口會產生 hash-bound candidate／receipt 並等待自然 EOD，不會提前製造 fill。
+
+### 排程、分類器與 readiness 結論
+
+升權唯讀 scheduler inspection
+`output/qa/scheduled_task_registration_task3_elevated_current.json`（capture
+`2026-09-08T04:58:03+00:00`，檔案 hash
+`sha256:2e1790609a7e86ea8653971feac357588bd122054a83a6d40b0da45dc8b3ec5b`）確認
+`17/17` tasks available、`configuration_ready=true`、17/17 action matches、所有
+action 均已觀測、`query_only=true`、`side_effect_free=true`。四個必要 task 的 LastResult
+分別為 PIT pre-open `0`、PIT sidecar `2`、Formal producer `-1073741510`、Paper
+EOD `267011`；均為 `Interactive only` 且 `Stop On Battery Mode, No Start On
+Batteries`。所以「已註冊／action 正確」與「自然執行已產生可驗證證據」被明確分開。
+
+最後的唯讀 operational auditor
+`output/qa/formal_operational_readiness_task3_current_v3.json`（檔案 hash
+`sha256:a94defdd6ce5043918e3583a962f3df49ce3f3c2a0f20f9e4d7beaa34cf41164`）為
+`status=blocked_no_formal_credit`、`credit_decision=no_credit`；lane readback 為
+Rule `blocked`、PIT `machine_candidate`、Paper `waiting_for_eod_window`。本次沒有
+注入舊的 ML readiness report，因此 `formal_readiness.state=not_supplied` 會如實成為
+blocker，而不是以 stale／research readiness 偽造正式信用。auditor safety flags 為
+`read_only=true`、`network_requests=false`、`writes_source_database=false`、
+`writes_formal_controlled_paths=false`、`broker_order_allowed=false`、
+`formal_oos_allowed=false`、`training_started=false`。
+
+auditor process exit `0` 僅代表唯讀稽核完成，不代表 Formal pass。分類器的狀態集合
+明確保留 `ready`、`complete`、`pending_natural_window`、`pending_upstream`、
+`blocked_missing_evidence`、`failed_retryable`、`failed_terminal` 與 `stale`；
+目前尚未有 `complete`，而是以各 lane 的具體證據落點顯示。Paper 的 EOD 未到是
+`pending_natural_window`，PIT sidecar／
+causal ledger 證據不足是 `blocked_missing_evidence`，未成功的 scheduler LastResult
+是 `failed_retryable`／`stale` 的執行觀測，不會被壓成 `complete`；只有三個 consumer
+receipt、自然時間與內容／hash replay 同時成立才可進入 `ready`／`complete`。等待不是
+failure，也不是 pass。
+
+下一個合法自然時窗：
+
+- Paper：台北 `2026-09-08 15:00` 後 EOD source 才可用，排程 wrapper 為 `15:05`；
+  在此之前只能保持 waiting，不能宣稱 fill 或 Paper performance。
+- PIT：`2026-09-08` 的 pre-open cutoff `08:30` 已過；下一個官方交易日須在
+  `08:30` 前捕獲新的同日 archive，再於 cutoff 後由 sidecar readback；不接受事後
+  fetch、舊 capture 或多重 capture 猜選。
+- Rule：當日自然窗口為 `09:00–13:30`；現有 machine revalidation 不足以補足 PIT／
+  causal ledger，下一次必須在下一個合法 session 重新取得缺件並由同一 consumer 驗證。
+
+本次工程驗證為 66 個受影響 test files、`445 passed`；UI workbench `81 passed`；
+Update Tab QA `25 passed / 0 failed / 4 skipped`；22 個 Python 檔案 `py_compile`；
+21 個 Formal／Paper 核心檔案及全 core/UI scope `mypy --explicit-package-bases`
+均無錯誤。新增 `*.cmd text eol=crlf` repo contract 與 line-ending regression test，
+以固定 Windows 公開入口的可重現性。

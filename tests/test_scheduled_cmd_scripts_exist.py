@@ -39,6 +39,17 @@ REQUIRED_CMD_FILES = (
 )
 
 
+FORMAL_PAPER_WINDOWS_WRAPPERS = (
+    "run_formal_input_producer_daily.cmd",
+    "run_formal_rule_source_preopen.cmd",
+    "run_formal_pit_sidecar_postcutoff.cmd",
+    "run_pit_sector_membership_preopen_capture.cmd",
+    "run_paper_execution_daily.cmd",
+    "run_paper_execution_daily_isolated.cmd",
+    "run_paper_portfolio_daily.cmd",
+)
+
+
 def test_required_scheduled_cmd_scripts_exist() -> None:
     missing = [name for name in REQUIRED_CMD_FILES if not (SCHEDULED_DIR / name).exists()]
 
@@ -51,5 +62,16 @@ def test_cmd_wrappers_do_not_use_powershell_policy_bypass() -> None:
         text = path.read_text(encoding="utf-8").lower()
         if "set-executionpolicy" in text or "executionpolicy bypass" in text:
             offenders.append(path.name)
+
+    assert offenders == []
+
+
+def test_formal_paper_windows_wrappers_use_crlf_line_endings() -> None:
+    offenders: list[str] = []
+    for name in FORMAL_PAPER_WINDOWS_WRAPPERS:
+        data = (SCHEDULED_DIR / name).read_bytes()
+        bare_line_endings = data.replace(b"\r\n", b"")
+        if not data.endswith(b"\r\n") or b"\n" in bare_line_endings or b"\r" in bare_line_endings:
+            offenders.append(name)
 
     assert offenders == []
