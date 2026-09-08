@@ -6,6 +6,17 @@ from typing import Any
 
 from app_module.advice_dtos import AdviceDashboardDTO
 from app_module.decision_desk_dtos import DecisionDeskSnapshot
+from app_module.machine_status_classification import (
+    MACHINE_STATUS_HUMAN_REVIEW,
+    MACHINE_STATUS_INVALID_EVIDENCE,
+    MACHINE_STATUS_MACHINE_CANDIDATE,
+    MACHINE_STATUS_MACHINE_DEGRADED,
+    MACHINE_STATUS_SOURCE_MISSING,
+    MACHINE_STATUS_STALE,
+    MACHINE_STATUS_UNKNOWN,
+    MACHINE_STATUS_WAITING_FOR_TIME,
+    classify_machine_status,
+)
 from app_module.pre_v2_readiness_service import (
     PreV2ReadinessItem,
     PreV2ReadinessReport,
@@ -168,14 +179,21 @@ class WorkbenchReadOnlyComposer:
                     )
                 )
         for item in readiness_report.items:
-            if item.status in {STATUS_ACTION_REQUIRED, STATUS_WAITING_FOR_TIME}:
+            classification = _readiness_status_classification(item)
+            if (
+                item.status in {STATUS_ACTION_REQUIRED, STATUS_WAITING_FOR_TIME}
+                and classification == MACHINE_STATUS_HUMAN_REVIEW
+            ):
                 items.append(
                     WorkbenchReviewItem(
                         item_id=f"readiness_{item.item_id}",
                         title=item.label,
                         severity=_status_to_severity(item.status),
                         source="pre_v2_readiness",
-                        summary=_readiness_summary(item.observed_count, item.required_count),
+                        summary=(
+                            f"{_readiness_summary(item.observed_count, item.required_count)}；"
+                            "此項有明確人工判讀需求。"
+                        ),
                         drilldown_target="evidence_mode",
                     )
                 )
@@ -266,6 +284,7 @@ class WorkbenchReadOnlyComposer:
                     for item in readiness_report.items
                     for reason in (*item.blocking_reasons, *item.diagnostics)
                 ),
+                status_classification=_readiness_report_classification(readiness_report),
             )
         )
         if scheduled_status is not None:
@@ -279,6 +298,7 @@ class WorkbenchReadOnlyComposer:
                     degraded_reason=_reason_or_none(scheduled_status.diagnostics),
                     drilldown_target="evidence_review",
                     diagnostics=scheduled_status.diagnostics,
+                    status_classification=scheduled_status.machine_status_classification,
                 )
             )
 
@@ -399,6 +419,7 @@ class WorkbenchReadOnlyComposer:
             severity = _status_to_severity(readiness_item.status)
             queue_group = "evidence_gate"
             source_type = "pre_v2_readiness"
+            status_classification = _readiness_status_classification(readiness_item)
             items.append(
                 WorkbenchActionItem(
                     item_id=f"readiness_{readiness_item.item_id}",
@@ -415,6 +436,7 @@ class WorkbenchReadOnlyComposer:
                     queue_group=queue_group,
                     source_label="Pre-V2 準備度",
                     sort_rank=_action_sort_rank(severity, queue_group, source_type, len(items)),
+                    status_classification=status_classification,
                 )
             )
 
@@ -514,7 +536,19 @@ class WorkbenchReadOnlyComposer:
         weekly_history = _find_readiness_item(readiness_report, "weekly_history")
         multi_day = _find_readiness_item(readiness_report, "multi_day_dry_run")
         manual_note = _find_checklist_item(daily_checklist, "manual_review_note")
-        first_action_target = action_items[0].drilldown_target if action_items else "evidence_review"
+        human_action_items = tuple(
+            item for item in action_items if _action_requires_human_review(item)
+        )
+        machine_action_items = tuple(
+            item for item in action_items if not _action_requires_human_review(item)
+        )
+        first_action_target = (
+            human_action_items[0].drilldown_target
+            if human_action_items
+            else machine_action_items[0].drilldown_target
+            if machine_action_items
+            else "evidence_review"
+        )
         return (
             WorkbenchOperatingLoopStep(
                 step_id="daily_start",
@@ -532,11 +566,12 @@ class WorkbenchReadOnlyComposer:
             ),
             WorkbenchOperatingLoopStep(
                 step_id="manual_queue",
-                label="人工處理佇列",
+                label="人工與機器處理佇列",
                 cadence="daily",
-                status="manual_required" if action_items else "observed",
+                status="manual_required" if human_action_items else "observed",
                 summary=(
-                    f"目前有 {len(action_items)} 筆 Action Items 要人工處理；"
+                    f"目前有 {len(human_action_items)} 筆 Action Items 要人工處理；"
+                    f"另有 {len(machine_action_items)} 筆機器證據狀態，無需人工簽核。"
                     "只依 source trace / degraded reason 覆盤，不標記完成。"
                 ),
                 source_trace="WorkbenchDashboardDTO.action_items",
@@ -768,6 +803,28 @@ def _operating_loop_readiness_summary(item: PreV2ReadinessItem | None) -> str:
 
 
 def _scheduled_status_label(status: ScheduledEvidenceStatus) -> str:
+    classification = status.machine_status_classification
+    if classification == MACHINE_STATUS_STALE:
+        return MACHINE_STATUS_STALE
+    if classification == MACHINE_STATUS_UNKNOWN:
+        return MACHINE_STATUS_UNKNOWN
+    # The service marks a partial initial read with ``load_checked_at`` while
+    # keeping ``load_state=unknown``.  Do not let old raw ``passed`` values
+    # make that untrusted read appear green.  DTO fixtures without loader
+    # metadata retain their legacy projection for compatibility.
+    if status.load_state == MACHINE_STATUS_UNKNOWN and status.load_checked_at is not None:
+        return classification
+    # Older injected DTO fixtures predate loader metadata.  Preserve their
+    # established pass/degraded projection while real service reads (which
+    # set load_state=current) use the source classification below.
+    if status.load_state == "current" and classification in {
+        MACHINE_STATUS_INVALID_EVIDENCE,
+        MACHINE_STATUS_SOURCE_MISSING,
+        MACHINE_STATUS_WAITING_FOR_TIME,
+        MACHINE_STATUS_MACHINE_CANDIDATE,
+        MACHINE_STATUS_MACHINE_DEGRADED,
+    }:
+        return classification
     if status.has_production_write_risk:
         return "blocked"
     if status.recommendation_status == "passed" and status.evidence_status == "passed":
@@ -788,6 +845,9 @@ def _scheduled_status_summary(status: ScheduledEvidenceStatus) -> str:
     return (
         f"recommendation={status.recommendation_status} / evidence={status.evidence_status}；"
         f"source={recommendation_source}；result_id={result_id}；推薦 {rec_count} 筆；"
+        f"machine_classification={status.machine_status_classification}；"
+        f"load_state={status.load_state}；"
+        f"last_good_loaded_at={status.last_good_loaded_at or '未知'}；"
         f"共同觀測 {status.scheduled_joint_observed_days} 天"
         f"（recommendation {status.recommendation_snapshot_observed_days} 天 / "
         f"manual recommendation {status.manual_recommendation_observed_days} 天 / "
@@ -801,6 +861,36 @@ def _readiness_summary(observed_count: int | None, required_count: int | None) -
     if required_count is None:
         return f"已觀測 {observed_count or 0} 筆。"
     return f"{observed_count or 0}/{required_count} records observed."
+
+
+def _readiness_status_classification(item: PreV2ReadinessItem) -> str:
+    return classify_machine_status(
+        item.status,
+        (*item.blocking_reasons, *item.diagnostics, *item.next_actions),
+    )
+
+
+def _readiness_report_classification(readiness_report: PreV2ReadinessReport) -> str:
+    classifications = tuple(
+        _readiness_status_classification(item) for item in readiness_report.items
+    )
+    if MACHINE_STATUS_HUMAN_REVIEW in classifications:
+        return MACHINE_STATUS_HUMAN_REVIEW
+    for classification in (
+        MACHINE_STATUS_INVALID_EVIDENCE,
+        MACHINE_STATUS_SOURCE_MISSING,
+        MACHINE_STATUS_WAITING_FOR_TIME,
+        MACHINE_STATUS_MACHINE_CANDIDATE,
+        MACHINE_STATUS_MACHINE_DEGRADED,
+        MACHINE_STATUS_UNKNOWN,
+    ):
+        if classification in classifications:
+            return classification
+    return classify_machine_status(readiness_report.overall_status)
+
+
+def _action_requires_human_review(item: WorkbenchActionItem) -> bool:
+    return item.status_classification == MACHINE_STATUS_HUMAN_REVIEW
 
 
 def _evidence_gate_status_summary(readiness_report: PreV2ReadinessReport) -> str:

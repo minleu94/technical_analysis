@@ -1,9 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from app_module.machine_status_classification import (
+    MACHINE_STATUS_HUMAN_REVIEW,
+    MACHINE_STATUS_INVALID_EVIDENCE,
+    MACHINE_STATUS_MACHINE_CANDIDATE,
+    MACHINE_STATUS_MACHINE_DEGRADED,
+    MACHINE_STATUS_MACHINE_VERIFIED,
+    MACHINE_STATUS_SOURCE_MISSING,
+    MACHINE_STATUS_STALE,
+    MACHINE_STATUS_UNKNOWN,
+    MACHINE_STATUS_WAITING_FOR_TIME,
+    classify_machine_status,
+)
 
 
 @dataclass(frozen=True)
@@ -53,19 +67,84 @@ class ScheduledEvidenceStatus:
     report_exists: bool = False
     report_preview: str = ""
     diagnostics: tuple[str, ...] = ()
+    # These fields describe the read itself.  They are deliberately separate
+    # from producer status so a stale last-known-good payload cannot look
+    # current merely because its old status was ``passed``.
+    load_state: str = "unknown"
+    is_stale: bool = False
+    load_checked_at: str | None = None
+    last_good_loaded_at: str | None = None
 
     @property
     def has_production_write_risk(self) -> bool:
         return bool(self.confirm) or bool(self.writes_evidence_db) or bool(self.auto_trading) or bool(self.lifecycle_action)
 
+    @property
+    def machine_status_classifications(self) -> tuple[tuple[str, str], ...]:
+        diagnostics = (
+            self.diagnostics
+            + self.pipeline_blocking_gaps
+            + self.pipeline_diagnostic_codes
+            + self.source_coverage_warnings
+            + self.freshness_errors
+        )
+        return (
+            ("data_freshness", classify_machine_status(self.freshness_status, diagnostics)),
+            ("recommendation_snapshot", classify_machine_status(self.recommendation_status, diagnostics)),
+            ("evidence_pipeline", classify_machine_status(self.evidence_status, diagnostics)),
+        )
+
+    @property
+    def machine_status_classification(self) -> str:
+        """Return the most conservative machine handling classification."""
+
+        if self.is_stale or self.load_state == MACHINE_STATUS_STALE:
+            return MACHINE_STATUS_STALE
+        if (
+            self.load_state == MACHINE_STATUS_UNKNOWN
+            and self.freshness_status in {"", "missing", "unknown"}
+            and self.recommendation_status in {"", "missing", "unknown"}
+            and self.evidence_status in {"", "missing", "unknown"}
+        ):
+            return MACHINE_STATUS_UNKNOWN
+        classifications = {value for _name, value in self.machine_status_classifications}
+        for value in (
+            MACHINE_STATUS_INVALID_EVIDENCE,
+            MACHINE_STATUS_SOURCE_MISSING,
+            MACHINE_STATUS_WAITING_FOR_TIME,
+            MACHINE_STATUS_HUMAN_REVIEW,
+            MACHINE_STATUS_MACHINE_CANDIDATE,
+            MACHINE_STATUS_MACHINE_DEGRADED,
+            MACHINE_STATUS_UNKNOWN,
+        ):
+            if value in classifications:
+                return value
+        return MACHINE_STATUS_MACHINE_VERIFIED
+
 
 class ScheduledEvidenceStatusService:
     """Read-only loader for Windows scheduled evidence output files."""
 
-    def __init__(self, config: Any) -> None:
+    def __init__(
+        self,
+        config: Any,
+        *,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self.output_root = Path(config.output_root)
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._last_good_status: ScheduledEvidenceStatus | None = None
 
     def load_latest(self) -> ScheduledEvidenceStatus:
+        checked_at = _timestamp(self._clock())
+        try:
+            candidate = self._load_latest()
+        except Exception as exc:  # noqa: BLE001
+            diagnostic = f"status_loader_error:{type(exc).__name__}:{exc}"
+            return self._fallback_after_failure(checked_at, (diagnostic,))
+        return self._accept_candidate(candidate, checked_at)
+
+    def _load_latest(self) -> ScheduledEvidenceStatus:
         diagnostics: list[str] = []
         freshness_path = self.output_root / "scheduled" / "data_freshness" / "latest_status.json"
         recommendation_path = self.output_root / "scheduled" / "recommendation_snapshot" / "latest_status.json"
@@ -190,6 +269,75 @@ class ScheduledEvidenceStatusService:
             diagnostics=tuple(diagnostics),
         )
 
+    def _accept_candidate(
+        self,
+        candidate: ScheduledEvidenceStatus,
+        checked_at: str,
+    ) -> ScheduledEvidenceStatus:
+        failures = tuple(
+            diagnostic
+            for diagnostic in candidate.diagnostics
+            if diagnostic.startswith(
+                ("status_missing:", "status_unreadable:", "status_invalid_payload:")
+            )
+        )
+        if (
+            candidate.freshness_status in {"", "missing", "unknown"}
+            and candidate.recommendation_status in {"", "missing", "unknown"}
+            and candidate.evidence_status in {"", "missing", "unknown"}
+        ):
+            failures = (*failures, "status_no_observation")
+
+        if failures:
+            return self._fallback_after_failure(checked_at, failures, candidate)
+
+        current = replace(
+            candidate,
+            load_state="current",
+            is_stale=False,
+            load_checked_at=checked_at,
+            last_good_loaded_at=checked_at,
+        )
+        self._last_good_status = current
+        return current
+
+    def _fallback_after_failure(
+        self,
+        checked_at: str,
+        failures: tuple[str, ...],
+        candidate: ScheduledEvidenceStatus | None = None,
+    ) -> ScheduledEvidenceStatus:
+        if self._last_good_status is not None:
+            previous = self._last_good_status
+            last_good_at = previous.last_good_loaded_at or previous.load_checked_at
+            diagnostics = _dedupe_strings(
+                (
+                    *previous.diagnostics,
+                    *(candidate.diagnostics if candidate is not None else ()),
+                    *failures,
+                    "last_known_good_preserved",
+                )
+            )
+            return replace(
+                previous,
+                load_state="stale",
+                is_stale=True,
+                load_checked_at=checked_at,
+                last_good_loaded_at=last_good_at,
+                diagnostics=diagnostics,
+            )
+
+        base = candidate or ScheduledEvidenceStatus()
+        diagnostics = _dedupe_strings((*base.diagnostics, *failures))
+        return replace(
+            base,
+            load_state="unknown",
+            is_stale=False,
+            load_checked_at=checked_at,
+            last_good_loaded_at=None,
+            diagnostics=diagnostics,
+        )
+
 
 def _read_json(path: Path, diagnostics: list[str]) -> dict[str, Any]:
     if not path.exists():
@@ -200,7 +348,28 @@ def _read_json(path: Path, diagnostics: list[str]) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as exc:
         diagnostics.append(f"status_unreadable:{path}:{exc}")
         return {}
-    return loaded if isinstance(loaded, dict) else {}
+    if not isinstance(loaded, dict):
+        diagnostics.append(f"status_invalid_payload:{path}:expected_object")
+        return {}
+    return loaded
+
+
+def _timestamp(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _dedupe_strings(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value)
+        if text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return tuple(result)
 
 
 def _read_report_preview(path: Path, diagnostics: list[str], *, max_lines: int = 120) -> str:

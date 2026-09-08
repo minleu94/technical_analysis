@@ -27,6 +27,7 @@ STRATEGY_PROFILE_LABEL = "策略版本，已通過 gate"
 BUILTIN_PROFILE_LABEL = "內建 Profile"
 
 GATE_PASSED_STATUSES = {"validated", "approved", "gate_passed", "passed", "promoted"}
+_PROFILE_RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 
 DEFAULT_BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
@@ -34,6 +35,7 @@ DEFAULT_BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
         "name": "暴衝策略",
         "version": "1.0.0",
         "description": "偏向趨勢追蹤與量能放大的內建 Profile。",
+        "risk_level": "high",
         "regime": ["Trend", "Breakout"],
         "regime_not_suitable": ["Reversion"],
         "risk_warning": {
@@ -51,6 +53,7 @@ DEFAULT_BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
         "name": "穩健策略",
         "version": "1.0.0",
         "description": "偏向均值回歸與風險控制的內建 Profile。",
+        "risk_level": "low",
         "regime": ["Reversion"],
         "regime_not_suitable": ["Trend", "Breakout"],
         "risk_warning": {
@@ -68,6 +71,7 @@ DEFAULT_BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
         "name": "長期投資",
         "version": "1.0.0",
         "description": "偏向趨勢延續與較長持有期的內建 Profile。",
+        "risk_level": "medium",
         "regime": ["Trend", "Breakout"],
         "regime_not_suitable": ["Reversion"],
         "risk_warning": {
@@ -101,6 +105,23 @@ class RecommendationProfile:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
+    def risk_level(self) -> Optional[str]:
+        """回傳 Profile 明確宣告的風險等級；沒有宣告時回傳 ``None``。
+
+        Regime detector 的信心不會被當成風險訊號。只有 Profile 自己的
+        risk policy 明確宣告支援的等級，才可參與自動研究建議。
+        """
+        candidates = (
+            self.metadata.get("risk_level"),
+            self.risk_warning.get("risk_level"),
+        )
+        for candidate in candidates:
+            normalized = str(candidate).strip().lower() if candidate is not None else ""
+            if normalized in {"low", "medium", "high"}:
+                return normalized
+        return None
+
+    @property
     def display_label(self) -> str:
         prefix = {
             PROFILE_TYPE_BUILTIN: "內建",
@@ -110,7 +131,7 @@ class RecommendationProfile:
         return f"{prefix}｜{self.name}"
 
     def to_legacy_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "name": self.name,
             "version": self.version,
             "description": self.description,
@@ -122,6 +143,9 @@ class RecommendationProfile:
             "validation_label": self.validation_label,
             "source_version_id": self.source_version_id,
         }
+        if self.risk_level is not None:
+            payload["risk_level"] = self.risk_level
+        return payload
 
 
 @dataclass(frozen=True)
@@ -132,6 +156,21 @@ class RegimeCompatibility:
     score_effect: str
     explanation: str
     excludes_results: bool = False
+
+
+@dataclass(frozen=True)
+class RegimeProfileSuggestion:
+    """依 Profile policy 與 Regime 適用性決定的一筆 Profile 建議。
+
+    刻意不含 ``regime_confidence``。信心只描述 detector 對市場狀態的證據，
+    不描述預期報酬、個人適配或風險預算。
+    """
+
+    profile_id: Optional[str]
+    status: str
+    reason_code: str
+    reason: str
+    risk_level: Optional[str] = None
 
 
 class RecommendationProfileService:
@@ -181,7 +220,7 @@ class RecommendationProfileService:
                     validation_label=CUSTOM_PROFILE_LABEL,
                     risk_warning=deepcopy(raw_profile.get("risk_warning", {})),
                     enabled=True,
-                    metadata=deepcopy(raw_profile.get("metadata", {})),
+                    metadata=self._profile_metadata(raw_profile),
                 )
             )
         return profiles
@@ -214,7 +253,11 @@ class RecommendationProfileService:
                     risk_warning=deepcopy(version_data.get("risk_warning", {})),
                     source_version_id=version_id,
                     enabled=True,
-                    metadata={"strategy_id": strategy_id, "validation_status": version_data.get("validation_status")},
+                    metadata={
+                        "strategy_id": strategy_id,
+                        "validation_status": version_data.get("validation_status"),
+                        "risk_level": version_data.get("risk_level"),
+                    },
                 )
             )
         return profiles
@@ -299,7 +342,186 @@ class RecommendationProfileService:
             explanation="Profile 與目前 Regime 不匹配；不排除結果，只作排序、分數或原因揭露。",
         )
 
+    @staticmethod
+    def _profile_risk_rank(profile: RecommendationProfile) -> int:
+        risk_level = profile.risk_level
+        if risk_level is None:
+            return 99
+        return _PROFILE_RISK_ORDER[risk_level]
+
+    def suggest_profile_for_regime(
+        self,
+        current_regime: Optional[str],
+        *,
+        selected_profile_id: Optional[str] = None,
+        risk_budget: Optional[str] = None,
+    ) -> RegimeProfileSuggestion:
+        """依明確的 Profile／風險 policy 選出研究建議。
+
+        使用者已選的 Profile 原樣保留；其餘情況只在適用目前 Regime 的
+        Profile 中選明確宣告最低風險等級者。沒有使用者風險預算時，結果
+        仍只是保守的研究建議，不宣稱個人適配。未知風險 metadata、未知
+        Regime 或沒有相容 Profile 的預算會維持 unavailable／blocked，
+        不以猜測補值。
+        """
+        profiles = [profile for profile in self.list_profiles() if profile.enabled]
+        by_id = {profile.profile_id: profile for profile in profiles}
+
+        normalized_budget: Optional[str] = None
+        if risk_budget is not None:
+            normalized_budget = str(risk_budget).strip().lower()
+            if normalized_budget not in _PROFILE_RISK_ORDER:
+                selected = by_id.get(str(selected_profile_id)) if selected_profile_id else None
+                return RegimeProfileSuggestion(
+                    profile_id=selected.profile_id if selected is not None else None,
+                    status="blocked",
+                    reason_code="invalid_risk_budget",
+                    reason=(
+                        "提供的風險預算不在既有 policy 範圍；保留目前選擇的 Profile，"
+                        "但不能視為 policy 通過。"
+                    ),
+                    risk_level=selected.risk_level if selected is not None else None,
+                )
+
+        selected = by_id.get(str(selected_profile_id)) if selected_profile_id else None
+        normalized_regime = str(current_regime).strip() if current_regime else ""
+        if selected is not None:
+            selected_risk_level = selected.risk_level
+            if normalized_budget is not None:
+                if selected_risk_level is None:
+                    return RegimeProfileSuggestion(
+                        profile_id=selected.profile_id,
+                        status="blocked",
+                        reason_code="selected_profile_risk_policy_unavailable",
+                        reason=(
+                            "保留使用者已選 Profile，但它缺少可驗證的風險 policy；"
+                            "不能依風險預算判定通過。"
+                        ),
+                    )
+                if self._profile_risk_rank(selected) > _PROFILE_RISK_ORDER[normalized_budget]:
+                    return RegimeProfileSuggestion(
+                        profile_id=selected.profile_id,
+                        status="blocked",
+                        reason_code="selected_profile_exceeds_risk_budget",
+                        reason=(
+                            "保留使用者已選 Profile，但其風險等級超過目前風險預算；"
+                            "不會自動換用另一個 Profile。"
+                        ),
+                        risk_level=selected_risk_level,
+                    )
+
+            if normalized_regime and normalized_regime not in selected.applicable_regimes:
+                return RegimeProfileSuggestion(
+                    profile_id=selected.profile_id,
+                    status="incompatible",
+                    reason_code="selected_profile_regime_mismatch",
+                    reason=(
+                        "保留使用者已選 Profile，但它不適用目前 Regime；"
+                        "不會自動換用另一個 Profile。"
+                    ),
+                    risk_level=selected_risk_level,
+                )
+
+            if normalized_budget is None:
+                return RegimeProfileSuggestion(
+                    profile_id=selected.profile_id,
+                    status="user_selected",
+                    reason_code="user_profile_preserved",
+                    reason=(
+                        "沿用使用者已選 Profile；未提供風險預算，"
+                        "不推定個人適配，Regime 判讀信心也不會改變其風險排序。"
+                    ),
+                    risk_level=selected_risk_level,
+                )
+            return RegimeProfileSuggestion(
+                profile_id=selected.profile_id,
+                status="user_selected",
+                reason_code="user_profile_within_risk_budget",
+                reason=(
+                    "沿用使用者已選 Profile；其已宣告風險等級符合目前風險預算，"
+                    "但這不代表個人適配。"
+                ),
+                risk_level=selected_risk_level,
+            )
+
+        if not normalized_regime:
+            return RegimeProfileSuggestion(
+                profile_id=None,
+                status="unavailable",
+                reason_code="regime_unavailable",
+                reason="目前沒有可驗證的 Regime，暫不提出 Profile 研究建議。",
+            )
+
+        suitable = [
+            profile
+            for profile in profiles
+            if normalized_regime in profile.applicable_regimes
+        ]
+        if not suitable:
+            return RegimeProfileSuggestion(
+                profile_id=None,
+                status="unavailable",
+                reason_code="no_compatible_profile",
+                reason="目前沒有明確適用此 Regime 的 Profile。",
+            )
+
+        candidates = [
+            profile
+            for profile in suitable
+            if profile.risk_level is not None
+            and (
+                normalized_budget is None
+                or self._profile_risk_rank(profile)
+                <= _PROFILE_RISK_ORDER[normalized_budget]
+            )
+        ]
+        if not candidates:
+            reason_code = (
+                "risk_budget_has_no_compatible_profile"
+                if normalized_budget is not None
+                else "risk_policy_unavailable"
+            )
+            reason = (
+                "沒有符合既有風險預算且適用此 Regime 的 Profile。"
+                if normalized_budget is not None
+                else "相容 Profile 缺少可驗證的風險 policy，不能猜測風險排序。"
+            )
+            return RegimeProfileSuggestion(
+                profile_id=None,
+                status="blocked",
+                reason_code=reason_code,
+                reason=reason,
+            )
+
+        suggested = min(
+            candidates,
+            key=lambda profile: (self._profile_risk_rank(profile), profile.profile_id),
+        )
+        if normalized_budget is None:
+            reason = (
+                "未提供風險預算，依 Profile 已宣告的最低風險等級提出研究建議；"
+                "此建議不代表個人適配，也不把 Regime 判讀信心當成獲利機率。"
+            )
+            reason_code = "conservative_research_suggestion"
+        else:
+            reason = (
+                "依使用者提供的既有風險預算與 Profile-Regime 適用性提出研究建議；"
+                "Regime 判讀信心只描述狀態判讀。"
+            )
+            reason_code = "risk_budget_constrained_suggestion"
+        return RegimeProfileSuggestion(
+            profile_id=suggested.profile_id,
+            status="suggested_research",
+            reason_code=reason_code,
+            reason=reason,
+            risk_level=suggested.risk_level,
+        )
+
     def _profile_from_builtin(self, profile_id: str, profile_data: Dict[str, Any]) -> RecommendationProfile:
+        metadata: Dict[str, Any] = {}
+        declared_risk_level = profile_data.get("risk_level")
+        if declared_risk_level is not None:
+            metadata["risk_level"] = declared_risk_level
         return RecommendationProfile(
             profile_id=profile_id,
             profile_type=PROFILE_TYPE_BUILTIN,
@@ -312,7 +534,16 @@ class RecommendationProfileService:
             validation_label=BUILTIN_PROFILE_LABEL,
             risk_warning=deepcopy(profile_data.get("risk_warning", {})),
             enabled=True,
+            metadata=metadata,
         )
+
+    def _profile_metadata(self, raw_profile: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = deepcopy(raw_profile.get("metadata", {}))
+        if not isinstance(metadata, dict):
+            metadata = {}
+        if "risk_level" not in metadata and raw_profile.get("risk_level") is not None:
+            metadata["risk_level"] = raw_profile.get("risk_level")
+        return metadata
 
     def _prepare_config_for_storage(self, config: Dict[str, Any]) -> Dict[str, Any]:
         normalized = deepcopy(config)

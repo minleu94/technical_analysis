@@ -249,6 +249,13 @@ def _display_token(value: str) -> str:
         "read_only_sources": "唯讀來源",
         "read_only_sources_plus_historical_replay": "唯讀來源 + 歷史 replay summary",
         "missing": "缺漏",
+        "source_missing": "來源缺件",
+        "invalid_evidence": "證據無效",
+        "machine_candidate": "機器候選",
+        "machine_verified": "機器已驗證",
+        "machine_degraded": "機器觀測降級",
+        "stale": "資料過期（stale）",
+        "unknown": "未知",
         "warning": "警告",
         "info": "資訊",
         "observed": "已觀測",
@@ -344,14 +351,28 @@ def _is_attention_status(status: str) -> bool:
         "action_required",
         "waiting_for_time",
         "manual_required",
+        "source_missing",
+        "invalid_evidence",
+        "machine_candidate",
+        "machine_degraded",
+        "stale",
     }
 
 
 def _status_tone(status: str) -> dict[str, str]:
     token = str(status)
-    if token in {"critical", "blocked", "missing"}:
+    if token in {"critical", "blocked", "missing", "source_missing", "invalid_evidence"}:
         return {"fg": "#ef4444", "bg": "#2a1114"}
-    if token in {"warning", "degraded", "action_required", "manual_required", "waiting_for_time"}:
+    if token in {
+        "warning",
+        "degraded",
+        "action_required",
+        "manual_required",
+        "waiting_for_time",
+        "machine_candidate",
+        "machine_degraded",
+        "stale",
+    }:
         return {"fg": "#f59e0b", "bg": "#221a10"}
     if token in {"observed", "ready", "done", "passed"}:
         return {"fg": "#22c55e", "bg": "#0d2116"}

@@ -34,6 +34,15 @@ from data_module.monthly_revenue_snapshot_selection import (
 from data_module.monthly_revenue_availability_candidate import (
     inspect_monthly_revenue_availability_candidate,
 )
+from data_module.daily_price_source_guard import (
+    AGGREGATE_SOURCE_VERSION,
+    DailyPriceSourceError,
+    aggregate_receipt_path,
+    configured_daily_price_dirs,
+    discover_daily_price_csvs,
+    validate_aggregate_receipt_payload,
+    validate_daily_price_frame_date,
+)
 
 
 def _monthly_revenue_status_today() -> str:
@@ -110,6 +119,8 @@ class UpdateService :
         self .config =config
         self .project_root =Path (__file__ ).parent .parent
         self .scripts_dir =self .project_root /'scripts'
+        # 最近一次 daily_data 來源選擇的唯讀診斷；不把 mtime 當成 custody 證據。
+        self._last_daily_source_selection: Dict[str, Any] = {}
         self .status_manifest_file =self .config .meta_data_dir /'data_status_manifest.json'
         self .monthly_revenue_source_version ="mops-static-snapshot-monthly-revenue-2026-06-16"
         configured_snapshot_candidate = (
@@ -936,20 +947,17 @@ class UpdateService :
     self ,
     start_date :Optional [str ],
     end_date :Optional [str ],
+    *,
+    strict_source: bool =False,
+    directories: Optional[List[Path]] =None,
     )->Any :
         import pandas as pd # type: ignore[import-untyped]
 
-        configured_dirs =[
-        getattr (self .config ,'daily_price_dir',None ),
-        getattr (self .config ,'tpex_daily_price_dir',None ),
-        ]
-        daily_dirs :list [Path ]=[]
-        for configured_dir in configured_dirs :
-            if configured_dir is None :
-                continue
-            daily_dir =Path (configured_dir )
-            if daily_dir .exists ():
-                daily_dirs .append (daily_dir )
+        daily_dirs :list [Path ]=(
+            list(directories)
+            if directories is not None
+            else list(configured_daily_price_dirs(self.config))
+        )
         if not daily_dirs :
             return pd .DataFrame ()
 
@@ -958,68 +966,231 @@ class UpdateService :
         frames =[]
         for daily_dir in daily_dirs :
             for path in sorted (daily_dir .glob ('*.csv')):
-                date_key =path .stem
+                try:
+                    from data_module.daily_price_source_guard import source_date_from_path
+
+                    date_key =source_date_from_path(path)
+                except DailyPriceSourceError:
+                    if strict_source:
+                        raise
+                    import logging
+                    logging .getLogger (__name__ ).warning (
+                    "[UpdateService] skip daily-price CSV with invalid source name: %s",path
+                    )
+                    continue
                 if start_key and date_key <start_key :
                     continue
                 if end_key and date_key >end_key :
                     continue
-                df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
+                try:
+                    df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
+                except Exception:
+                    if strict_source:
+                        raise
+                    raise
                 if df .empty :
+                    if strict_source:
+                        raise DailyPriceSourceError(
+                            f"每日股價來源檔為空：{path.name}"
+                        )
                     continue
                 df =self ._normalize_sqlite_dates (df )
+                try:
+                    df =validate_daily_price_frame_date(
+                        df,
+                        path=path,
+                        normalize_date=self._date_key,
+                    )
+                except DailyPriceSourceError:
+                    if strict_source:
+                        raise
+                    import logging
+                    logging .getLogger (__name__ ).warning (
+                    "[UpdateService] skip daily-price CSV with inconsistent date: %s",path
+                    )
+                    continue
                 if not is_valid_daily_price_frame (df ):
+                    if strict_source:
+                        raise DailyPriceSourceError(
+                            f"每日股價來源 schema 不完整：{path.name}"
+                        )
                     import logging
                     logging .getLogger (__name__ ).warning (
                     "[UpdateService] skip invalid daily-price CSV schema: %s",path
                     )
                     continue
                 if is_weekend_date_key (date_key )and not official_twse_session_exists (date_key ):
+                    if strict_source:
+                        raise DailyPriceSourceError(
+                            f"每日股價來源缺少週末官方交易證據：{path.name}"
+                        )
                     import logging
                     logging .getLogger (__name__ ).warning (
                     "[UpdateService] daily-price session has no official TWSE evidence; skip file: %s",path
                     )
                     continue
-                if '日期'not in df .columns :
-                    df .insert (0 ,'日期',date_key )
                 frames .append (df )
 
         if not frames :
             return pd .DataFrame ()
         return self ._normalize_sqlite_dates (pd .concat (frames ,ignore_index =True ))
 
-    def _load_daily_data_for_sqlite (self )->Any :
+    def _load_aggregate_daily_data_for_sqlite(self)->Any:
+        """只在具備內容綁定 receipt 時讀取 aggregate 快照。
+
+        測試／legacy caller 若沒有 ``profile=prod`` 仍保留相容 fallback，
+        但診斷會標示為 legacy；正式 profile 沒有 receipt 就 fail closed。
+        """
+
+        import hashlib
+        import json
         import pandas as pd # type: ignore[import-untyped]
 
-        daily_df =self ._load_csv_for_sqlite (self .config .stock_data_file ,require_date =True )
+        stock_data_file =Path(self.config.stock_data_file)
+        daily_df =self ._load_csv_for_sqlite (stock_data_file ,require_date =True )
         if daily_df .empty :
             return daily_df
 
+        profile =str(getattr(self.config, "profile", "")).strip().lower()
+        receipt_path =aggregate_receipt_path(stock_data_file)
+        if profile != "prod":
+            self._last_daily_source_selection ={
+                "source_kind":"aggregate_legacy_compatibility",
+                "source_version":"legacy-unbound-aggregate",
+                "quality_status":"degraded",
+                "path":str(stock_data_file.resolve()),
+                "receipt_path":str(receipt_path.resolve()),
+            }
+            return daily_df
+
+        if not receipt_path.exists():
+            raise DailyPriceSourceError(
+                "正式 profile 不得讀取沒有 source receipt 的 stock_data_whole.csv"
+            )
+        try:
+            payload =json.loads(receipt_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise DailyPriceSourceError(
+                f"整合快照 source receipt 無法讀取：{receipt_path}"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise DailyPriceSourceError("整合快照 source receipt 必須是 JSON object")
+        file_sha256 ="sha256:"+hashlib.sha256(stock_data_file.read_bytes()).hexdigest()
+        validate_aggregate_receipt_payload(
+            payload,
+            stock_data_file=stock_data_file,
+            actual_frame=daily_df,
+            file_sha256=file_sha256,
+        )
+        self._last_daily_source_selection ={
+            "source_kind":"aggregate_receipt",
+            "source_version":AGGREGATE_SOURCE_VERSION,
+            "quality_status":"accepted",
+            "path":str(stock_data_file.resolve()),
+            "receipt_path":str(receipt_path.resolve()),
+            "source_sha256":file_sha256,
+        }
+        return daily_df
+
+    def _load_daily_data_for_sqlite (self )->Any :
+        import pandas as pd # type: ignore[import-untyped]
+
+        directories =configured_daily_price_dirs(self.config)
+        twse_dir =getattr(self.config, "daily_price_dir", None)
+        tpex_dir =getattr(self.config, "tpex_daily_price_dir", None)
+        twse_dirs =tuple(
+            Path(value) for value in (twse_dir,) if value is not None
+        )
+        tpex_dirs =tuple(
+            Path(value) for value in (tpex_dir,) if value is not None
+        )
+        twse_files, twse_invalid =discover_daily_price_csvs(twse_dirs)
+        tpex_files, tpex_invalid =discover_daily_price_csvs(tpex_dirs)
+        invalid_files =twse_invalid +tpex_invalid
+
+        # 有任何日期檔時，日期檔是較新且可按檔案驗證的來源；不能先讀
+        # stale aggregate 再以 keep=last 假設其內容是同一版本。
+        if invalid_files:
+            self._last_daily_source_selection ={
+                "source_kind":"blocked",
+                "source_version":"unknown",
+                "quality_status":"rejected",
+                "reason":"invalid_daily_price_filename",
+                "paths":[str(path.resolve()) for path in invalid_files],
+            }
+            return pd.DataFrame()
+
+        if twse_files or tpex_files:
+            try:
+                date_df =self ._load_daily_price_files_for_sqlite(
+                    None,
+                    None,
+                    strict_source=True,
+                    directories=list(directories),
+                )
+            except (DailyPriceSourceError, OSError, ValueError) as exc:
+                self._last_daily_source_selection ={
+                    "source_kind":"blocked",
+                    "source_version":"unknown",
+                    "quality_status":"rejected",
+                    "reason":"daily_price_file_contract_failed",
+                    "detail":str(exc),
+                    "paths":[str(path.resolve()) for path in twse_files + tpex_files],
+                }
+                return pd.DataFrame()
+            if date_df.empty:
+                self._last_daily_source_selection ={
+                    "source_kind":"blocked",
+                    "source_version":"unknown",
+                    "quality_status":"rejected",
+                    "reason":"daily_price_file_empty",
+                    "paths":[str(path.resolve()) for path in twse_files + tpex_files],
+                }
+                return date_df
+
+            # TWSE 日期檔存在時，完全隔離 aggregate；若只有 TPEX 日期檔，
+            # aggregate 僅可作為另一個來源，且正式 profile 必須具 receipt。
+            if twse_files:
+                combined =date_df
+                source_kind ="date_files"
+            else:
+                try:
+                    aggregate_df =self ._load_aggregate_daily_data_for_sqlite()
+                except DailyPriceSourceError as exc:
+                    self._last_daily_source_selection ={
+                        "source_kind":"blocked",
+                        "source_version":"unknown",
+                        "quality_status":"rejected",
+                        "reason":"aggregate_source_contract_failed",
+                        "detail":str(exc),
+                        "paths":[str(path.resolve()) for path in tpex_files],
+                    }
+                    return pd.DataFrame()
+                combined =pd.concat([aggregate_df, date_df], ignore_index=True)
+                source_kind ="aggregate_plus_tpex_date_files"
+            self._last_daily_source_selection.update({
+                "source_kind":source_kind,
+                "source_version":"daily-price-date-file-selection.v1",
+                "quality_status":"accepted",
+                "date_file_paths":[str(path.resolve()) for path in twse_files + tpex_files],
+                "aggregate_is_authoritative":bool(twse_files),
+            })
+        else:
+            try:
+                combined =self ._load_aggregate_daily_data_for_sqlite()
+            except DailyPriceSourceError as exc:
+                self._last_daily_source_selection ={
+                    "source_kind":"blocked",
+                    "source_version":"unknown",
+                    "quality_status":"rejected",
+                    "reason":"aggregate_source_contract_failed",
+                    "detail":str(exc),
+                }
+                return pd.DataFrame()
+
         date_col ='日期'
         code_col ='證券代號'
-        frames =[daily_df ]
-        date_keys ={
-        str (value ).strip ()
-        for value in daily_df .get (date_col ,pd .Series (dtype =str )).dropna ().astype (str )
-        if str (value ).strip ()
-        }
-
-        tpex_daily_dir =getattr (self .config ,'tpex_daily_price_dir',None )
-        if tpex_daily_dir is not None :
-            tpex_daily_dir =Path (tpex_daily_dir )
-            if tpex_daily_dir .exists ()and date_keys :
-                for path in sorted (tpex_daily_dir .glob ('*.csv')):
-                    date_key =path .stem
-                    if date_key not in date_keys :
-                        continue
-                    tpex_df =pd .read_csv (path ,encoding ='utf-8-sig',dtype =self ._sqlite_csv_dtype (),low_memory =False )
-                    if tpex_df .empty :
-                        continue
-                    tpex_df =self ._normalize_sqlite_dates (tpex_df )
-                    if date_col not in tpex_df .columns :
-                        tpex_df .insert (0 ,date_col ,date_key )
-                    frames .append (tpex_df )
-
-        combined =self ._normalize_sqlite_dates (pd .concat (frames ,ignore_index =True ))
+        combined =self ._normalize_sqlite_dates (combined)
         if date_col in combined .columns and code_col in combined .columns :
             combined =combined .drop_duplicates (subset =[date_col ,code_col ],keep ='last')
         return combined

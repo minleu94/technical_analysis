@@ -17,9 +17,11 @@ from app_module.decision_desk_dtos import (
 from app_module.pre_v2_readiness_service import (
     PreV2ReadinessItem,
     PreV2ReadinessReport,
+    STATUS_ACTION_REQUIRED,
     STATUS_READY,
     STATUS_WAITING_FOR_TIME,
 )
+from app_module.machine_status_classification import MACHINE_STATUS_HUMAN_REVIEW
 from app_module.workbench_dtos import (
     WORKBENCH_LEGACY_DRILLDOWN_TARGETS,
     WorkbenchAccessBoundary,
@@ -349,6 +351,76 @@ def test_composer_builds_read_only_action_items_with_trace_reason_and_drilldown(
     assert any(item["source_type"] == "pre_v2_readiness" for item in action_items)
     assert not any(item.get("write_intent") for item in action_items)
     assert payload["access_boundary"]["writes_allowed"] is False
+
+
+def test_composer_routes_machine_gaps_and_time_waits_away_from_human_review() -> None:
+    readiness = PreV2ReadinessReport(
+        generated_at="2026-09-07T05:00:00Z",
+        overall_status=STATUS_ACTION_REQUIRED,
+        production_scheduler_allowed=False,
+        items=(
+            PreV2ReadinessItem(
+                item_id="source_gaps",
+                label="官方來源缺件",
+                status=STATUS_ACTION_REQUIRED,
+                blocking_reasons=("source_missing_screening_matrix",),
+            ),
+            PreV2ReadinessItem(
+                item_id="multi_day_dry_run",
+                label="多日 dry-run",
+                status=STATUS_WAITING_FOR_TIME,
+                blocking_reasons=("insufficient_dry_run_days",),
+            ),
+        ),
+        limitations=(),
+    )
+
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=None,
+        readiness_report=readiness,
+    )
+
+    assert dashboard.review_items == ()
+    readiness_actions = [
+        item for item in dashboard.action_items if item.source_type == "pre_v2_readiness"
+    ]
+    assert {item.status_classification for item in readiness_actions} == {
+        "source_missing",
+        "waiting_for_time",
+    }
+    assert not any(
+        item.status_classification == MACHINE_STATUS_HUMAN_REVIEW
+        for item in readiness_actions
+    )
+    manual_step = next(item for item in dashboard.operating_loop_steps if item.step_id == "manual_queue")
+    assert manual_step.status == "observed"
+    assert "無需人工簽核" in manual_step.summary
+
+
+def test_composer_keeps_explicit_pending_human_review_as_human() -> None:
+    readiness = PreV2ReadinessReport(
+        generated_at="2026-09-07T05:00:00Z",
+        overall_status=STATUS_ACTION_REQUIRED,
+        production_scheduler_allowed=False,
+        items=(
+            PreV2ReadinessItem(
+                item_id="weekly_history",
+                label="Weekly history review",
+                status=STATUS_ACTION_REQUIRED,
+                blocking_reasons=("pending_human_review",),
+            ),
+        ),
+        limitations=(),
+    )
+
+    dashboard = WorkbenchReadOnlyComposer().compose(
+        decision_snapshot=None,
+        readiness_report=readiness,
+    )
+
+    assert [item.item_id for item in dashboard.review_items] == ["readiness_weekly_history"]
+    action = next(item for item in dashboard.action_items if item.item_id == "readiness_weekly_history")
+    assert action.status_classification == MACHINE_STATUS_HUMAN_REVIEW
 
 
 def test_composer_sorts_and_groups_action_items_for_manual_queue_scan() -> None:

@@ -43,6 +43,12 @@ def _is_degraded_status(status: object) -> bool:
         "blocked",
         "action_required",
         "waiting_for_time",
+        "source_missing",
+        "invalid_evidence",
+        "machine_candidate",
+        "machine_degraded",
+        "stale",
+        "unknown",
     }
 
 
@@ -58,13 +64,25 @@ def evidence_feed_state_text(dashboard) -> str:
             "目前沒有背景證據列；這只代表 WorkbenchDashboardDTO payload 為空。"
             "Workbench 不讀 DB、不執行 replay、不補資料，也不代表 gate 已通過。"
         )
-    if any(
+    degraded = any(
         _is_degraded_status(item.status) or _has_degraded_reason(item.degraded_reason)
         for item in dashboard.background_evidence_feed
-    ):
+    )
+    human_count = sum(
+        1
+        for item in dashboard.background_evidence_feed
+        if str(getattr(item, "status_classification", "human_review")).strip()
+        == "human_review"
+    )
+    if degraded and human_count:
         return (
             f"背景證據流降級：{count} 筆來源中包含 missing / degraded / warning。"
             "請依來源追蹤與診斷訊號人工檢查；Workbench 不補值、不重跑 pipeline、不讀 replay DB。"
+        )
+    if degraded:
+        return (
+            f"背景證據流含 {count} 筆機器狀態：來源缺件、自然等待或降級。"
+            "請依來源追蹤與診斷訊號等待或修復來源；不需人工簽核，Workbench 不補值、不重跑 pipeline、不讀 replay DB。"
         )
     return (
         f"背景證據流已載入 {count} 筆唯讀來源。"
@@ -74,22 +92,35 @@ def evidence_feed_state_text(dashboard) -> str:
 
 def action_item_state_text(dashboard) -> str:
     count = len(dashboard.action_items)
+    human_count = sum(
+        1
+        for item in dashboard.action_items
+        if str(getattr(item, "status_classification", "human_review")).strip()
+        == "human_review"
+    )
+    machine_count = count - human_count
     if count == 0:
         return (
             "目前沒有人工待處理事項；這不代表可以交易或 Phase gate 已通過。"
             "Workbench 不寫 DB、不標記完成、不套用 lifecycle，也不是買賣建議。"
         )
-    if any(
+    degraded = any(
         _is_degraded_status(item.severity) or _has_degraded_reason(item.degraded_reason)
         for item in dashboard.action_items
-    ):
+    )
+    if degraded:
+        if human_count:
+            handling = f"人工待處理 {human_count} 筆；機器狀態 {machine_count} 筆，不需人工簽核。"
+        else:
+            handling = f"人工待處理 0 筆；機器狀態 {machine_count} 筆，不需人工簽核。"
         return (
-            f"Action Items 降級：佇列包含 {count} 筆資料缺口、警示或等待真實時間累積項目。"
-            "只供人工覆盤排序，不是買賣建議；Workbench 不寫 DB、不套用 lifecycle。"
+            f"Action Items 降級：{handling}佇列包含資料缺口、警示或等待真實時間累積項目。"
+            "只有明確 human_review 項目只供人工覆盤排序；機器狀態不需人工簽核；"
+            "不是買賣建議；Workbench 不寫 DB、不套用 lifecycle。"
         )
     return (
-        f"Action Items 已載入 {count} 筆人工待處理事項。"
-        "佇列只供人工檢查 source trace，不會自動建立 repository 或寫入狀態。"
+        f"Action Items 已載入 {human_count} 筆人工待處理事項；機器狀態 {machine_count} 筆。"
+        "只有明確 human_review 項目供人工檢查 source trace，不會自動建立 repository 或寫入狀態。"
     )
 
 

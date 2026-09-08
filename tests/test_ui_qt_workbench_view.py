@@ -289,6 +289,23 @@ class _FakeWorkbenchSourceService:
         return self.dashboard
 
 
+class _FlakyWorkbenchSourceService:
+    def __init__(self, dashboard: WorkbenchDashboardDTO) -> None:
+        self.dashboard = dashboard
+        self.calls = 0
+
+    def inspect(self, **kwargs):
+        self.calls += 1
+        if self.calls > 1:
+            raise RuntimeError()
+        return self.dashboard
+
+
+class _AlwaysFailWorkbenchSourceService:
+    def inspect(self, **kwargs):
+        raise RuntimeError()
+
+
 def test_workbench_evidence_table_model_has_no_diagnostics_column() -> None:
     app()
     replay = _dashboard_with_replay().evidence_summary[1]
@@ -297,6 +314,41 @@ def test_workbench_evidence_table_model_has_no_diagnostics_column() -> None:
     assert model.rowCount() == 1
     visible_fields = tuple(field for field, _label in model.COLUMNS)
     assert visible_fields == ("label", "status", "summary")
+
+
+def test_workbench_refresh_preserves_last_good_dashboard_as_stale_and_focuses_retry() -> None:
+    app()
+    dashboard = _dashboard_with_replay()
+    view = UnifiedDecisionWorkbenchView(
+        source_service=_FlakyWorkbenchSourceService(dashboard),
+        dashboard=dashboard,
+        auto_refresh=False,
+    )
+
+    view.refresh_dashboard()
+    view.refresh_dashboard()
+
+    assert view._dashboard is dashboard
+    assert view.review_model.rowCount() == 1
+    assert "stale" in view.priority_banner.text()
+    assert "最後成功載入" in view.priority_banner.text()
+    assert "不把舊資料當成 current" in view.priority_banner.text()
+    assert "workbench_source_stale" in view.warning_list.toPlainText()
+    assert view.refresh_button.focusPolicy().value != 0
+
+
+def test_workbench_initial_refresh_failure_is_unknown_and_does_not_claim_human_review() -> None:
+    app()
+    view = UnifiedDecisionWorkbenchView(
+        source_service=_AlwaysFailWorkbenchSourceService(),
+        auto_refresh=False,
+    )
+
+    view.refresh_dashboard()
+
+    assert "狀態未知" in view.boundary_banner.text()
+    assert "不能推定需要人工" in view.action_item_state_label.text()
+    assert view.review_model.rowCount() == 0
 
 
 
@@ -710,6 +762,33 @@ def test_unified_workbench_view_displays_empty_and_degraded_queue_state_copy() -
     assert "降級" in degraded_view.action_item_state_label.text()
     assert "只供人工覆盤排序" in degraded_view.action_item_state_label.text()
     assert "不是買賣建議" in degraded_view.action_item_state_label.text()
+
+
+def test_unified_workbench_view_does_not_call_machine_only_gaps_confirmed() -> None:
+    app()
+    machine_only = replace(
+        _empty_dashboard(),
+        action_items=(
+            WorkbenchActionItem(
+                item_id="missing_source",
+                title="官方來源缺件",
+                source_type="pre_v2_readiness",
+                severity="action_required",
+                summary="來源尚未提供。",
+                source_trace="PreV2ReadinessReport",
+                degraded_reason="source_missing_screening_matrix",
+                drilldown_target="evidence_review",
+                queue_group="evidence_gate",
+            ),
+        ),
+    )
+
+    view = UnifiedDecisionWorkbenchView(dashboard=machine_only, auto_refresh=False)
+
+    assert view.review_model.rowCount() == 0
+    assert "機器狀態待處理" in view.review_empty_state.title_label.text()
+    assert "不能解讀為風險已確認" in view.review_empty_state.body_label.text()
+    assert "人工處理 0" in view.priority_banner.text()
 
 
 def test_unified_workbench_view_routes_action_item_targets_to_legacy_pages() -> None:

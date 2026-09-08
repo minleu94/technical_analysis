@@ -23,6 +23,7 @@ from PySide6.QtGui import QFont, QColor, QPalette, QBrush
 
 from ui_qt.models.pandas_table_model import PandasTableModel
 from app_module.portfolio_service import PortfolioService
+from app_module.dtos.portfolio_dtos import PortfolioDTO
 from app_module.journal_service import JournalService
 from app_module.recommendation_service import RecommendationService
 from app_module.broker_flow_service import BrokerFlowService
@@ -34,6 +35,7 @@ from portfolio_module import PortfolioValidationError
 from ui_qt.theme import MIDNIGHT_ANALYST
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.table_style import apply_financial_table_style
+from ui_qt.workers.task_worker import TaskWorker
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.portfolio_chip_service import PortfolioChipService
 from app_module.portfolio_feedback_service import PortfolioFeedbackService
@@ -59,6 +61,15 @@ from app_module.paper_trade_import_service import PaperTradeImportService
 from app_module.trade_import_service import TradeImportService
 
 logger = logging.getLogger(__name__)
+
+
+def _first_error_line(message: object) -> str:
+    """Normalize empty worker exceptions for a stable UI diagnostic."""
+
+    for line in str(message or "").splitlines():
+        if line.strip():
+            return line.strip()
+    return "未提供錯誤訊息"
 
 
 def _paper_status_text(value: Any) -> str:
@@ -357,7 +368,9 @@ class PortfolioView(QWidget):
         recommendation_service: Optional[RecommendationService] = None,
         broker_flow_service: Optional[BrokerFlowService] = None,
         condition_monitor: Optional[PortfolioConditionMonitor] = None,
-        parent=None
+        parent=None,
+        *,
+        async_refresh: bool = False,
     ):
         super().__init__(parent)
         self.portfolio_service = portfolio_service
@@ -393,8 +406,20 @@ class PortfolioView(QWidget):
 
         self.positions_model: Optional[PandasTableModel] = None
         self.trades_model: Optional[PandasTableModel] = None
+        # Summary 與明細表必須來自同一個 service DTO，避免一次 refresh 中
+        # 分別讀取而顯示不同版本的持倉狀態。
+        self._last_portfolio_dto: PortfolioDTO | None = None
         self.selected_stock_code: str = ""
         self.selected_trade_id: str = ""
+        # PortfolioService 讀取可能同時掃描 JSONL、SQLite 與價格來源；主
+        # 視窗採用既有 TaskWorker，且只把同一份 PortfolioDTO 交給摘要／表格。
+        # 舊的同步呼叫端仍可明確使用預設模式，避免改變既有測試與嵌入頁面契約。
+        self.async_refresh = bool(async_refresh)
+        self._refresh_generation = 0
+        self._worker_generation = 0
+        self._refresh_worker: TaskWorker | None = None
+        self._refresh_pending = False
+        self._closing = False
 
         # 緩存最新推薦結果，用以在背景進行 Condition Monitor 條件監控
         self.rec_cache: Dict[str, Dict[str, Any]] = {}
@@ -457,6 +482,13 @@ class PortfolioView(QWidget):
         )
         main_layout.addWidget(self.active_positions_summary_label)
 
+        self.portfolio_refresh_status_label = QLabel("持倉資料尚未載入")
+        self.portfolio_refresh_status_label.setWordWrap(True)
+        self.portfolio_refresh_status_label.setStyleSheet(
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; padding: 2px 4px;"
+        )
+        main_layout.addWidget(self.portfolio_refresh_status_label)
+
         # ========== 2. 中部核心分割區 (Splitter) ==========
         main_splitter = QSplitter(Qt.Horizontal)
 
@@ -506,6 +538,11 @@ class PortfolioView(QWidget):
         btn_layout.addWidget(self.btn_add_journal)
 
         self.btn_refresh = QPushButton("整理刷新")
+        self.btn_refresh.setAccessibleName("重新整理持倉資料")
+        self.btn_refresh.setAccessibleDescription(
+            "背景讀取單一 PortfolioDTO；完成後同步更新摘要與持倉表。"
+        )
+        self.btn_refresh.setToolTip("背景讀取既有持倉資料；不會寫入交易或資料庫。")
         self.btn_refresh.clicked.connect(self.refresh_all)
         btn_layout.addWidget(self.btn_refresh)
 
@@ -860,18 +897,184 @@ class PortfolioView(QWidget):
         main_splitter.setSizes([720, 480])
         main_layout.addWidget(main_splitter)
 
-    def refresh_all(self):
-        """重新整理加載所有持倉、歷史與日記數據"""
-        logger.info("[PortfolioView] Refreshing all data...")
-        self._load_portfolio_summary()
-        self._load_positions_table()
+    def refresh_all(self) -> None:
+        """重新整理持倉資料；正式 UI 入口使用背景 worker。"""
+
+        self._refresh_generation += 1
+        if self.async_refresh:
+            self._start_refresh_worker()
+            return
+        self._refresh_all_sync()
+
+    def _refresh_all_sync(self) -> None:
+        """保留同步相容入口，與背景完成回呼共用同一個套用路徑。"""
+
+        logger.info("[PortfolioView] Refreshing all data synchronously...")
+        try:
+            portfolio = self._fetch_portfolio_dto()
+        except Exception as error:  # noqa: BLE001
+            self._handle_portfolio_refresh_error(str(error))
+            return
+        self._apply_portfolio_dto(portfolio)
+
+    def _fetch_portfolio_dto(self, cancel_callback=None) -> PortfolioDTO:
+        """在 worker 執行緒讀取一次 DTO，不在背景執行緒觸碰 Qt model。"""
+
+        if callable(cancel_callback) and cancel_callback():
+            raise RuntimeError("portfolio refresh cancelled before read")
+        portfolio = self.portfolio_service.get_portfolio()
+        if not isinstance(portfolio, PortfolioDTO):
+            raise TypeError("PortfolioService.get_portfolio must return PortfolioDTO")
+        return portfolio
+
+    def _apply_portfolio_dto(self, portfolio: PortfolioDTO) -> None:
+        """以單一 DTO 更新摘要／持倉表，再刷新其餘只讀區塊。"""
+
+        self._last_portfolio_dto = portfolio
+        self._load_portfolio_summary(portfolio)
+        self._load_positions_table(portfolio)
         self._load_trades_history()
         self._load_journal_entries()
         self._load_paper_readiness()
         self._load_paper_weekly_evidence()
-        self._load_stress_lab()
+        self._load_stress_lab(portfolio=portfolio)
         self._load_stress_history()
-        self._update_monitoring_tab()
+        self._update_monitoring_tab(portfolio)
+        self.portfolio_refresh_status_label.setText(
+            f"持倉資料已更新｜DTO updated_at={portfolio.updated_at or '未提供'}｜"
+            "摘要與持倉表使用同一份 DTO；只讀。"
+        )
+
+    def _start_refresh_worker(self) -> None:
+        if self._closing:
+            return
+        if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            self._refresh_pending = True
+            self.portfolio_refresh_status_label.setText(
+                "持倉背景刷新已排隊；正在取消較早一輪，保留最新 generation。"
+            )
+            self._refresh_worker.cancel(cooperative=True, wait=False)
+            return
+
+        self._refresh_pending = False
+        generation = self._refresh_generation
+        self._worker_generation = generation
+        self.btn_refresh.setEnabled(False)
+        self.portfolio_refresh_status_label.setText(
+            f"持倉資料背景讀取中（generation={generation}）；目前畫面保留既有資料。"
+        )
+        worker = TaskWorker(self._fetch_portfolio_dto)
+        self._refresh_worker = worker
+        worker.finished.connect(
+            lambda portfolio, item=worker, value=generation: self._on_refresh_worker_finished(
+                portfolio, value, item
+            )
+        )
+        worker.error.connect(
+            lambda message, item=worker, value=generation: self._on_refresh_worker_error(
+                message, value, item
+            )
+        )
+        worker.cancelled.connect(
+            lambda item=worker, value=generation: self._on_refresh_worker_cancelled(value, item)
+        )
+        worker.start()
+
+    def _on_refresh_worker_finished(
+        self,
+        portfolio: object,
+        generation: int,
+        worker: TaskWorker,
+    ) -> None:
+        if worker is not self._refresh_worker:
+            worker.deleteLater()
+            return
+        if generation == self._refresh_generation and not self._closing:
+            if not isinstance(portfolio, PortfolioDTO):
+                self._handle_portfolio_refresh_error(
+                    "PortfolioService worker returned a non-PortfolioDTO result"
+                )
+            else:
+                self._apply_portfolio_dto(portfolio)
+        self._release_refresh_worker(worker)
+
+    def _on_refresh_worker_error(
+        self,
+        message: str,
+        generation: int,
+        worker: TaskWorker,
+    ) -> None:
+        if worker is not self._refresh_worker:
+            worker.deleteLater()
+            return
+        if generation == self._refresh_generation and not self._closing:
+            self._handle_portfolio_refresh_error(message)
+        self._release_refresh_worker(worker)
+
+    def _on_refresh_worker_cancelled(self, generation: int, worker: TaskWorker) -> None:
+        if worker is not self._refresh_worker:
+            worker.deleteLater()
+            return
+        if generation == self._refresh_generation and not self._closing:
+            self.portfolio_refresh_status_label.setText(
+                "持倉背景刷新已取消；畫面保留最近一次資料。"
+            )
+        self._release_refresh_worker(worker)
+
+    def _release_refresh_worker(self, worker: TaskWorker) -> None:
+        if worker is not self._refresh_worker:
+            worker.deleteLater()
+            return
+        self._refresh_worker = None
+        worker.deleteLater()
+        if self._refresh_pending and not self._closing:
+            self._refresh_pending = False
+            self._start_refresh_worker()
+            return
+        self.btn_refresh.setEnabled(not self._closing)
+
+    def _handle_portfolio_refresh_error(self, message: str) -> None:
+        error_line = _first_error_line(message)
+        logger.error("Failed to load portfolio DTO: %s", error_line)
+        if self._last_portfolio_dto is not None:
+            self.portfolio_refresh_status_label.setText(
+                "持倉背景刷新失敗；保留最近一次 PortfolioDTO。"
+                f"原因：{error_line}"
+            )
+            return
+        self.portfolio_refresh_status_label.setText(
+            f"持倉資料狀態未知；尚無可信 PortfolioDTO。原因：{error_line}"
+        )
+
+    def cancel_refresh(self) -> None:
+        """合作式取消目前背景讀取，供視窗關閉與測試使用。"""
+
+        self._refresh_generation += 1
+        self._refresh_pending = False
+        if self._refresh_worker is not None and self._refresh_worker.isRunning():
+            self._refresh_worker.cancel(cooperative=True, wait=False)
+            self.portfolio_refresh_status_label.setText(
+                "正在取消持倉背景刷新；目前資料仍保留。"
+            )
+
+    def closeEvent(self, event) -> None:
+        """關閉前合作式取消 worker，避免回呼在 widget 銷毀後套用。"""
+
+        self._closing = True
+        self._refresh_generation += 1
+        self._refresh_pending = False
+        worker = self._refresh_worker
+        if worker is not None and worker.isRunning():
+            worker.cancel(cooperative=True, wait=False)
+            self.portfolio_refresh_status_label.setText(
+                "已請求取消持倉背景刷新；工作安全結束後再關閉。"
+            )
+            event.ignore()
+            return
+        if worker is not None:
+            self._refresh_worker = None
+            worker.deleteLater()
+        super().closeEvent(event)
 
     def _load_paper_readiness(self):
         """只讀顯示 Paper Portfolio／Equal Weight 的實際累積狀態。"""
@@ -1070,11 +1273,20 @@ class PortfolioView(QWidget):
             "這只補齊 benchmark 輸入；Paper Trade Ledger 仍需真實 execution fills 才能計算成本後週報。",
         )
 
-    def _load_stress_lab(self):
+    def _load_stress_lab(
+        self,
+        _checked: bool = False,
+        *,
+        portfolio: PortfolioDTO | None = None,
+    ):
         """以目前持倉做唯讀情境投影；不寫入任何資料或交易紀錄。"""
         try:
             scenario_id = self.stress_scenario_combo.currentData() or "fast_drop"
-            positions = self.portfolio_service.list_positions()
+            positions = (
+                list(portfolio.positions)
+                if portfolio is not None
+                else self.portfolio_service.list_positions()
+            )
             result = self.stress_lab_service.evaluate_positions(
                 positions,
                 scenario_id=str(scenario_id),
@@ -1402,10 +1614,13 @@ class PortfolioView(QWidget):
             f"已匯入 {len(imported)} 筆交易；持倉已重新驗證。",
         )
 
-    def _load_portfolio_summary(self):
+    def _load_portfolio_summary(self, portfolio: PortfolioDTO | None = None):
         """讀取持倉摘要，並更新頂部卡片"""
         try:
-            portfolio = self.portfolio_service.get_portfolio()
+            if portfolio is None:
+                portfolio = self.portfolio_service.get_portfolio()
+                if not isinstance(portfolio, PortfolioDTO):
+                    raise TypeError("PortfolioService.get_portfolio must return PortfolioDTO")
             active_count = portfolio.active_positions
             total_invested = portfolio.total_invested_amount
             realized_pnl = portfolio.total_realized_pnl
@@ -1480,10 +1695,14 @@ class PortfolioView(QWidget):
         except Exception as e:
             logger.error("Failed to load portfolio summary: %s", e)
 
-    def _load_positions_table(self):
+    def _load_positions_table(self, portfolio: PortfolioDTO | None = None):
         """加載衍生持倉列表，並執行非同步推薦引擎 Monitor 檢查"""
         try:
-            positions = self.portfolio_service.list_positions()
+            if portfolio is None:
+                portfolio = self.portfolio_service.get_portfolio()
+                if not isinstance(portfolio, PortfolioDTO):
+                    raise TypeError("PortfolioService.get_portfolio must return PortfolioDTO")
+            positions = list(portfolio.positions)
 
             if not positions:
                 df = pd.DataFrame(columns=[
@@ -1915,12 +2134,19 @@ class PortfolioView(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "清空失敗", f"發生錯誤：\n{e}")
 
-    def _update_monitoring_tab(self):
+    def _update_monitoring_tab(self, portfolio: PortfolioDTO | None = None):
         """連動並更新「策略與價格監控」分頁"""
         position_dto = None
         if self.selected_stock_code:
             try:
-                for p in self.portfolio_service.list_positions():
+                source_positions = (
+                    list(portfolio.positions)
+                    if portfolio is not None
+                    else list(self._last_portfolio_dto.positions)
+                    if self._last_portfolio_dto is not None
+                    else self.portfolio_service.list_positions()
+                )
+                for p in source_positions:
                     if p.stock_code == self.selected_stock_code:
                         position_dto = p
                         break

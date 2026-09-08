@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from collections.abc import Callable
+from datetime import datetime
 from typing import cast
 
 from PySide6.QtCore import Qt
@@ -26,6 +27,10 @@ from app_module.workbench_dtos import (
     WORKBENCH_LEGACY_DRILLDOWN_TARGETS,
     WorkbenchDashboardDTO,
     WorkbenchEvidenceSummary,
+)
+from app_module.machine_status_classification import (
+    MACHINE_STATUS_HUMAN_REVIEW,
+    MACHINE_STATUS_STALE,
 )
 from app_module.engineering_closure_dashboard_service import EvidenceRehearsalDashboard
 from app_module.workbench_source_service import WorkbenchSourceService
@@ -78,6 +83,12 @@ WORKBENCH_TONES: dict[str, dict[str, str]] = {
     "critical": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
     "blocked": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
     "missing": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
+    "source_missing": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
+    "invalid_evidence": {"fg": "#ef4444", "bg": "#2a1114", "border": "#991b1b"},
+    "machine_candidate": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "machine_degraded": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "stale": {"fg": "#f59e0b", "bg": "#221a10", "border": "#92400e"},
+    "unknown": {"fg": "#94a3b8", "bg": "#111827", "border": "#334155"},
     "off": {"fg": "#94a3b8", "bg": "#111827", "border": "#334155"},
     "neutral": {"fg": "#94a3b8", "bg": "#111827", "border": "#334155"},
 }
@@ -120,6 +131,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.navigate_to_update_callback = navigate_to_update_callback
         self.navigate_to_recommendation_callback = navigate_to_recommendation_callback
         self._dashboard: WorkbenchDashboardDTO | None = None
+        self._last_good_dashboard: WorkbenchDashboardDTO | None = None
+        self._last_good_dashboard_loaded_at: datetime | None = None
+        self._dashboard_stale = False
         self._viewed_review_item_ids: set[str] = set()
 
         self.status_model = WorkbenchStatusStripTableModel()
@@ -333,7 +347,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         list_layout.addWidget(evidence_feed_panel)
 
         action_item_panel, self.action_item_section_title = self._panel_with_title(
-            "只讀 Action Items / Read-only Manual Queue"
+            "只讀 Action Items / Machine + Manual Queue"
         )
         self.action_item_state_label = self._make_state_label()
         self.action_item_table = self._make_table(self.action_item_model)
@@ -639,6 +653,10 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.refresh_button = QPushButton("重新整理狀態")
         self.refresh_button.setProperty("variant", "secondary")
         self.refresh_button.setMinimumHeight(34)
+        self.refresh_button.setAccessibleName("重新整理工作台狀態")
+        self.refresh_button.setAccessibleDescription(
+            "重新讀取唯讀 Workbench 狀態；失敗時保留最後可信資料並標示 stale。"
+        )
         self.refresh_button.setToolTip("重新讀取既有的唯讀工作台狀態。")
         self.refresh_button.clicked.connect(self.refresh_dashboard)
         header_layout.addWidget(self.refresh_button)
@@ -847,12 +865,16 @@ class UnifiedDecisionWorkbenchView(QWidget):
                 target="recommendation",
             )
 
-        action_count = len(dashboard.action_items)
+        action_count = _human_action_count(dashboard)
+        machine_action_count = _machine_action_count(dashboard)
         if action_count:
             self._set_today_action_card(
                 "portfolio",
                 status=f"待覆盤 {action_count} 項",
-                body="已有持倉或風險相關的人工事項時，優先前往持倉管理檢查。",
+                body=(
+                    "已有持倉或風險相關的人工事項時，優先前往持倉管理檢查。"
+                    f"另有機器證據狀態 {machine_action_count} 項，不需人工簽核。"
+                ),
                 tone="warning",
                 button_text="開啟持倉管理",
                 target="portfolio_review",
@@ -860,9 +882,17 @@ class UnifiedDecisionWorkbenchView(QWidget):
         else:
             self._set_today_action_card(
                 "portfolio",
-                status="目前無待覆盤項目",
-                body="沒有 Action Item 不代表持倉風險為零；可在持倉管理進行人工確認。",
-                tone="info",
+                status=(
+                    f"目前無人工待覆盤；機器狀態 {machine_action_count} 項"
+                    if machine_action_count
+                    else "目前無待覆盤項目"
+                ),
+                body=(
+                    "目前沒有明確 human_review 項目；機器來源缺件或自然等待不會被標成人工。"
+                    if machine_action_count
+                    else "沒有 Action Item 不代表持倉風險為零；可在持倉管理進行人工確認。"
+                ),
+                tone="warning" if machine_action_count else "info",
                 button_text="開啟持倉管理",
                 target="portfolio_review",
             )
@@ -1050,6 +1080,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def render_dashboard(self, dashboard: WorkbenchDashboardDTO) -> None:
         self._dashboard = dashboard
+        self._last_good_dashboard = dashboard
+        self._last_good_dashboard_loaded_at = datetime.now().astimezone()
+        self._dashboard_stale = False
         self.refresh_button.setEnabled(self.source_service is not None)
         self.boundary_banner.setText(
             "安全與唯讀邊界：這裡只整理既有狀態與導覽；不是交易建議，不會寫 DB、執行策略或交易；"
@@ -1076,6 +1109,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.review_state_label.setText(self._review_queue_state_text(dashboard))
         has_review_items = bool(dashboard.review_items)
         self.review_empty_state.setVisible(not has_review_items)
+        if not has_review_items:
+            self._set_review_empty_state(dashboard)
         self.review_table.setVisible(has_review_items)
         self.evidence_feed_model.set_rows(dashboard.background_evidence_feed)
         self.action_item_model.set_rows(dashboard.action_items)
@@ -1229,28 +1264,113 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.review_empty_state.setVisible(True)
         self.review_table.setVisible(False)
+        self._set_review_empty_state(None)
         self.action_item_model.set_rows(())
         self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings(())
         self._set_detail_placeholder("等待 DTO", "請先重新載入 WorkbenchDashboardDTO。")
 
+    def _set_review_empty_state(self, dashboard: WorkbenchDashboardDTO | None) -> None:
+        """Keep a machine-only/unknown queue from looking like a green pass."""
+
+        if dashboard is not None:
+            machine_action_count = _machine_action_count(dashboard)
+            if machine_action_count:
+                self.review_empty_state.title_label.setText("目前無人工判讀；機器狀態待處理")
+                self.review_empty_state.body_label.setText(
+                    f"目前有 {machine_action_count} 項機器來源缺件、自然等待或降級狀態。"
+                    "這些狀態不需要具名人工簽核，也不能解讀為風險已確認；"
+                    "請依來源與時間條件重新整理。"
+                )
+                return
+            self.review_empty_state.title_label.setText("今日所有風險已確認")
+            self.review_empty_state.body_label.setText(
+                "今日待判讀佇列目前為空；可切到市場探索做研究，或等待下一次正式資料更新。"
+            )
+            return
+
+        self.review_empty_state.title_label.setText("狀態未知，不能判定風險")
+        self.review_empty_state.body_label.setText(
+            "尚無可信 Workbench DTO；請聚焦 Retry，不把空佇列解讀為風險已確認。"
+        )
+
     def _display_exception_dashboard(self, error_message: str) -> None:
+        if self._last_good_dashboard is not None:
+            self._dashboard = self._last_good_dashboard
+            self._dashboard_stale = True
+            last_good_at = (
+                self._last_good_dashboard_loaded_at.isoformat()
+                if self._last_good_dashboard_loaded_at is not None
+                else "未知"
+            )
+            dashboard = self._last_good_dashboard
+            self._set_summary_blocks(dashboard)
+            for key in self.summary_blocks:
+                self._apply_summary_block_style(key, MACHINE_STATUS_STALE)
+            self._render_today_action_center(dashboard)
+            if not dashboard.review_items:
+                self._set_review_empty_state(dashboard)
+            self.priority_banner.setText(
+                "資料狀態：stale；目前保留最後可信 Workbench DTO。"
+                f"最後成功載入：{last_good_at}。Retry 可重新讀取來源；不把舊資料當成 current。"
+            )
+            stale_tone = _workbench_tone(MACHINE_STATUS_STALE)
+            self.priority_banner.setStyleSheet(
+                f"background: {stale_tone['bg']}; color: {MIDNIGHT_ANALYST.text_primary}; "
+                f"border: 1px solid {stale_tone['border']}; border-left: 6px solid {stale_tone['fg']}; "
+                f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 10px 12px; "
+                "font-size: 12px; font-weight: 700; line-height: 140%;"
+            )
+            self.boundary_banner.setText(
+                "安全邊界：來源暫時不可用；畫面顯示最後可信 DTO 並明示 stale。"
+                "不補值、不執行策略、不寫 DB；請聚焦 Retry 重新讀取。"
+            )
+            self.boundary_banner.setToolTip(
+                "目前資料不是 current：最後可信載入時間已列在今日重點。"
+                "Retry 只重新讀取 WorkbenchSourceService，不會寫 DB 或補 gate。"
+            )
+            self.meta_label.setText(
+                f"Workbench DTO stale；最後成功載入={last_good_at}；"
+                f"本次載入錯誤={error_message}"
+            )
+            self.evidence_feed_state_label.setText(
+                "背景證據流保留最後可信 DTO；狀態為 stale，不宣稱目前來源有效。"
+                "請聚焦 Retry；Workbench 不補值、不讀 DB。"
+            )
+            self.action_item_state_label.setText(
+                "待處理清單保留最後可信 DTO；狀態為 stale，不把舊 Action Item 當成 current。"
+                "只有 DTO 明示的 human_review 才需人工判讀。"
+            )
+            self.operating_loop_state_label.setText(
+                "操作節奏保留最後可信 DTO；狀態為 stale。Retry 只重新讀取來源，"
+                "不標記完成、不寫 DB。"
+            )
+            self.warning_list.set_warnings(
+                (*dashboard.warnings, f"workbench_source_stale:{error_message}")
+            )
+            self.refresh_button.setEnabled(self.source_service is not None)
+            self.refresh_button.setFocus(Qt.OtherFocusReason)
+            return
+
+        self._dashboard = None
+        self._dashboard_stale = False
         self._render_today_action_center(None)
         self.boundary_banner.setText(
-            "安全邊界：工作台狀態載入降級；不會補值、執行策略或把資料問題當成交易結論。"
+            "安全邊界：工作台狀態未知；尚無可信 DTO 可顯示。"
+            "不會補值、執行策略或把資料問題當成交易結論；請聚焦 Retry。"
         )
-        self._set_summary_placeholder("載入降級", "請先確認 WorkbenchSourceService；Phase gate 不變")
-        self.meta_label.setText(f"工作台載入失敗：{error_message}")
-        self.evidence_boundary_card.value_label.setText("資料品質降級")
+        self._set_summary_placeholder("狀態未知", "尚無可信 Workbench DTO；請聚焦 Retry，Phase gate 不變")
+        self.meta_label.setText(f"工作台載入失敗；狀態未知：{error_message}")
+        self.evidence_boundary_card.value_label.setText("資料品質未知")
         self.evidence_coverage_card.value_label.setText("WorkbenchSourceService 未回傳 dashboard DTO。")
         self.evidence_feed_state_label.setText(
-            "背景證據流降級：WorkbenchSourceService 未回傳 DTO；UI 不補值、不讀 DB、不執行 replay。"
+            "背景證據流未知：WorkbenchSourceService 未回傳可信 DTO；UI 不補值、不讀 DB、不執行 replay。"
         )
         self.action_item_state_label.setText(
-            "Action Items 降級：來源不可用；只供人工確認載入問題，不寫 DB，也不是買賣建議。"
+            "待處理清單未知：沒有可信 DTO，不能推定需要人工；請聚焦 Retry，不寫 DB，也不是買賣建議。"
         )
         self.operating_loop_state_label.setText(
-            "操作節奏降級：WorkbenchSourceService 未回傳 DTO；只供人工檢查載入問題，不寫 DB、不標記完成。"
+            "操作節奏未知：WorkbenchSourceService 未回傳 DTO；不能推定人工狀態，不寫 DB、不標記完成。"
         )
         self.evidence_feed_model.set_rows(())
         self.advice_recommendation_model.set_rows(())
@@ -1263,10 +1383,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         )
         self.review_empty_state.setVisible(True)
         self.review_table.setVisible(False)
+        self._set_review_empty_state(None)
         self.action_item_model.set_rows(())
         self.operating_loop_model.set_rows(())
         self.warning_list.set_warnings((f"workbench_source_degraded:{error_message}",))
-        self._set_detail_placeholder("載入降級", f"WorkbenchSourceService 未回傳 DTO：{error_message}")
+        self._set_detail_placeholder("狀態未知", f"WorkbenchSourceService 未回傳可信 DTO：{error_message}")
+        self.refresh_button.setFocus(Qt.OtherFocusReason)
 
     def _resize_tables(self) -> None:
         for table in (
@@ -1402,7 +1524,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             status = str(getattr(item, "status", ""))
             status_text = display_workbench_value(status)
             if status == "waiting_for_time":
-                status_text = f"需要處理 / 需要人工覆盤 / {status_text}"
+                status_text = f"機器等待 / {status_text}"
             card = StatusCard(
                 index=i,
                 title=_localize_workbench_text(str(getattr(item, "label", ""))),
@@ -1415,7 +1537,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _set_summary_blocks(self, dashboard: WorkbenchDashboardDTO) -> None:
         review_count = len(dashboard.review_items)
-        action_count = len(dashboard.action_items)
+        action_count = _human_action_count(dashboard)
+        machine_action_count = _machine_action_count(dashboard)
         waiting_count = sum(
             1 for item in dashboard.daily_checklist if str(item.status) == "waiting_for_time"
         )
@@ -1423,7 +1546,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.summary_value_labels["review"].setText(f"{review_count} 筆")
         self.summary_detail_labels["review"].setText("今日需人工判讀；已查看只存在本次 UI session")
         self.summary_value_labels["action"].setText(f"{action_count} 筆")
-        self.summary_detail_labels["action"].setText("只讀人工佇列；不寫 DB、不標記完成")
+        self.summary_detail_labels["action"].setText(
+            f"只讀人工佇列；機器證據 {machine_action_count} 筆不需人工簽核；不寫 DB、不標記完成"
+        )
         self.summary_value_labels["waiting"].setText(f"{waiting_count} 項")
         self.summary_detail_labels["waiting"].setText(_format_phase0_ratio_text(dashboard))
         self.summary_value_labels["warning"].setText(f"{warning_count} 則")
@@ -1452,7 +1577,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _set_priority_banner(self, dashboard: WorkbenchDashboardDTO) -> None:
         review_count = len(dashboard.review_items)
-        action_count = len(dashboard.action_items)
+        action_count = _human_action_count(dashboard)
+        machine_action_count = _machine_action_count(dashboard)
         warning_count = len(dashboard.warnings)
         waiting_count = sum(
             1 for item in dashboard.daily_checklist if str(item.status) == "waiting_for_time"
@@ -1462,6 +1588,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.priority_banner.setText(
             "今日重點："
             f"待判讀 {review_count} | 人工處理 {action_count} | "
+            f"機器證據 {machine_action_count} | "
             f"等待真實時間 {waiting_count} | 警告 {warning_count}。"
             "右側 Inspector 只顯示既有 DTO 證據，不寫入、不補 gate。"
         )
@@ -1526,7 +1653,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
 
     def _overview_summary_text(self, dashboard: WorkbenchDashboardDTO) -> str:
         return (
-            f"今日待判讀 {len(dashboard.review_items)} 筆｜人工待處理 {len(dashboard.action_items)} 筆｜"
+            f"今日待判讀 {len(dashboard.review_items)} 筆｜人工待處理 {_human_action_count(dashboard)} 筆｜"
+            f"機器證據待驗證 {_machine_action_count(dashboard)} 筆｜"
             f"等待真實時間 {sum(1 for item in dashboard.daily_checklist if str(item.status) == 'waiting_for_time')} 項｜"
             f"警告 {len(dashboard.warnings)} 則\n"
             f"{_format_phase0_gate_text(dashboard)}\n"
@@ -1559,6 +1687,19 @@ def _workbench_tone(status: str) -> dict[str, str]:
 
 def _detail_status(item) -> str:
     return str(getattr(item, "status", getattr(item, "severity", "")) or "")
+
+
+def _human_action_count(dashboard: WorkbenchDashboardDTO) -> int:
+    return sum(
+        1
+        for item in dashboard.action_items
+        if str(getattr(item, "status_classification", "human_review"))
+        == MACHINE_STATUS_HUMAN_REVIEW
+    )
+
+
+def _machine_action_count(dashboard: WorkbenchDashboardDTO) -> int:
+    return len(dashboard.action_items) - _human_action_count(dashboard)
 
 
 def _format_card_lines(lines: list[str]) -> str:
@@ -1596,6 +1737,13 @@ def _localize_workbench_text(text: str) -> str:
         "manual_observed": "人工已觀測",
         "passed": "通過",
         "missing": "缺漏",
+        "source_missing": "來源缺件",
+        "invalid_evidence": "證據無效",
+        "machine_candidate": "機器候選",
+        "machine_verified": "機器已驗證",
+        "machine_degraded": "機器觀測降級",
+        "stale": "資料過期（stale）",
+        "unknown": "未知",
         "degraded": "降級",
         "records observed": "筆已觀測",
         "record observed": "筆已觀測",
@@ -1672,6 +1820,7 @@ def _format_detail_body(item) -> str:
         ("來源", "source"),
         ("來源類型", "source_type"),
         ("來源名稱", "source_label"),
+        ("機器處理分類", "status_classification"),
         ("來源追蹤", "source_trace"),
         ("降級原因", "degraded_reason"),
         ("節奏", "cadence"),

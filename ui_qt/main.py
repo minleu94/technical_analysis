@@ -698,6 +698,7 @@ class MainWindow(QMainWindow):
                     journal_service=self.journal_service,
                     recommendation_service=self.recommendation_service,
                     broker_flow_service=self.broker_flow_service,
+                    async_refresh=True,
                     parent=self,
                 )
                 self.portfolio_view = portfolio_view
@@ -962,6 +963,13 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """只在所有受管背景工作安全結束後才允許關閉。"""
+        # MainWindow 的 closeEvent 不會可靠地逐一傳遞到子 QWidget。Portfolio
+        # 頁有自己的 pending generation；先撤銷它，避免全域 worker coordinator
+        # 取消目前一輪後，子頁又把排隊中的下一輪重新啟動。
+        portfolio_view = getattr(self, "portfolio_view", None)
+        cancel_portfolio_refresh = getattr(portfolio_view, "cancel_refresh", None)
+        if callable(cancel_portfolio_refresh):
+            cancel_portfolio_refresh()
         remaining_workers = request_cooperative_task_worker_shutdown()
         update_view = getattr(self, "update_view", None)
         background_process_running = bool(

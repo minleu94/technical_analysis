@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import sys
+import threading
+import time
 from dataclasses import dataclass, field
 from decimal import Decimal
 import json
@@ -9,7 +11,8 @@ from typing import Any
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QMainWindow, QWidget
+from PySide6.QtTest import QTest
 
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
 from app_module.paper_portfolio_snapshot_repository import (
@@ -19,6 +22,7 @@ from app_module.paper_portfolio_snapshot_repository import (
 )
 from app_module.paper_trade_ledger import PaperTradeLedgerRepository
 from ui_qt.views.portfolio_view import AddTradeDialog, PortfolioView
+from ui_qt.workers.task_worker import TaskWorker, running_task_workers
 
 
 def app():
@@ -173,6 +177,26 @@ class FakePortfolioService:
         return True
 
 
+class _SequencedAsyncPortfolioService(FakePortfolioService):
+    """Hold the first read so refresh generation/cancellation is observable."""
+
+    def __init__(self, config: FakeConfig):
+        super().__init__(config)
+        self.read_started = threading.Event()
+        self.release_first_read = threading.Event()
+        self.calls = 0
+
+    def get_portfolio(self):
+        self.calls += 1
+        if self.calls == 1:
+            self.read_started.set()
+            self.release_first_read.wait(timeout=5)
+        return super().get_portfolio()
+
+    def list_positions(self):
+        raise AssertionError("background refresh must reuse the returned PortfolioDTO")
+
+
 class FakeJournalService:
     def list_journal_entries(self, stock_code: str = ""):
         return []
@@ -219,6 +243,17 @@ def make_portfolio_view(tmp_path, parent=None):
     return view
 
 
+def _wait_until(predicate, timeout_seconds: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        app().processEvents()
+        if predicate():
+            return True
+        QTest.qWait(10)
+    app().processEvents()
+    return bool(predicate())
+
+
 def test_portfolio_active_summary_lists_position_count_and_top_symbols(tmp_path):
     view = make_portfolio_view(tmp_path)
 
@@ -229,6 +264,130 @@ def test_portfolio_active_summary_lists_position_count_and_top_symbols(tmp_path)
     assert view.card_net_val.title_label.text() == "持倉市值（未含現金）"
     assert view.card_net_val.value_label.text() == "TWD 261,000.00"
     assert "已標記市值 2/2 檔" in view.active_positions_summary_label.text()
+
+
+def test_portfolio_page_hydrates_summary_and_table_from_one_portfolio_dto(tmp_path):
+    class DtoOnlyPortfolioService(FakePortfolioService):
+        def list_positions(self):
+            raise AssertionError("refresh must use the returned PortfolioDTO")
+
+    app()
+    view = PortfolioView(
+        portfolio_service=DtoOnlyPortfolioService(FakeConfig(tmp_path)),
+        journal_service=FakeJournalService(),
+        condition_monitor=FakeConditionMonitor(),
+    )
+
+    dto = view._last_portfolio_dto
+    assert dto is not None
+    assert view.positions_model is not None
+    assert view.positions_model.rowCount() == len(dto.positions)
+    frame = view.positions_model.getDataFrame()
+    assert tuple(frame["證券代號"]) == tuple(
+        position.stock_code for position in dto.positions
+    )
+    assert f"活躍持倉：{dto.active_positions} 檔" in (
+        view.active_positions_summary_label.text()
+    )
+    assert view.card_invested.value_label.text() == (
+        f"TWD {dto.total_invested_amount:,.2f}"
+    )
+
+
+def test_portfolio_async_refresh_cancels_older_generation_and_uses_one_dto(tmp_path):
+    app()
+    service = _SequencedAsyncPortfolioService(FakeConfig(tmp_path))
+    view = PortfolioView(
+        portfolio_service=service,
+        journal_service=FakeJournalService(),
+        condition_monitor=FakeConditionMonitor(),
+        async_refresh=True,
+    )
+
+    assert _wait_until(service.read_started.is_set)
+    first_generation = view._refresh_generation
+    view.refresh_all()
+    assert view._refresh_generation == first_generation + 1
+    service.release_first_read.set()
+
+    assert _wait_until(lambda: service.calls >= 2 and view._refresh_worker is None)
+    assert view._last_portfolio_dto is not None
+    assert view.positions_model is not None
+    assert view.positions_model.rowCount() == len(view._last_portfolio_dto.positions)
+    assert "同一份 DTO" in view.portfolio_refresh_status_label.text()
+    assert view.btn_refresh.isEnabled()
+
+
+def test_portfolio_stale_worker_callback_cannot_replace_new_generation(tmp_path):
+    view = make_portfolio_view(tmp_path)
+    previous = view._last_portfolio_dto
+    assert previous is not None
+    worker = TaskWorker(lambda: previous)
+    view._refresh_worker = worker
+    view._refresh_generation = 2
+    view._worker_generation = 1
+
+    view._on_refresh_worker_finished(previous, 1, worker)
+
+    assert view._last_portfolio_dto is previous
+    assert view._refresh_worker is None
+
+
+def test_main_window_close_cancels_portfolio_worker_without_restarting_pending_generation(
+    tmp_path,
+):
+    """主視窗關閉協調器必須撤銷子頁排隊輪次並等待原生 QThread 結束。"""
+
+    app()
+    from ui_qt.main import MainWindow
+
+    service = _SequencedAsyncPortfolioService(FakeConfig(tmp_path))
+    window = QMainWindow()
+    view = PortfolioView(
+        portfolio_service=service,
+        journal_service=FakeJournalService(),
+        condition_monitor=FakeConditionMonitor(),
+        parent=window,
+        async_refresh=True,
+    )
+    window.portfolio_view = view
+
+    assert _wait_until(service.read_started.is_set)
+    view.refresh_all()
+    assert view._refresh_pending is True
+
+    class CloseEvent:
+        accepted = False
+        ignored = False
+
+        def accept(self):
+            self.accepted = True
+
+        def ignore(self):
+            self.ignored = True
+
+    first_event = CloseEvent()
+    MainWindow.closeEvent(window, first_event)
+
+    assert first_event.ignored is True
+    assert first_event.accepted is False
+    assert view._refresh_pending is False
+    assert view._refresh_generation > view._worker_generation
+
+    service.release_first_read.set()
+    assert _wait_until(
+        lambda: view._refresh_worker is None and not running_task_workers()
+    )
+    assert service.calls == 1
+
+    second_event = CloseEvent()
+    MainWindow.closeEvent(window, second_event)
+    assert second_event.accepted is True
+    assert second_event.ignored is False
+    assert view._refresh_worker is None
+
+    window.deleteLater()
+    app().processEvents()
 
 
 def test_portfolio_stress_lab_is_visible_and_research_only(tmp_path):

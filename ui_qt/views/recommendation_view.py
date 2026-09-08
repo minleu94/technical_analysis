@@ -1042,7 +1042,7 @@ class RecommendationView(QWidget):
             regime_score = details.get("score") or details.get("regime_score") or "未標示"
             regime_text = (
                 f"市場狀態：{regime_name} ({regime_code})\n"
-                f"信心度：{confidence_value:.0%}\n"
+                f"Regime 判讀信心：{confidence_value:.0%}（不代表獲利機率或風險預算）\n"
                 f"Regime score：{regime_score}\n"
                 f"資料日期 / 來源：{as_of_date} / {source}"
             )
@@ -1053,6 +1053,9 @@ class RecommendationView(QWidget):
             self.current_regime = regime_code
 
             # 根據 Regime 建議 Profile（Phase 3.2）
+            # Regime confidence 只用於顯示判讀證據；Profile 風險選擇由
+            # application service 依既有 Profile policy 決定，不在 UI 以
+            # float 閾值推升風險。
             self._suggest_profile_for_regime(regime_code, confidence_value)
 
             # 根據 Regime 自動調整策略配置（如果用戶沒有選擇 Profile）
@@ -1071,48 +1074,63 @@ class RecommendationView(QWidget):
             self.regime_label.setText(f"檢測失敗：{str(e)}")
 
     def _suggest_profile_for_regime(self, regime: str, confidence: float):
-        """根據市場狀態建議 Profile（Phase 3.2）
+        """顯示 application policy 產生的 Regime Profile 建議。
 
         Args:
             regime: 市場狀態（'Trend' | 'Reversion' | 'Breakout'）
-            confidence: 信心度（0-1）
+            confidence: 僅供 UI 顯示的 Regime 判讀信心度（0-1）。
         """
-        # 找到適用該 Regime 的 Profiles
-        suitable_profiles = []
-        for profile_id, profile in self.profiles.items():
-            if regime in profile.get('regime', []):
-                suitable_profiles.append((profile_id, profile))
+        suggestion = self.profile_service.suggest_profile_for_regime(
+            regime,
+            selected_profile_id=self.current_profile,
+        )
+        self.suggested_profile_id = suggestion.profile_id
 
-        if not suitable_profiles:
-            # 沒有適用的 Profile，隱藏建議
-            if hasattr(self, 'regime_suggestion_group'):
-                self.regime_suggestion_group.setVisible(False)
+        if not hasattr(self, 'regime_suggestion_group'):
+            return
+        if suggestion.profile_id is None:
+            if suggestion.status in {"blocked", "incompatible"}:
+                self._update_regime_suggestion_blocker(
+                    confidence,
+                    suggestion.reason,
+                    suggestion.status,
+                )
+                self.regime_suggestion_group.setVisible(True)
+                return
+            self.regime_suggestion_group.setVisible(False)
             return
 
-        # 選擇最適合的 Profile（優先選擇風險等級適中的）
-        # 如果信心度高，可以選擇風險較高的 Profile
-        if confidence >= 0.7:
-            # 高信心度：優先選擇風險較高的 Profile
-            suitable_profiles.sort(key=lambda x: {'high': 3, 'medium': 2, 'low': 1}.get(x[1].get('risk_level', 'medium'), 2), reverse=True)
-        else:
-            # 低信心度：優先選擇風險較低的 Profile
-            suitable_profiles.sort(key=lambda x: {'high': 1, 'medium': 2, 'low': 3}.get(x[1].get('risk_level', 'medium'), 2), reverse=True)
+        suggested_profile = self.profiles.get(suggestion.profile_id)
+        if suggested_profile is None:
+            self.suggested_profile_id = None
+            self.regime_suggestion_group.setVisible(False)
+            return
 
-        suggested_profile_id, suggested_profile = suitable_profiles[0]
-        self.suggested_profile_id = suggested_profile_id
+        self._update_regime_suggestion(
+            suggestion.profile_id,
+            suggested_profile,
+            confidence,
+            suggestion.reason,
+            suggestion.status,
+        )
+        self.regime_suggestion_group.setVisible(True)
 
-        # 顯示建議（如果建議區塊存在）
-        if hasattr(self, 'regime_suggestion_group'):
-            self._update_regime_suggestion(suggested_profile_id, suggested_profile, confidence)
-            self.regime_suggestion_group.setVisible(True)
-
-    def _update_regime_suggestion(self, profile_id: str, profile: Dict[str, Any], confidence: float):
+    def _update_regime_suggestion(
+        self,
+        profile_id: str,
+        profile: Dict[str, Any],
+        confidence: float,
+        policy_reason: str = "",
+        suggestion_status: str = "suggested_research",
+    ):
         """更新 Regime 建議顯示
 
         Args:
             profile_id: 建議的 Profile ID
             profile: Profile 資料
-            confidence: 市場狀態信心度
+            confidence: 僅供 UI 顯示的 Regime 判讀信心度
+            policy_reason: application profile policy 的可讀原因
+            suggestion_status: application profile policy 的狀態
         """
         regime_names = {
             'Trend': '趨勢追蹤',
@@ -1121,13 +1139,56 @@ class RecommendationView(QWidget):
         }
         current_regime_name = regime_names.get(self.current_regime, self.current_regime)
 
-        suggestion_text = f"<b>💡 根據當前市場狀態（{current_regime_name}，信心度 {confidence:.0%}）</b><br/>"
-        suggestion_text += f"<b>建議使用：{profile['name']}</b><br/><br/>"
+        suggestion_text = (
+            f"<b>💡 根據當前市場狀態（{current_regime_name}，"
+            f"Regime 判讀信心 {confidence:.0%}）</b><br/>"
+        )
+        suggestion_text += (
+            "<span>此信心只描述市場狀態判讀，不代表獲利機率、"
+            "風險預算或個人適配。</span><br/>"
+        )
+        if policy_reason:
+            suggestion_text += f"<span>{policy_reason}</span><br/>"
+        if suggestion_status == "suggested_research":
+            title = "建議使用"
+        elif suggestion_status == "user_selected":
+            title = "目前選擇"
+        else:
+            title = "目前選擇（policy 未通過）"
+        suggestion_text += f"<b>{title}：{profile['name']}</b><br/><br/>"
         suggestion_text += f"{profile['description']}<br/><br/>"
         suggestion_text += f"<b>風險等級：</b>{profile.get('risk_level', '未知')}"
 
         self.regime_suggestion_label.setText(suggestion_text)
-        self.apply_suggestion_btn.setVisible(True)
+        self.apply_suggestion_btn.setVisible(suggestion_status == "suggested_research")
+
+    def _update_regime_suggestion_blocker(
+        self,
+        confidence: float,
+        policy_reason: str,
+        policy_status: str,
+    ) -> None:
+        """顯示 Profile policy blocker，不把使用者選擇呈現為通過。"""
+        regime_names = {
+            'Trend': '趨勢追蹤',
+            'Reversion': '均值回歸',
+            'Breakout': '突破準備',
+        }
+        current_regime_name = regime_names.get(self.current_regime, self.current_regime)
+        status_label = {
+            "blocked": "blocked（暫停自動建議）",
+            "incompatible": "incompatible（條件不相容）",
+        }.get(policy_status, policy_status)
+        suggestion_text = (
+            f"<b>市場狀態（{current_regime_name}，"
+            f"Regime 判讀信心 {confidence:.0%}）</b><br/>"
+            "<span>此信心只描述市場狀態判讀，不代表獲利機率、"
+            "風險預算或個人適配。</span><br/>"
+            f"<b>Profile policy 狀態：</b>{status_label}<br/>"
+            f"<b>原因：</b>{policy_reason}"
+        )
+        self.regime_suggestion_label.setText(suggestion_text)
+        self.apply_suggestion_btn.setVisible(False)
 
     def _apply_suggested_profile(self):
         """一鍵套用建議的 Profile"""
@@ -2591,7 +2652,7 @@ class RecommendationView(QWidget):
         if hasattr(self, "_last_suggestion") and self._last_suggestion:
             regime_snapshot = {
                 "偵測 Regime": self._last_suggestion.get("regime", "N/A"),
-                "置信度": self._last_suggestion.get("confidence", 0.0),
+                "Regime 判讀信心": self._last_suggestion.get("confidence", 0.0),
                 "推薦配置 ID": self._last_suggestion.get("profile_id", "N/A"),
             }
 

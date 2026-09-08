@@ -140,6 +140,23 @@ class FakeManualObservedScheduledStatus:
         return self.result
 
 
+class _FlakyScheduledStatus:
+    def __init__(self, result) -> None:
+        self.result = result
+        self.calls = 0
+
+    def load_latest(self):
+        self.calls += 1
+        if self.calls > 1:
+            raise RuntimeError()
+        return self.result
+
+
+class _AlwaysFailScheduledStatus:
+    def load_latest(self):
+        raise RuntimeError()
+
+
 def test_signal_decay_table_model_formats_bp_without_changing_raw_value() -> None:
     app()
     from app_module.signal_decay_dashboard_dtos import SignalDecayDashboardRow
@@ -251,6 +268,42 @@ def test_scheduled_evidence_status_view_prioritizes_manual_observed_summary_over
     assert "production evidence/trading write risk: false" in details
     assert "Report preview（trimmed）" in details
     assert "source_capabilities" not in details
+
+
+def test_scheduled_status_view_marks_each_card_stale_and_focuses_retry() -> None:
+    app()
+    source = _FlakyScheduledStatus(FakeScheduledStatus().result)
+    view = ScheduledEvidenceStatusView(source, auto_refresh=False, async_refresh=False)
+
+    view.refresh_status()
+    first_id = view.recommendation_label.text()
+    view.refresh_status()
+
+    assert "scheduled_rec_20260707_051001" in first_id
+    assert "scheduled_rec_20260707_051001" in view.recommendation_label.text()
+    assert all("資料狀態：stale" in label.text() for label in (
+        view.freshness_label,
+        view.recommendation_label,
+        view.evidence_label,
+        view.safety_label,
+        view.report_label,
+    ))
+    assert "last-known-good" in view.detail_panel.toPlainText()
+    assert view.refresh_button.accessibleName() == "重新整理排程證據狀態"
+    assert view.refresh_button.focusPolicy().value != 0
+
+
+def test_scheduled_status_view_keeps_initial_empty_error_unknown_without_index_error() -> None:
+    app()
+    view = ScheduledEvidenceStatusView(
+        _AlwaysFailScheduledStatus(), auto_refresh=False, async_refresh=False
+    )
+
+    view.refresh_status()
+
+    assert "狀態未知" in view.boundary_label.text()
+    assert "尚無 last-known-good" in view.detail_panel.toPlainText()
+    assert "狀態未知" in view.safety_label.text()
 
 
 def test_evidence_operations_history_table_model_formats_scheduler_boundary() -> None:

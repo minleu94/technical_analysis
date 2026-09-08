@@ -6,7 +6,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication
 
 from app_module.dtos import RegimeResultDTO
-from app_module.recommendation_profile_service import RecommendationProfileService
+from app_module.recommendation_profile_service import (
+    RecommendationProfileService,
+    RegimeProfileSuggestion,
+)
 from ui_qt.views.recommendation_view import RecommendationView
 
 
@@ -156,3 +159,75 @@ def test_view_can_save_current_settings_as_custom_profile(tmp_path):
 
     assert saved.validation_label == "自訂，未經回測驗證"
     assert "自訂｜盤整觀察" in _combo_labels(view.profile_combo)
+
+
+def test_regime_confidence_does_not_promote_high_risk_profile(tmp_path):
+    _app()
+    view = RecommendationView(
+        recommendation_service=FakeRecommendationService(),
+        regime_service=FakeRegimeService(),
+        config=None,
+    )
+
+    # Trend has both momentum (high) and long_term (medium).  A high detector
+    # confidence must not turn into a high-risk profile recommendation.
+    assert view.suggested_profile_id == "long_term"
+    text = view.regime_suggestion_label.text()
+    assert "Regime 判讀信心：77%" in view.regime_label.text()
+    assert "不代表獲利機率或風險預算" in view.regime_label.text()
+    assert "Regime 判讀信心 77%" in text
+    assert "不代表獲利機率" in text
+    assert "未提供風險預算" in text
+    assert "不代表個人適配" in text
+    assert "風險等級：</b>medium" in text
+
+    view._suggest_profile_for_regime("Trend", 0.01)
+    assert view.suggested_profile_id == "long_term"
+
+
+def test_explicit_profile_selection_is_preserved_when_regime_is_refreshed(tmp_path):
+    _app()
+    view = RecommendationView(
+        recommendation_service=FakeRecommendationService(),
+        regime_service=FakeRegimeService(),
+        config=None,
+    )
+    index = view.profile_combo.findData("momentum")
+    assert index >= 0
+    view.profile_combo.setCurrentIndex(index)
+
+    view._suggest_profile_for_regime("Trend", 0.99)
+
+    assert view.current_profile == "momentum"
+    assert view.suggested_profile_id == "momentum"
+    assert "沿用使用者已選 Profile" in view.regime_suggestion_label.text()
+
+
+def test_ui_does_not_present_blocked_selected_profile_as_policy_pass(tmp_path, monkeypatch):
+    _app()
+    view = RecommendationView(
+        recommendation_service=FakeRecommendationService(),
+        regime_service=FakeRegimeService(),
+        config=None,
+    )
+    index = view.profile_combo.findData("momentum")
+    assert index >= 0
+    view.profile_combo.setCurrentIndex(index)
+
+    monkeypatch.setattr(
+        view.profile_service,
+        "suggest_profile_for_regime",
+        lambda *_args, **_kwargs: RegimeProfileSuggestion(
+            profile_id="momentum",
+            status="blocked",
+            reason_code="selected_profile_exceeds_risk_budget",
+            reason="目前選擇超過風險預算；不會自動換用另一個 Profile。",
+            risk_level="high",
+        ),
+    )
+    view._suggest_profile_for_regime("Trend", 0.99)
+
+    text = view.regime_suggestion_label.text()
+    assert "目前選擇（policy 未通過）" in text
+    assert "目前選擇超過風險預算" in text
+    assert view.apply_suggestion_btn.isHidden()

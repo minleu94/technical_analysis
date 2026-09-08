@@ -1,5 +1,23 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-09-07 V4 持續修復（尚未正式發布）
+
+- 跨年成交量缺口已在 v7 研究比較補回：原 Direct 年度 writer 重置 20 筆視窗，使 v6 在 2016 年初 19 個交易日沒有研究股票池；唯讀跨年 sidecar 恢復 16,488 筆 median，40,998 筆原有同年數值全部一致，另 180 筆仍缺。v7 的 63 個日期均有八檔共用股票池；root 獨立重算 12 組淨報酬與最大回撤全部吻合。這是修復資料缺口的探索證據，不是 ML 優勢；正式 Direct writer 的跨年延續與新區間讀取前強制方法檢查仍待完成，fold-005 尚未讀取。
+
+- 產業特徵的實際 post-freeze input 已由 root 驗收：11 檔 TWSE、33 個 industry features observed、0 missing；壓縮輸入與 audit 檔案 SHA 均吻合，所有 observed feature 的 available_at 不晚於 decision_at。18 項整合測試通過，包含同產業 TWSE／TPEx 隔離負例。這是盤後 research input，不是歷史 PIT 或正式模型核准；市場指數兩欄及技術分類兩欄仍各缺 11 筆。完整產物與時間證據見[機器證據紀錄](../06_qa/V4_AUTOMATED_REVIEW_2026_09_07.md)。
+- 新增 2317／5274 財報候選已由 root 在全新 TEMP consumer 讀回 316 筆（189／127），主表與 sidecar 筆數一致，EPS 為 4.27／44.27；9/7 不可見、9/8 可見。16 個產物 SHA 吻合、SQLite quick_check=ok、重跑新增 0 筆。來源抓取證據與跨午夜可用時間修補仍在驗收，不能據此宣稱正式資料或全市場恢復。
+- ML 歷史比較的撮合 helper 曾在不調整持倉時，將整數 bp 換算回股數而誤賣整張；root 已重現，修補的持倉保留回歸測試通過，但完整比較驗收尚未完成。舊 fold-004 v1–v5 結果可能受影響，只保留為探索紀錄，不作 ML 優勢或正式 OOS 證據；下一區間須先鎖定程式、撮合政策與輸入版本。
+
+- 月營收官方2026-07 snapshot已取得1851筆；官方OpenAPI公告對照涵蓋1849筆，另2筆留在candidate。1849筆已在隔離SQLite物化並重跑，保守可用日為2026-09-08；正式D資料尚未更新，歷史修訂不變性與正式更新計畫仍在驗收。見[資料恢復紀錄](../06_qa/V4_DATA_RECOVERY_2026_09_07.md)。
+- 季報已取得2026-Q2官方三表候選：TWSE 2330為172項、TPEx 6488為139項。新版TWSE r8／TPEx r6的18個檔案hash經root核對全部吻合；隔離consumer v3 SQLite唯讀quick_check為ok，主表與單位／期間sidecar各311筆、來源hash吻合。9/7讀回0筆、9/8讀回172／139筆，EPS為27.25／7.9；重跑新增0筆。公司／期別改用官方metadata精確比對，隔離路徑拒絕DATA_ROOT與未標記既有DB，root實際Windows junction負例通過；parser／adapter為16 passed、1 skipped（symlink權限）。這只證明兩家公司隔離接入，尚未恢復全市場或正式資料；舊r7 manifest不符的產物保留，不能借新版驗收追認。
+- 機器來源決議已完成一條真實官方producer→證據驗證→隔離registry路徑：TWSE月營收涵蓋獨立上市分母1094檔中的1084檔（9908bp）。root重驗政府資料集18420 metadata原始hash、授權及API映射，當前evaluator為machine_verified／limited；SQLite唯讀quick_check為ok，唯一決議hash與寫入證據一致。此路徑不需具名人類reviewer，但只允許research_shadow／diagnostics，不授予正式輸入、排程或交易權限。見[機器證據紀錄](../06_qa/V4_AUTOMATED_REVIEW_2026_09_07.md)。
+- OOC 線性衍生 release 已由真實 Direct parent 建立，產物4,187,004 bytes；root核對模型、前處理、校準與重播證據共5個檔案hash吻合。實際Meta訓練148,874 rows，校準84,609 rows；fold-004保存57,666 rows的獨立base／Meta重播。新版builder＋inference共14 tests通過；兩筆轉換自Direct的QA樣本驗證consumer載入與校準接線，尚不代表自然日shadow producer或2026前瞻效果。正式alpha仍0。見[ML release紀錄](../06_qa/V4_ML_RELEASE_2026_09_07.md)。
+- 排程容量與互斥接線已通過 root 定向重驗：政策變更前基線為67 passed、1 skipped（symlink 權限）；Raw／Direct 共用 OS 鎖，Direct 由 maintainer 持有並在取鎖後重查容量，Raw 另辨識仍存活的 continuation。2026-09-07 起所有 heavy caller 的中央 safety reserve 至少200 GiB；scheduled raw／Direct 仍為持久新增35 GiB、暫存40 GiB，required free headroom 為275 GiB，PIT／standalone Direct／raw-to-OOC／OOC 預設各1 GiB。`ml_storage_capacity.py` 的跨磁碟 aggregate、nearest-existing probe、鎖定後外部容量變化與 canonical lock mismatch 負例已新增，中央測試25 passed、1 skipped；另以真實三年度 Direct fixture 驗證年度 helper 收到已解析 budget，低 reserve CLI fail closed。2026-09-07 handoff 再以 owner nonce、canonical lock、parent／child PID sidecar、child 實際 OS gate 與 watchdog 取代舊裸 marker；四個 scheduled／continuation fixture suite 共78 passed、1 skipped；未執行 D 槽 live fit。見[容量驗證](../06_qa/V4_ML_STORAGE_GUARD_2026_09_07.md)。本輪未取得新的正式三項輸入完成證據，仍不宣稱V4完成。完整範圍見[V4驗收帳](../07_guides/V4_COMPLETION_PLAN_2026_09_07.md)。
+- bounded ResearchShadowUnion v2 已獨立重算既有 manifest／pointer／summary hash，原 chain 為 33 symbols、PIT `252,484` rows、base／Union `7,836` samples／18 folds；官方 overlay readback 為 `33/33`，PIT `33 symbols / 99 rows` 但歷史 cutoff 前可得 `0`，Union `9/33`，Direct `1/33`（`2454`）。其餘 24 檔逐檔均有 60-trading-day 內的 `ex_right_dividend_result` result-only event，依 horizon exclusion 與四 horizon completeness 規則不發布 sample；沒有把缺值轉成成功，也沒有重建 immutable block／PIT／overlay／Union。最終 readback、frozen inference 與完整限制見[ML release QA](../06_qa/V4_ML_RELEASE_2026_09_07.md)。
+- bounded capacity guard 已再收緊：raw／label spool batch callback 前先 commit 並量測，最後 summary write 前做 encoded-size projection、寫後再 checkpoint；回歸新增後 bounded／assembler／storage 為 `63 passed, 1 skipped`。這只影響未來受控執行，v2 artifact 沒有因 patch 重建；正式輸入仍 `0/3`、`formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。
+- 已完成11檔股票的盤後研究推論；v2真實release（`output/v4_ml_derived_h5_20260907_real_v2`）使用同值同rank契約，root確認兩組等值expert預測全為5000bp，不再依股票代碼產生差異。新版derived／推論整合與shadow回歸6 tests通過。v2 shadow新增53,982,559 bytes與目錄實測一致，Raw暫存峰值53,650,412 bytes；C／D執行後保留量通過，全流程暫存峰值仍unknown。盤後捕捉不計自然日前瞻信用。
+- root已唯讀核對Direct全部13年、3,353,096筆配置targets（80,474,304 bytes，逐檔SHA與manifest吻合）：target_weight／delta_weight／risk_contribution／risky_budget／rebalance五欄皆為0，cash全為10000bp。manifest同時記錄缺PIT產業成分而禁teacher新部位、缺ledger而退回全現金、缺正式Rule歷史；不能再以重訓這批targets宣稱配置能力改善。v2仍缺同7個features；加權coverage由83.97%變85.04%並非資料補齊，family weights改變且cash係數最大僅約7.3e-9，權重識別性仍待修復。接續先做base expert相對Rule／等權的成本後研究比較，正式Meta須待真實輸入支持非退化targets。
+
 ## 2026-09-07 三面向建議實作增量
 
 依三面向清查的優先順序，已在不改寫正式原始資料、不啟用 production ML／broker 的前提下完成一輪可驗證工程：
@@ -7,7 +25,7 @@
 - 分數證據：Score effectiveness read model 增加 liquidity cost、成本後 benchmark excess 與描述性 95% 區間；仍只作研究，缺完整成交帳本時不合成淨績效。
 - 成交與帳務：`ConservativeFillPolicy` 將日頻回放的開盤漲跌停、已知成交量參與率、整張與部分／未成交寫入診斷；Paper reconciliation 增加可選現金守恆阻擋；Portfolio ledger migration 仍只允許隔離 candidate 副本。
 - 持倉風控：invalidation rule 支援 `reduce`／`exit` 分級；holding horizon 僅使用涵蓋兩端的官方交易日曆，缺日曆時不猜曆日。
-- ML 交付與容量：Direct／raw wrapper、PIT exporter、OOC trainer 與各階段 checkpoint 使用持久新增、暫存峰值、安全保留三段式 bytes preflight；全鏈操作建議把 safety reserve 設為 125 GiB，與 35 GiB 持久新增、40 GiB 暫存峰值合計保留 200 GiB（另含日常更新與額外餘裕）。`minimal_linear_shadow` CLI profile 提供單一 Ridge／Logistic、單一 horizon 的成本後增益起點；`AllocationReleaseAdapter` 與 parity CLI 綁定模型、前處理、校準、feature order、missing policy、lineage hash。
+- ML 交付與容量：Direct／raw wrapper、PIT exporter、OOC trainer 與各階段 checkpoint 使用持久新增、暫存峰值、安全保留三段式 bytes preflight；2026-09-07 的中央政策把 heavy safety reserve 固定為至少200 GiB，scheduled 35 GiB 持久新增加40 GiB 暫存峰值因此要求至少275 GiB，standalone producer 預設各1 GiB。各 caller 以 nearest existing ancestor 判定磁碟，跨磁碟 aggregate quota 與 `release_v4/.ml_heavy_chain.lock` canonical identity 一併驗證；容量不足只保留 checkpoint／blocked，不自動升級預算。`minimal_linear_shadow` CLI profile 提供單一 Ridge／Logistic、單一 horizon 的成本後增益起點；`AllocationReleaseAdapter` 與 parity CLI 綁定模型、前處理、校準、feature order、missing policy、lineage hash。
 - UI：研究上下文、日期／來源返回、中文結論與收合診斷已接入；長任務進度／可存取圖表與表格仍由 UI P2 驗證中。
 
 目前正式輸入仍為 0/3、`formal_oos_allowed=false`、`production_alpha_bp=0`、`broker_order_allowed=false`。OOC calibration 若仍為 diagnostic-only，不得建立 release；容量 preflight 通過只表示可以安全啟動或續跑，不代表 Formal／promotion 通過。

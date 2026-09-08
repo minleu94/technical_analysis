@@ -5,6 +5,24 @@ from typing import Any, Mapping
 from app_module.program_readiness_projection import PROGRAM_READINESS_LANE_ORDER
 
 
+def format_machine_status_classification(classification: Any) -> str:
+    """Render the handling class without implying human approval or gate credit."""
+
+    raw = str(classification or "unknown").strip().lower()
+    mapping = {
+        "source_missing": "來源缺件（機器狀態，不需人工簽核）",
+        "waiting_for_time": "等待自然時間（機器狀態）",
+        "invalid_evidence": "證據無效（機器拒絕）",
+        "human_review": "需要實質人工判讀",
+        "machine_candidate": "機器候選（尚未正式驗證）",
+        "machine_verified": "機器 consumer 已驗證",
+        "machine_degraded": "機器觀測降級",
+        "stale": "最後可信資料（stale，需重新載入）",
+        "unknown": "狀態未知（尚無可信讀取）",
+    }
+    return mapping.get(raw, f"未分類機器狀態（{raw or 'unknown'}）")
+
+
 def _safe_nonnegative_int(value: Any) -> int:
     """把 malformed 計數 fail-closed 成 0，避免狀態頁因顯示而中止。"""
 
@@ -54,9 +72,19 @@ def format_status_token(status: Any) -> str:
         "contract_only": "僅有契約",
         "candidate_only": "僅限候選",
         "candidate_evidence_only": "僅限候選證據",
+        "source_missing": "來源缺件",
+        "invalid_evidence": "證據無效",
+        "machine_candidate": "機器候選",
+        "machine_verified": "機器已驗證",
+        "machine_degraded": "機器觀測降級",
         "governance_review": "待治理審核",
         "needs_named_owner_reviewer": "待具名 owner／reviewer",
         "ready_for_owner_review": "可交 owner 審核",
+        "needs_input_evidence": "待補來源證據",
+        "unknown_input_evidence": "來源證據未知",
+        "input_evidence_invalid": "來源證據無效",
+        "machine_verified": "機器 consumer 已驗證",
+        "machine_verified_candidate": "機器候選證據",
         "pending_capacity_owner_review": "待容量 owner 審核",
         "pending_production_pool_review": "待 production pool 審核",
         "observed_staging_only": "僅觀測 staging",
@@ -328,6 +356,21 @@ def format_program_readiness_blockers(value: Any) -> str:
         if raw.startswith("formal_input_not_ready:"):
             input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
             label = f"Formal 輸入未就緒：{input_name}"
+        elif raw.startswith("formal_input_source_missing:"):
+            input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
+            label = f"Formal 來源資料缺件：{input_name}"
+        elif raw.startswith("formal_input_machine_candidate:"):
+            input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
+            label = f"Formal 僅有機器候選：{input_name}"
+        elif raw.startswith("formal_input_evidence_invalid:"):
+            input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
+            label = f"Formal 來源證據無效：{input_name}"
+        elif raw.startswith("formal_input_evidence_unknown:"):
+            input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
+            label = f"Formal 來源證據未知：{input_name}"
+        elif raw.startswith("formal_input_evidence_unclassified:"):
+            input_name = raw.split(":", 1)[1].strip() or "未命名輸入"
+            label = f"Formal 來源證據狀態未分類：{input_name}"
         elif raw.startswith("scheduled_tasks_missing_or_unavailable:"):
             label = "排程工作未完整可用"
         else:
@@ -410,7 +453,22 @@ def format_program_readiness_lane_progress(lane: str, value: Mapping[str, Any]) 
     if lane == "formal_ml":
         ready = _safe_nonnegative_int(metrics.get("ready_input_count"))
         total = _safe_nonnegative_int(metrics.get("input_count"))
-        return f"owner-controlled input {ready}/{total}" if total else ""
+        if not total:
+            return ""
+        parts = [f"formal consumer verified {ready}/{total}"]
+        candidate = _safe_nonnegative_int(metrics.get("machine_candidate_input_count"))
+        missing = _safe_nonnegative_int(metrics.get("missing_input_count"))
+        unknown = _safe_nonnegative_int(metrics.get("unknown_input_count"))
+        invalid = _safe_nonnegative_int(metrics.get("invalid_input_count"))
+        if candidate:
+            parts.append(f"機器候選 {candidate}")
+        if missing:
+            parts.append(f"來源缺件 {missing}")
+        if unknown:
+            parts.append(f"來源未知 {unknown}")
+        if invalid:
+            parts.append(f"來源無效 {invalid}")
+        return "；".join(parts)
 
     if lane == "runtime":
         state = str(metrics.get("overall_state") or "").strip()

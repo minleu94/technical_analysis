@@ -5,6 +5,7 @@ from datetime import date, datetime
 from typing import Any
 
 from app_module.advice_dtos import AdviceDashboardDTO
+from app_module.machine_status_classification import classify_machine_status
 
 
 WORKBENCH_LEGACY_DRILLDOWN_TARGETS: dict[str, str] = {
@@ -113,9 +114,17 @@ class WorkbenchEvidenceFeedItem:
     degraded_reason: str
     drilldown_target: str
     diagnostics: tuple[str, ...] = ()
+    status_classification: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "diagnostics", _normalize_strings(self.diagnostics))
+        classification = str(self.status_classification or "").strip()
+        if not classification:
+            classification = classify_machine_status(
+                self.status,
+                (self.degraded_reason, self.summary, *self.diagnostics),
+            )
+        object.__setattr__(self, "status_classification", classification)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -127,6 +136,7 @@ class WorkbenchEvidenceFeedItem:
             "degraded_reason": self.degraded_reason,
             "drilldown_target": self.drilldown_target,
             "diagnostics": list(self.diagnostics),
+            "status_classification": self.status_classification,
         }
 
 
@@ -145,11 +155,19 @@ class WorkbenchActionItem:
     sort_rank: int = 9999
     code: str | None = None
     write_intent: bool = False
+    status_classification: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "queue_group", str(self.queue_group or "manual_review"))
         object.__setattr__(self, "source_label", str(self.source_label or self.source_type))
         object.__setattr__(self, "sort_rank", int(self.sort_rank))
+        classification = str(self.status_classification or "").strip()
+        if not classification:
+            classification = classify_machine_status(
+                self.severity,
+                (self.degraded_reason, self.summary, self.title),
+            )
+        object.__setattr__(self, "status_classification", classification)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -166,6 +184,7 @@ class WorkbenchActionItem:
             "sort_rank": self.sort_rank,
             "code": self.code,
             "write_intent": self.write_intent,
+            "status_classification": self.status_classification,
         }
 
 
