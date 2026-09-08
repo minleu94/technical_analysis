@@ -55,7 +55,11 @@ class WorkbenchReadOnlyComposer:
         warnings = self._warnings(readiness_report, agent_report_sample, historical_replay_summary, source_diagnostics)
         if decision_snapshot is not None:
             warnings.extend(item for item in decision_snapshot.warnings if item not in warnings)
-        review_items = self._review_items(decision_snapshot, readiness_report)
+        review_items = self._review_items(
+            decision_snapshot,
+            readiness_report,
+            source_diagnostics=source_diagnostics,
+        )
         daily_checklist = self._daily_checklist(decision_snapshot, readiness_report)
         background_evidence_feed = self._background_evidence_feed(
             decision_snapshot,
@@ -139,8 +143,13 @@ class WorkbenchReadOnlyComposer:
         self,
         decision_snapshot: DecisionDeskSnapshot | None,
         readiness_report: PreV2ReadinessReport,
+        *,
+        source_diagnostics: tuple[str, ...] = (),
     ) -> tuple[WorkbenchReviewItem, ...]:
         items: list[WorkbenchReviewItem] = []
+        source_gap_item = _source_diagnostic_review_item(source_diagnostics)
+        if source_gap_item is not None:
+            items.append(source_gap_item)
         if decision_snapshot is not None:
             watchlist = decision_snapshot.watchlist_triggers
             if (watchlist.trigger_count or 0) > 0 or watchlist.triggered_codes:
@@ -867,6 +876,50 @@ def _readiness_status_classification(item: PreV2ReadinessItem) -> str:
     return classify_machine_status(
         item.status,
         (*item.blocking_reasons, *item.diagnostics, *item.next_actions),
+    )
+
+
+def _source_diagnostic_review_item(
+    source_diagnostics: tuple[str, ...],
+) -> WorkbenchReviewItem | None:
+    """把 Workbench source adapter 的明示缺口投影成可操作的人工提示。
+
+    Pre-V2 readiness 的機器缺口仍由 action/evidence feed 呈現，不能因為
+    UI 想集中顯示就冒充人工審查。這裡只接收 source service 明示的
+    ``decision_desk_snapshot*`` 診斷，避免把一般機器狀態重新分類。
+    """
+    diagnostics = tuple(str(item) for item in source_diagnostics if str(item).strip())
+    if not any(item.startswith("decision_desk_snapshot") for item in diagnostics):
+        return None
+
+    if any("future_date" in item for item in diagnostics):
+        summary = (
+            "指定日期超過目前可用的台灣市場資料範圍；畫面已限制在可用日期，"
+            "這筆未來快照不能當作今日研究依據。請查看資料來源與日期診斷。"
+        )
+    elif any("table_missing" in item or "db_missing" in item for item in diagnostics):
+        summary = (
+            "決策快照來源尚未提供或不可讀；目前只能看見降級狀態，"
+            "不能把空白當成沒有風險。請查看資料來源與日期診斷。"
+        )
+    elif any("degraded" in item or "unavailable" in item for item in diagnostics):
+        summary = (
+            "決策快照讀取時發生來源錯誤；目前內容不足以支持完整研究。"
+            "請查看資料來源與日期診斷後再重試。"
+        )
+    else:
+        summary = (
+            "決策快照來源有缺口；目前內容不足以支持完整研究。"
+            "請查看資料來源與日期診斷。"
+        )
+    return WorkbenchReviewItem(
+        item_id="readiness_source_gaps",
+        title="決策來源缺口",
+        severity="warning",
+        source="workbench_source",
+        summary=summary,
+        drilldown_target="evidence_mode",
+        code="; ".join(diagnostics[:3]),
     )
 
 

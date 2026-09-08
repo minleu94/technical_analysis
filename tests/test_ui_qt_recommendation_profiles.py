@@ -3,7 +3,8 @@ import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QBoxLayout
 
 from app_module.dtos import RegimeResultDTO
 from app_module.recommendation_profile_service import (
@@ -231,3 +232,25 @@ def test_ui_does_not_present_blocked_selected_profile_as_policy_pass(tmp_path, m
     assert "目前選擇（policy 未通過）" in text
     assert "目前選擇超過風險預算" in text
     assert view.apply_suggestion_btn.isHidden()
+
+
+def test_recommendation_view_reflows_config_and_result_for_narrow_research() -> None:
+    _app()
+    view = RecommendationView(
+        recommendation_service=FakeRecommendationService(),
+        regime_service=FakeRegimeService(),
+        config=None,
+    )
+    view.show()
+    _app().processEvents()
+
+    view.resize(1366, 768)
+    assert view.main_splitter.orientation() == Qt.Horizontal
+    assert view.result_title_layout.direction() == QBoxLayout.LeftToRight
+
+    view.resize(390, 844)
+    assert view.main_splitter.orientation() == Qt.Vertical
+    assert view.result_title_layout.direction() == QBoxLayout.TopToBottom
+    assert view.config_scroll.minimumWidth() == 0
+    assert view.result_panel.minimumWidth() == 0
+    assert view.research_context_label.text().startswith("研究上下文：尚未執行")

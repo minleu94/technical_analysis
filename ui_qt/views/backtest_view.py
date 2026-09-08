@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox, QTextEdit as QTextEditDialog, QScrollArea,
     QMenu
 )
-from PySide6.QtCore import Qt, Signal, QDate, QTimer
+from PySide6.QtCore import Qt, Signal, QSize, QDate, QTimer
 from PySide6.QtGui import QFont
 import pandas as pd
 from typing import Dict, Any, Optional, List
@@ -105,6 +105,14 @@ class BacktestView(QWidget):
     walkforward_service: Optional[WalkForwardService]
     worker: Optional[Any]
 
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        """允許主視窗以 viewport 高度呈現，內容由既有捲動區承接。"""
+
+        # 設定面板與結果面板內已有 scroll area／table view；若把整個
+        # child layout 的最小高度傳給 QMainWindow，切換到回測頁會把
+        # 1366x768 的研究 viewport 撐高，窄版也無法驗證垂直重排。
+        return QSize(0, 0)
+
     def __init__(
         self,
         backtest_service: BacktestService,
@@ -128,6 +136,7 @@ class BacktestView(QWidget):
         self.batch_backtest_service = batch_backtest_service
         self.watchlist_service = watchlist_service
         self.research_run_service_error: str | None = None
+        self._backtest_narrow = False
 
         # 初始化新服務
         if config:
@@ -629,7 +638,7 @@ class BacktestView(QWidget):
         # 左側：配置面板（使用 ScrollArea 支援滾動）
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
-        config_scroll.setMinimumWidth(560)
+        config_scroll.setMinimumWidth(0)
         config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
@@ -649,6 +658,7 @@ class BacktestView(QWidget):
 
         # 右側：結果面板
         self.result_panel = BacktestResultPanel(self)
+        self.result_panel.setMinimumWidth(0)
         splitter.addWidget(self.result_panel)
 
         # 設置 Splitter 比例：左側預設吃下完整設定表單，額外空間優先給結果區。
@@ -664,6 +674,30 @@ class BacktestView(QWidget):
 
         # 初始根據選中的實驗模式更新 UI 狀態
         self._update_ui_state_by_mode(self.research_lab_mode_combo.currentData() or "single_stock")
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        """窄版將設定與結果改為上下流，維持 Research Lab context 可見。"""
+        if not hasattr(self, "backtest_splitter"):
+            return
+        narrow = self.width() < 900
+        if not force and narrow == self._backtest_narrow:
+            return
+        self._backtest_narrow = narrow
+        self.backtest_splitter.setOrientation(
+            Qt.Orientation.Vertical if narrow else Qt.Orientation.Horizontal
+        )
+        self.config_scroll.setMinimumWidth(0)
+        self.result_panel.setMinimumWidth(0)
+        if self._config_panel_collapsed:
+            self.backtest_splitter.setSizes([0, max(self.backtest_splitter.width(), 1)])
+        elif narrow:
+            self.backtest_splitter.setSizes([500, 700])
+        else:
+            self.backtest_splitter.setSizes([560, 780])
 
     def _toggle_config_panel_collapsed(self) -> None:
         self._set_config_panel_collapsed(not self._config_panel_collapsed)

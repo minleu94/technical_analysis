@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QBrush, QColor
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QBoxLayout, QWidget
 
 from app_module.workbench_dtos import (
     WorkbenchAccessBoundary,
@@ -717,6 +717,34 @@ def test_unified_workbench_overview_uses_detail_inspector_and_collapsible_sectio
     assert view.evidence_collapsible.is_collapsed() is False
     view.evidence_collapsible.toggle_button.click()
     assert view.evidence_collapsible.is_collapsed() is True
+
+
+def test_unified_workbench_reflows_narrow_layout_and_expands_dto_fields() -> None:
+    app()
+    view = UnifiedDecisionWorkbenchView(
+        dashboard=_dashboard_with_replay(),
+        auto_refresh=False,
+    )
+    view.show()
+    app().processEvents()
+
+    view.resize(1366, 768)
+    assert view.primary_layout.direction() == QBoxLayout.LeftToRight
+    assert view.detail_panel.minimumWidth() == 360
+
+    view.resize(390, 844)
+    assert view.primary_layout.direction() == QBoxLayout.TopToBottom
+    assert view.detail_panel.minimumWidth() == 0
+    assert view.review_table.horizontalScrollBarPolicy() == Qt.ScrollBarAsNeeded
+    assert view.detail_body_label.isHidden() is True
+
+    view.detail_technical_button.click()
+    assert view.detail_body_label.isHidden() is False
+    assert "snapshot hash：未知" in view.detail_body_label.text()
+    assert "schema 版本：未知" in view.detail_body_label.text()
+
+    view.detail_technical_button.click()
+    assert view.detail_body_label.isHidden() is True
 
 
 def test_unified_workbench_overview_uses_high_contrast_priority_treatments() -> None:

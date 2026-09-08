@@ -11,7 +11,17 @@ from typing import Any
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox, QMainWindow, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication,
+    QBoxLayout,
+    QFileDialog,
+    QMessageBox,
+    QMainWindow,
+    QSizePolicy,
+    QStackedWidget,
+    QWidget,
+)
 from PySide6.QtTest import QTest
 
 from app_module.dtos.portfolio_dtos import PortfolioDTO, PositionDTO, TradeDTO
@@ -291,6 +301,31 @@ def test_portfolio_page_hydrates_summary_and_table_from_one_portfolio_dto(tmp_pa
     )
     assert view.card_invested.value_label.text() == (
         f"TWD {dto.total_invested_amount:,.2f}"
+    )
+
+
+def test_portfolio_view_reflows_positions_and_existing_evidence_tabs_on_narrow_width(tmp_path):
+    view = make_portfolio_view(tmp_path)
+    host = QStackedWidget()
+    host.setMinimumSize(0, 0)
+    host.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+    host.addWidget(view)
+    host.show()
+    app().processEvents()
+
+    host.resize(1366, 768)
+    app().processEvents()
+    assert view.main_splitter.orientation() == Qt.Horizontal
+    assert view.position_action_layout.direction() == QBoxLayout.LeftToRight
+
+    host.resize(390, 844)
+    app().processEvents()
+    assert view.main_splitter.orientation() == Qt.Vertical
+    assert view.position_action_layout.direction() == QBoxLayout.TopToBottom
+    assert view.history_filter_layout.direction() == QBoxLayout.TopToBottom
+    assert view.portfolio_detail_tabs.minimumWidth() == 0
+    assert "研究建議／待成交佇列／已記錄成交分開判讀" in (
+        view.portfolio_refresh_status_label.toolTip()
     )
 
 

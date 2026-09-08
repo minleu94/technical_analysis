@@ -1193,9 +1193,15 @@ python ui_qt/main.py
 
 「總覽」現在先顯示「今日行動中心」：四張卡依序整理資料狀態、市場判讀、Advice／候選與持倉覆盤；上方唯一主要按鈕會依既有 DTO 選出下一個應檢查的工作區。它只會切換至數據更新、市場總覽、推薦分析或持倉管理，不會更新資料、執行策略、產生或套用 Advice、寫入持倉或交易。資料待確認時先看數據更新；有持倉 Action Item 時先看持倉管理；再依待判讀與 Advice DTO 狀態導向市場總覽或推薦分析。
 
+資料可用性判讀先看畫面上的研究／決策基準日（`as_of`）、資料日期、來源狀態與 warnings；UI 不把本機日期猜成台股交易日，也不自行補 freshness。Workbench DTO 沒有提供資料日期時會明示未知，應按「查看數據更新」回到既有來源投影。空白、載入中、部分完成、stale、失敗與已取消是不同狀態；背景更新只顯示目前階段與已處理數量，總量未知時不製造百分比。取消後保留已完成成果並標示真實取消狀態，不能解讀成完整更新。
+
 行動中心下方保留四個指揮台摘要 block：今日待判讀、人工待處理、等待真實時間、Warnings。等待真實時間 block 會明確顯示 weekly history 與 multi-day dry-run 比例，讓使用者掃描重點後再往下看表格。「Evidence」子頁已替換為唯讀 Research Console；「持倉追蹤」與「操作節奏」仍是摘要與下鑽入口。Research Console 的可見性不代表 formal evidence、source acceptance 或 promotion 已完成。
 
 Workbench 仍只透過 `WorkbenchSourceService` / `WorkbenchDashboardDTO` 讀取既有資料；不寫 DB、不啟用 production scheduler、不執行 replay、不補 lifecycle gate、不產生買賣建議。Evidence 必須按來源層判讀：formal/canonical DB credit 未授予；未設定 projection 時 legacy DB 可能顯示 `0/3`；歷史 working-copy Week 1=`1/3`；owner-approved UI projection=`3/3`；正式 sidecar 已有 `10` 期 `pending_human_review`；multi-day dry-run=`3/3`。目前缺口已不是「等待 Week 2／3 出現」，而是由具名 reviewer 對 10 期逐期裁決、取得 formal credit，並完成 backup／rollback／recovery 與 scheduler approval。UI 重排、replay、fixture 或人工改表都不能替代上述步驟。
+
+若來源投影明確回報決策 snapshot 未來日期、snapshot table 缺失或其他 source gap，Workbench 會在「決策來源缺口」列中保留可讀原因與 `evidence_mode` 下鑽；機器-only readiness gap 不會被改標成人工 review。此時先查看來源 trace／數據更新／Evidence，不要在 UI 查 DB、改日期或把空佇列當成安全。
+
+窄版（例如 390×844）會把今日行動卡、主要內容與 Inspector 依序堆疊；推薦、Research Lab 與 Portfolio 的設定／結果或操作列也會改為垂直排列。只有真正的資料表保留水平捲動，主要錯誤、取消與下一步不會藏在不可見的右側。Workbench Inspector 的技術欄位預設收合，按「查看技術欄位（DTO raw）」才展開 hash、schema 與 Gate 細項；DTO 沒有提供時顯示未知，不由 view 重建。
 
 ### 2.7 顯示縮放、鍵盤與長表格驗證
 
@@ -1882,9 +1888,13 @@ Regime 是對當下市場環境的分類，不是未來預測。規則匹配度�
 5. 若目前設定值得重用，可按「保存目前設定為自訂 Profile」；保存後會出現在 `自訂｜...` 清單。
 6. 點擊「執行推薦分析」。
 
+執行或選取結果後，結果區上方的「研究上下文」會沿用同一檔股票、研究區間、決策日、資料日期、來源與 Profile。切到個股研究、Research Lab 或 Portfolio 時，應以這組 context 核對是否仍在同一研究假說；缺少欄位會顯示未知，不由 UI 猜測或重新計算。
+
 推薦分析執行期間，進度列會顯示目前百分比；下方「執行狀態」會同步顯示四個階段（讀取資料、建立分析範圍、執行推薦規則、整理結果）、耗時與最後活動時間。這些欄位是本輪背景工作的可觀測狀態，不會把等待中的時間推算成額外完成度。按「取消分析」只會送出合作式取消，按鈕會改為「取消中…」並等待背景工作安全收尾；收尾前不套用部分結果，也不會強制終止仍可能持有資料資源的執行緒。完成後畫面會保留「已安全取消」及本輪耗時，需重新按「執行推薦分析」才能開始新一輪。
 
 市場狀態卡會顯示 Regime 中文名、regime code、confidence / 規則匹配度、Regime score、資料日期與來源。confidence / 規則匹配度是當下資料符合分類規則的程度，不是未來走勢勝率。
+
+推薦結果的規則分數、資料品質、研究訊號與校準機率是不同欄位；`reliability=0.9` 或 Regime confidence 不能寫成 90% 勝率。Profile 的風險 policy、相容性與 blocked／incompatible 理由仍由 `RecommendationProfileService` 決定，畫面不會因高 confidence 自動改選高風險 Profile。
 
 Profile-Regime 說明：
 
@@ -2460,6 +2470,8 @@ dry-run 只讀官方 TPEX daily close quotes 與 SQLite，顯示 `ready_for_appl
 
 Research Lab 左側設定面板預設保留足夠寬度給長下拉選項與表單欄位，右側結果區吃剩餘空間；一般 1400px 預設主視窗不應需要手動左右拖動才看得到完整「執行價格」等設定列。
 
+在窄版研究時，左側設定與右側結果會改為上下堆疊；「收合左側設定」仍只改變 UI 空間，不改參數、已選 run 或結果。比較前先核對股票池、日期區間、成本政策、成交假設、樣本數與 benchmark；不相容 run 以中文原因揭露，不能用一個綠色總分掩蓋差異。
+
 ### 9.2 基本設定
 
 1. 選擇策略來源或載入 Preset。
@@ -2560,6 +2572,8 @@ Registry 保存 `execution_contract`、凍結成本／部位假設與 run_status
 保存過程依 staging→files_ready→committed 保護半成品。刷新、列表與載入都不暗中修復；只載入 committed、valid 且雙 Parquet hash 一致的結果。缺檔、損毀、未知 schema／execution version 時停止比較並顯示原因。維護 owner 需先在隔離副本驗證，再明確執行 reconciliation；不要把重新整理當修復操作。原始 run 不因市場追加未來資料而重算。
 
 Evidence 的 close-to-close outcome 是事後診斷，不是 v2 執行 PnL；成熟 outcome 仍保留原 event 的 replay／forward／paper／live 宣告來源。應用服務的人工覆盤接點接受 run_id、reviewer、notes 與下一輪研究問題，回傳原推薦 snapshot、event、outcome 與缺件；沒有新增 UI 核准按鈕。宣告 tier 與 reviewer 字串不等於正式來源接受、真實時間或身分驗證，提案不增加 Formal credit 或 promotion 權限。
+
+比較畫面先顯示可直接比較／需謹慎比較／不可直接比較及其原因，再顯示既有淨值、回撤、換手、成本或 benchmark 欄位。數值未由服務提供時顯示 `unknown` 與原因，不在 UI 補值。結果的研究回放、自然前瞻觀測、Paper 成交紀錄與正式可用 scope 必須分開，任何一層都不能替代另一層。
 
 - 實驗摘要：績效摘要與交易明細。
 - 圖表：權益、回撤、報酬分布、持有天數。
@@ -3314,6 +3328,8 @@ Registry 比較只使用已保存的 metadata、equity curve 與 benchmark_resul
 相容 API `PortfolioService.get_benchmark_comparison()` 在尚未提供比較期間、現金／資金流帳與固定 benchmark constituents 時會回傳 `status=not_computable` 與 `None`，不再用數值 0 冒充已完成的超額報酬比較。正式的成本後 Portfolio／Equal Weight 比較要走 Paper Portfolio 的期間化 ledger 與 weekly report。
 
 目前不要把批次回測排行榜理解成已提供直接加入持倉入口；可記錄到持倉的主要入口是推薦結果表與回測交易明細。
+
+Portfolio 首層分開判讀研究建議、待成交／Paper 佇列與已記錄成交：研究建議不等於 fill，待成交不等於已成交，交易歷史只代表既有帳本事件。右側「交易歷史」與「Paper Portfolio」沿用服務／帳本狀態；缺數值時顯示未知或不可計算，不以 0 冒充完成。窄版會將持倉操作列與明細 tabs 直向排列，保留「清除篩選」與明確的記錄／取消入口；此頁不自動下單、不擅自套用配置。
 
 ### 10.3 Paper Portfolio 與 Equal Weight 狀態
 

@@ -4,7 +4,7 @@
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QLabel,
     QPushButton, QTableView, QGroupBox, QProgressBar,
     QTextEdit, QHeaderView, QCheckBox, QSpinBox, QDoubleSpinBox,
     QComboBox, QMessageBox, QSplitter, QScrollArea,
@@ -37,6 +37,7 @@ from data_module.config import TWStockConfig
 from ui_qt.widgets.info_button import InfoButton
 from ui_qt.widgets.table_style import apply_financial_table_style
 from ui_qt.widgets.text_sanitizer import remove_symbol_icons
+from ui_qt.theme import MIDNIGHT_ANALYST
 
 from ui_qt.views.recommendation.recommendation_metadata import (
     TECHNICAL_DESCRIPTIONS,
@@ -190,6 +191,7 @@ class RecommendationView(QWidget):
         self._execution_phase_position = "0/4"
         self._execution_state = "尚未執行"
         self._execution_cancel_requested = False
+        self._recommendation_narrow = False
 
         # 策略配置狀態
         self.strategy_config = self._get_default_config()
@@ -327,13 +329,15 @@ class RecommendationView(QWidget):
 
         # 創建分割器（左側配置，右側結果）
         splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = splitter
 
         # 左側：策略配置面板（使用 ScrollArea 支援滾動）
         config_scroll = QScrollArea()
         config_scroll.setWidgetResizable(True)
-        config_scroll.setMinimumWidth(350)  # 設置最小寬度
-        config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        config_scroll.setMinimumWidth(0)
+        config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         config_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.config_scroll = config_scroll
 
         config_panel = self._create_config_panel()
         config_scroll.setWidget(config_panel)
@@ -341,12 +345,42 @@ class RecommendationView(QWidget):
 
         # 右側：結果面板
         result_panel = self._create_result_panel()
+        result_panel.setMinimumWidth(0)
+        self.result_panel = result_panel
         splitter.addWidget(result_panel)
 
         # 設置分割器比例（左側40%，右側60%）
         splitter.setSizes([200, 800])
 
         main_layout.addWidget(splitter)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        """在窄版把設定與結果上下排列，保留同一份分析 context。"""
+        if not hasattr(self, "main_splitter"):
+            return
+        narrow = self.width() < 820
+        if not force and narrow == self._recommendation_narrow:
+            return
+        self._recommendation_narrow = narrow
+        self.main_splitter.setOrientation(Qt.Vertical if narrow else Qt.Horizontal)
+        self.result_title_layout.setDirection(
+            QBoxLayout.TopToBottom if narrow else QBoxLayout.LeftToRight
+        )
+        self.config_scroll.setMinimumWidth(0)
+        self.config_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.result_panel.setMinimumWidth(0)
+        if narrow:
+            self.main_splitter.setSizes([520, 680])
+        else:
+            self.main_splitter.setSizes([360, 900])
+        if hasattr(self, "results_table"):
+            self.results_table.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarAsNeeded if narrow else Qt.ScrollBarAlwaysOff
+            )
 
     def _create_checkbox_with_tooltip(
         self,
@@ -425,16 +459,13 @@ class RecommendationView(QWidget):
         suggestion_layout = QVBoxLayout()
         self.regime_suggestion_label = QLabel("")
         self.regime_suggestion_label.setWordWrap(True)
-        self.regime_suggestion_label.setStyleSheet("""
-            QLabel {
-                background-color: #2d2d2d;
-                color: #e0e0e0;
-                padding: 8px;
-                border-radius: 4px;
-                font-size: 0.9em;
-                line-height: 1.4;
-            }
-        """)
+        self.regime_suggestion_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; "
+            f"color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; "
+            "padding: 8px; font-size: 11px; line-height: 140%;"
+        )
         suggestion_layout.addWidget(self.regime_suggestion_label)
 
         # 一鍵套用按鈕
@@ -930,8 +961,23 @@ class RecommendationView(QWidget):
         layout = QVBoxLayout(panel)
         layout.setSpacing(10)
 
+        self.research_context_label = QLabel(
+            "研究上下文：尚未執行；選取結果後顯示標的、區間、決策日、資料日、來源與 Profile。"
+        )
+        self.research_context_label.setWordWrap(True)
+        self.research_context_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.research_context_label.setAccessibleName("推薦分析研究上下文")
+        self.research_context_label.setStyleSheet(
+            f"background: {MIDNIGHT_ANALYST.surface_2}; color: {MIDNIGHT_ANALYST.text_secondary}; "
+            f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
+            f"border-left: 4px solid {MIDNIGHT_ANALYST.accent}; "
+            f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px;"
+        )
+        layout.addWidget(self.research_context_label)
+
         # 標題和控制欄
         title_layout = QHBoxLayout()
+        self.result_title_layout = title_layout
         title = QLabel("推薦結果")
         title_font = QFont()
         title_font.setPointSize(12)
@@ -1736,6 +1782,7 @@ class RecommendationView(QWidget):
         self.current_config = config
         self.current_regime = config.get('regime')
         self.current_recommendation_source_created_at = ""
+        self._update_research_context_banner()
 
         # 保存當前 Profile（如果在新手模式下）
         if self.is_beginner_mode:
@@ -1948,6 +1995,7 @@ class RecommendationView(QWidget):
         # 保存當前推薦結果（用於保存功能）
         self.current_recommendations = recommendations
         self.current_result_id = ""
+        self._update_research_context_banner()
 
         # 顯示結果
         if not recommendations:
@@ -2421,6 +2469,54 @@ class RecommendationView(QWidget):
             source_workspace="recommendation",
         )
 
+    def _update_research_context_banner(
+        self,
+        *,
+        stock_code: str = "",
+        recommendation: RecommendationDTO | None = None,
+    ) -> None:
+        """在結果頂端重述同一份研究 context；不補抓資料、不重算日期。"""
+        label = getattr(self, "research_context_label", None)
+        if label is None:
+            return
+        run_context = getattr(self.recommendation_service, "last_run_context", {}) or {}
+        if not isinstance(run_context, dict):
+            run_context = {}
+        config = self.current_config if isinstance(self.current_config, dict) else {}
+
+        def _context_value(*keys: str) -> str:
+            for source in (run_context, config):
+                for key in keys:
+                    value = str(source.get(key) or "").strip()
+                    if value:
+                        return value
+            return "未提供"
+
+        selected = str(stock_code or "").strip() or "尚未選取"
+        data_date = _context_value("data_date", "data_as_of_date")
+        if data_date == "未提供" and recommendation is not None:
+            data_date = str(getattr(recommendation, "eligible_universe_date", "") or "").strip() or "未提供"
+        start_date = _context_value("start_date", "range_start", "period_start")
+        end_date = _context_value("end_date", "range_end", "period_end")
+        interval = (
+            f"{start_date}～{end_date}"
+            if start_date != "未提供" and end_date != "未提供"
+            else "未提供（推薦來源未提供期間）"
+        )
+        profile_id = _context_value("profile_id")
+        profile = self._get_profile_option(profile_id)
+        profile_label = profile.display_label if profile is not None else profile_id
+        source = _context_value("source_label", "source_id", "source_kind")
+        result_id = str(getattr(self, "current_result_id", "") or "") or "目前未保存"
+        label.setText(
+            "研究上下文\n"
+            f"標的：{selected}｜區間：{interval}\n"
+            f"決策基準日：{_context_value('as_of_date', 'decision_date')}｜"
+            f"資料日期：{data_date}\n"
+            f"Profile：{profile_label}｜來源：{source}｜結果：{result_id}\n"
+            "信心／Regime 只作判讀證據，不等於勝率或風險預算；Profile policy 仍由既有服務決定。"
+        )
+
     def _update_stock_research_button(self) -> None:
         button = getattr(self, "stock_research_btn", None)
         if button is None:
@@ -2460,16 +2556,19 @@ class RecommendationView(QWidget):
     def _update_detail_text(self):
         """更新推薦理由詳情顯示"""
         if not self.recommendations_model:
+            self._update_research_context_banner()
             self.detail_text.clear()
             return
 
         selection = self.results_table.selectionModel()
         if not selection:
+            self._update_research_context_banner()
             self.detail_text.clear()
             return
 
         selected_rows = selection.selectedRows()
         if not selected_rows:
+            self._update_research_context_banner()
             self.detail_text.clear()
             return
 
@@ -2486,6 +2585,11 @@ class RecommendationView(QWidget):
                     if str(rec.stock_code) == str(stock_code):
                         recommendation = rec
                         break
+
+            self._update_research_context_banner(
+                stock_code=str(stock_code),
+                recommendation=recommendation,
+            )
 
             html_content = ""
 

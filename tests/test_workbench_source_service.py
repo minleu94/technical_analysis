@@ -244,11 +244,28 @@ def _multi_day_record(path: Path, rows: int) -> None:
 
 def _scheduled_outputs(config: TWStockConfig) -> None:
     output_root = Path(config.output_root)
+    freshness_dir = output_root / "scheduled" / "data_freshness"
     recommendation_dir = output_root / "scheduled" / "recommendation_snapshot"
     evidence_report_dir = output_root / "scheduled" / "evidence_pipeline_dry_run" / "reports"
     evidence_dir = output_root / "scheduled" / "evidence_pipeline_dry_run"
+    freshness_dir.mkdir(parents=True, exist_ok=True)
     recommendation_dir.mkdir(parents=True, exist_ok=True)
     evidence_report_dir.mkdir(parents=True, exist_ok=True)
+    (freshness_dir / "latest_status.json").write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "checked_at": "2026-07-07T05:00:01",
+                "checks": {
+                    "daily_prices_latest_date": "2026-07-07",
+                    "technical_indicators_latest_date": "2026-07-07",
+                },
+                "warnings": [],
+                "errors": [],
+            }
+        ),
+        encoding="utf-8",
+    )
     (recommendation_dir / "latest_status.json").write_text(
         json.dumps(
             {

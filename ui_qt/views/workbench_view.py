@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
+    QBoxLayout,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -135,6 +136,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self._last_good_dashboard_loaded_at: datetime | None = None
         self._dashboard_stale = False
         self._viewed_review_item_ids: set[str] = set()
+        self._workbench_narrow = False
 
         self.status_model = WorkbenchStatusStripTableModel()
         self.review_model = WorkbenchReviewQueueTableModel()
@@ -175,6 +177,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setFrameShape(QScrollArea.NoFrame)
         scroll_content = QWidget()
+        scroll_content.setMinimumWidth(0)
         content_layout = QVBoxLayout(scroll_content)
         content_layout.setSpacing(10)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -201,6 +204,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         summary_layout = QHBoxLayout(summary_row)
         summary_layout.setContentsMargins(0, 0, 0, 0)
         summary_layout.setSpacing(8)
+        self.summary_layout = summary_layout
         for key, label in (
             ("review", "今日待判讀"),
             ("action", "人工待處理"),
@@ -266,6 +270,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         drilldown_layout = QHBoxLayout()
         drilldown_layout.setContentsMargins(0, 0, 0, 0)
         drilldown_layout.setSpacing(8)
+        self.drilldown_layout = drilldown_layout
         self.daily_decision_button = self._make_drilldown_button(
             "開啟市場總覽",
             self.navigate_to_daily_decision_callback,
@@ -310,6 +315,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         primary_layout = QHBoxLayout(primary_area)
         primary_layout.setContentsMargins(0, 0, 0, 0)
         primary_layout.setSpacing(10)
+        self.primary_layout = primary_layout
+        primary_area.setMinimumWidth(0)
         list_column = QWidget()
         list_layout = QVBoxLayout(list_column)
         list_layout.setContentsMargins(0, 0, 0, 0)
@@ -362,7 +369,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         list_layout.addWidget(action_item_panel)
 
         detail_panel, self.detail_section_title = self._panel_with_title("詳情檢視 / Inspector")
-        detail_panel.setMinimumWidth(360)
+        detail_panel.setMinimumWidth(0)
+        self.detail_panel = detail_panel
         self.detail_title_label = QLabel("尚未選取項目")
         detail_title_font = QFont()
         detail_title_font.setPointSize(13)
@@ -408,7 +416,23 @@ class UnifiedDecisionWorkbenchView(QWidget):
         detail_panel.layout.addWidget(self.detail_source_box)
         detail_panel.layout.addWidget(self.detail_diagnostics_box)
         self.detail_body_label.setVisible(False)
+        self.detail_technical_button = QPushButton("查看技術欄位（DTO raw）")
+        self.detail_technical_button.setProperty("variant", "secondary")
+        self.detail_technical_button.setCheckable(True)
+        self.detail_technical_button.setAccessibleName("查看 Workbench 技術欄位")
+        self.detail_technical_button.setAccessibleDescription(
+            "展開既有 DTO 的來源追蹤、診斷、代碼與欄位可用性；不會執行查詢或計算。"
+        )
+        self.detail_technical_button.toggled.connect(self._toggle_detail_technical)
         detail_panel.layout.addWidget(self.detail_drilldown_button)
+        detail_panel.layout.insertWidget(
+            detail_panel.layout.indexOf(self.detail_drilldown_button),
+            self.detail_body_label,
+        )
+        detail_panel.layout.insertWidget(
+            detail_panel.layout.indexOf(self.detail_drilldown_button),
+            self.detail_technical_button,
+        )
         detail_panel.layout.addStretch()
 
         primary_layout.addWidget(list_column, 3)
@@ -438,6 +462,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         evidence_summary_layout = QHBoxLayout(self.evidence_summary_row)
         evidence_summary_layout.setContentsMargins(0, 0, 0, 0)
         evidence_summary_layout.setSpacing(10)
+        self.evidence_summary_layout = evidence_summary_layout
         self.evidence_boundary_card = MetricCard("邊界與 Gate 摘要", "")
         self.evidence_coverage_card = MetricCard("覆蓋率與缺口", "")
         self.evidence_boundary_card.value_label.setStyleSheet(
@@ -513,6 +538,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
             ),
             "操作節奏",
         )
+        self._apply_responsive_layout(force=True)
 
     def _build_decision_source_page(self) -> QWidget:
         return self._build_navigation_page(
@@ -576,6 +602,8 @@ class UnifiedDecisionWorkbenchView(QWidget):
         table.setModel(model)
         table.setMinimumHeight(110)
         table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         apply_financial_table_style(table)
         return table
 
@@ -602,6 +630,59 @@ class UnifiedDecisionWorkbenchView(QWidget):
             f"border-radius: {MIDNIGHT_ANALYST.radius_panel}px; padding: 8px;"
         )
         return label
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        """依可用寬度重排既有 Workbench 元件，不改變 DTO 或導覽契約。"""
+        if not hasattr(self, "primary_layout"):
+            return
+        narrow = self.width() < 820
+        if not force and narrow == self._workbench_narrow:
+            return
+        self._workbench_narrow = narrow
+
+        direction = QBoxLayout.TopToBottom if narrow else QBoxLayout.LeftToRight
+        self.summary_layout.setDirection(direction)
+        self.drilldown_layout.setDirection(direction)
+        self.evidence_summary_layout.setDirection(direction)
+        self.primary_layout.setDirection(direction)
+        self.detail_panel.setMinimumWidth(0 if narrow else 360)
+
+        cards_layout = self.today_cards_layout
+        for index, key in enumerate(self.today_action_cards):
+            card = self.today_action_cards[key]
+            cards_layout.removeWidget(card)
+            row = index if narrow else index // 2
+            column = 0 if narrow else index % 2
+            cards_layout.addWidget(card, row, column)
+        cards_layout.setColumnStretch(0, 1)
+        cards_layout.setColumnStretch(1, 0 if narrow else 1)
+        self._resize_tables()
+
+    def _format_workbench_source_meta(self, dashboard: WorkbenchDashboardDTO) -> str:
+        """顯示來源契約可確認的日期與未知欄位，不由 UI 猜測 freshness。"""
+        market_context = dashboard.market_context if isinstance(dashboard.market_context, dict) else {}
+        source_status = display_workbench_value(str(market_context.get("source_status") or "unknown"))
+        advice_data_date = ""
+        advice = dashboard.advice_dashboard
+        if advice is not None:
+            advice_data_date = str(getattr(advice, "data_as_of_date", "") or "").strip()
+        data_date = advice_data_date or "未知（Workbench DTO 未提供；請查看數據更新）"
+        return "\n".join(
+            (
+                f"研究／決策基準日（as_of）：{dashboard.as_of_date.isoformat()}",
+                f"資料日期：{data_date}",
+                f"來源狀態：{source_status}；來源模式：{display_workbench_value(dashboard.source_mode)}",
+                f"產生時間（既有 DTO）：{dashboard.generated_at.isoformat()}",
+                (
+                    "安全邊界：唯讀；不允許寫入、不啟用正式排程器。"
+                    "日期與 freshness 不在 UI 補值，需到數據更新查看來源詳情。"
+                ),
+            )
+        )
 
     def _build_today_action_center(self, parent_layout: QVBoxLayout) -> None:
         """建立首頁的任務導向入口；按鈕只切換既有工作區。"""
@@ -672,6 +753,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.today_action_buttons: dict[str, QPushButton] = {}
         self._today_action_targets: dict[str, str] = {}
         self._primary_action_target = ""
+        self.today_cards_layout = cards_layout
 
         specifications = (
             ("data", "資料狀態", "檢查今日資料是否可用", "查看數據更新", "update"),
@@ -1061,6 +1143,12 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.detail_body_label.setText(_format_detail_body(item))
         self.detail_drilldown_button.setEnabled(bool(target))
 
+    def _toggle_detail_technical(self, expanded: bool) -> None:
+        self.detail_body_label.setVisible(bool(expanded))
+        self.detail_technical_button.setText(
+            "收合技術欄位（DTO raw）" if expanded else "查看技術欄位（DTO raw）"
+        )
+
     def _set_detail_placeholder(self, title: str, body: str) -> None:
         self._selected_detail_target = ""
         self.detail_title_label.setText(_detail_display_title(title))
@@ -1071,6 +1159,7 @@ class UnifiedDecisionWorkbenchView(QWidget):
         self.detail_source_box.setText("來源與邊界\n等待 WorkbenchDashboardDTO。")
         self.detail_diagnostics_box.setText("診斷訊號\n尚無可檢視項目。")
         self.detail_body_label.setText(body)
+        self.detail_technical_button.setChecked(False)
         self.detail_drilldown_button.setEnabled(False)
 
     def _open_selected_detail_target(self) -> None:
@@ -1400,6 +1489,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
             self.advice_recommendation_table,
             self.advice_portfolio_table,
         ):
+            table.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarAsNeeded if self._workbench_narrow else Qt.ScrollBarAlwaysOff
+            )
             table.resizeColumnsToContents()
             table.resizeRowsToContents()
         self._fit_summary_table(self.evidence_feed_table, fixed_widths=(190, 92))
@@ -1409,7 +1501,9 @@ class UnifiedDecisionWorkbenchView(QWidget):
         header = table.horizontalHeader()
         if table.model() is None or table.model().columnCount() <= len(fixed_widths):
             return
-        table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAsNeeded if self._workbench_narrow else Qt.ScrollBarAlwaysOff
+        )
         for index, width in enumerate(fixed_widths):
             header.setSectionResizeMode(index, QHeaderView.Fixed)
             table.setColumnWidth(index, width)
@@ -1836,6 +1930,15 @@ def _format_detail_body(item) -> str:
         if value is None or value == "" or value == ():
             continue
         lines.append(f"- {label}: {_format_detail_value(value)}")
+    lines.extend(
+        (
+            "",
+            "欄位可用性",
+            "- snapshot hash：未知（目前 DTO 未提供；UI 不自行重建）",
+            "- schema 版本：未知（目前 DTO 未提供）",
+            "- Gate 細項：未知（請以下鑽頁面的既有 evidence／readiness 結果為準）",
+        )
+    )
     return "\n".join(lines)
 
 

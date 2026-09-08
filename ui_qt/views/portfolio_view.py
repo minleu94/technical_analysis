@@ -12,11 +12,12 @@ import pandas as pd
 from uuid import uuid4
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QBoxLayout, QLabel, QPushButton,
     QTableView, QMessageBox, QDialog, QDialogButtonBox, QLineEdit,
     QTextEdit, QListWidget, QListWidgetItem, QHeaderView, QMenu,
     QAbstractItemView, QGroupBox, QSplitter, QComboBox, QDateEdit,
-    QDoubleSpinBox, QSpinBox, QFormLayout, QTabWidget, QFrame, QFileDialog
+    QDoubleSpinBox, QSpinBox, QFormLayout, QTabWidget, QFrame, QFileDialog,
+    QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QSize, QDate
 from PySide6.QtGui import QFont, QColor, QPalette, QBrush
@@ -361,6 +362,14 @@ class PortfolioView(QWidget):
     # 信號：當持倉數據或交易更新時發出
     portfolioUpdated = Signal()
 
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        """允許持倉頁在主視窗 viewport 內縮放，表格承接額外內容。"""
+
+        # 持倉／交易表本身可垂直捲動；若將右側 tabs 的 child minimum
+        # height 傳給 QMainWindow，工作區切換會把主視窗撐到超出 requested
+        # viewport，破壞窄版研究流程的可讀性驗證。
+        return QSize(0, 0)
+
     def __init__(
         self,
         portfolio_service: PortfolioService,
@@ -373,6 +382,8 @@ class PortfolioView(QWidget):
         async_refresh: bool = False,
     ):
         super().__init__(parent)
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.portfolio_service = portfolio_service
         self.journal_service = journal_service
         self.recommendation_service = recommendation_service
@@ -420,6 +431,7 @@ class PortfolioView(QWidget):
         self._refresh_worker: TaskWorker | None = None
         self._refresh_pending = False
         self._closing = False
+        self._portfolio_narrow = False
 
         # 緩存最新推薦結果，用以在背景進行 Condition Monitor 條件監控
         self.rec_cache: Dict[str, Dict[str, Any]] = {}
@@ -474,7 +486,7 @@ class PortfolioView(QWidget):
 
         self.active_positions_summary_label = QLabel("活躍持倉：0 檔")
         self.active_positions_summary_label.setWordWrap(True)
-        self.active_positions_summary_label.setMaximumHeight(58)
+        self.active_positions_summary_label.setMaximumHeight(100)
         self.active_positions_summary_label.setStyleSheet(
             f"color: {MIDNIGHT_ANALYST.text_secondary}; background-color: {MIDNIGHT_ANALYST.surface_1}; "
             f"border: 1px solid {MIDNIGHT_ANALYST.border}; "
@@ -487,10 +499,17 @@ class PortfolioView(QWidget):
         self.portfolio_refresh_status_label.setStyleSheet(
             f"color: {MIDNIGHT_ANALYST.text_secondary}; padding: 2px 4px;"
         )
+        evidence_scope_text = (
+            "研究建議／待成交佇列／已記錄成交分開判讀；各層只採用既有 DTO／帳本狀態，"
+            "沒有數值就顯示未知，不自動下單、不擅自套用配置。"
+        )
+        self.portfolio_refresh_status_label.setToolTip(evidence_scope_text)
+        self.portfolio_refresh_status_label.setAccessibleDescription(evidence_scope_text)
         main_layout.addWidget(self.portfolio_refresh_status_label)
 
         # ========== 2. 中部核心分割區 (Splitter) ==========
         main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter = main_splitter
 
         # Left Panel: 持倉列表與操作
         left_widget = QWidget()
@@ -510,6 +529,8 @@ class PortfolioView(QWidget):
         self.positions_table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.positions_table.setSortingEnabled(True)
         self.positions_table.horizontalHeader().setStretchLastSection(True)
+        self.positions_table.setMinimumWidth(0)
+        self.positions_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         # 監聽持倉選擇事件，用以更新右側明細與日記
         self.positions_table.clicked.connect(self._on_position_selected)
@@ -522,6 +543,7 @@ class PortfolioView(QWidget):
 
         # 左側底部操作按鈕
         btn_layout = QHBoxLayout()
+        self.position_action_layout = btn_layout
         self.btn_record_trade = QPushButton("手動記錄交易")
         self.btn_record_trade.setProperty("variant", "primary")
         self.btn_record_trade.clicked.connect(self._show_record_trade_dialog)
@@ -559,6 +581,8 @@ class PortfolioView(QWidget):
 
         # Right Panel: 歷史明細與日記
         right_widget = QTabWidget()
+        right_widget.setMinimumWidth(0)
+        self.portfolio_detail_tabs = right_widget
 
         # Right Tab 1: 交易歷史 (Trade History)
         history_tab = QWidget()
@@ -566,6 +590,7 @@ class PortfolioView(QWidget):
         history_layout.setContentsMargins(6, 6, 6, 6)
 
         history_filter_layout = QHBoxLayout()
+        self.history_filter_layout = history_filter_layout
         self.trade_filter_status_label = QLabel("顯示全部交易歷史")
         self.trade_filter_status_label.setStyleSheet(f"color: {MIDNIGHT_ANALYST.text_secondary};")
         self.clear_trade_filter_button = QPushButton("清除篩選 / 顯示全部交易歷史")
@@ -587,6 +612,7 @@ class PortfolioView(QWidget):
         history_layout.addWidget(self.trades_table)
 
         trade_action_layout = QHBoxLayout()
+        self.trade_action_layout = trade_action_layout
         self.trade_selection_hint_label = QLabel("選取一筆交易後，可安全刪除該筆紀錄。")
         self.trade_selection_hint_label.setStyleSheet(
             f"color: {MIDNIGHT_ANALYST.text_secondary}; font-size: 11px;"
@@ -635,6 +661,7 @@ class PortfolioView(QWidget):
         paper_layout.addWidget(paper_intro)
 
         paper_controls = QHBoxLayout()
+        self.paper_controls_layout = paper_controls
         self.btn_refresh_paper = QPushButton("重新讀取 Paper 狀態")
         self.btn_refresh_paper.setProperty("variant", "secondary")
         self.btn_refresh_paper.setToolTip("只讀 status JSON 與既有 append-only ledger，不會寫入資料。")
@@ -896,6 +923,33 @@ class PortfolioView(QWidget):
         # 設定左右分割比例（60% : 40%）
         main_splitter.setSizes([720, 480])
         main_layout.addWidget(main_splitter)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self, *, force: bool = False) -> None:
+        """窄版先顯示持倉清單，再顯示既有明細 tabs，避免右側被裁切。"""
+        if not hasattr(self, "main_splitter"):
+            return
+        narrow = self.width() < 900
+        if not force and narrow == self._portfolio_narrow:
+            return
+        self._portfolio_narrow = narrow
+        self.main_splitter.setOrientation(Qt.Vertical if narrow else Qt.Horizontal)
+        self.position_action_layout.setDirection(
+            QBoxLayout.TopToBottom if narrow else QBoxLayout.LeftToRight
+        )
+        for layout in (
+            self.history_filter_layout,
+            self.trade_action_layout,
+            self.paper_controls_layout,
+        ):
+            layout.setDirection(QBoxLayout.TopToBottom if narrow else QBoxLayout.LeftToRight)
+        self.main_splitter.setSizes([460, 620] if narrow else [720, 480])
+        self.positions_table.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAsNeeded if narrow else Qt.ScrollBarAlwaysOff
+        )
 
     def refresh_all(self) -> None:
         """重新整理持倉資料；正式 UI 入口使用背景 worker。"""
