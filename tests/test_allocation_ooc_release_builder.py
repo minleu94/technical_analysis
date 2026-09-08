@@ -66,8 +66,6 @@ from data_module.portfolio_ml_out_of_core_store import TARGET_FIELDS
 from data_module.ml_storage_capacity import BYTES_PER_GIB, StorageCapacityError
 
 
-pytest_plugins = ("tests.test_portfolio_ml_out_of_core_pipeline",)
-
 _TAIPEI = ZoneInfo("Asia/Taipei")
 _HASH = "sha256:" + ("a" * 64)
 

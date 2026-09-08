@@ -7,6 +7,8 @@ import sqlite3
 import subprocess
 import sys
 
+from tests.fixtures.portfolio_ml_ooc_support import run_synthetic_ml_cli
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = PROJECT_ROOT / "scripts" / "build_ml_pit_year_shards.py"
@@ -32,7 +34,7 @@ def _database(path: Path) -> None:
 def _run(database: Path, output: Path, *universe: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
-    return subprocess.run(
+    return run_synthetic_ml_cli(
         [
             sys.executable,
             str(SCRIPT),

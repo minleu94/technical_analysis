@@ -1,11 +1,13 @@
 # LUNA C 投資研究 UI／UX 交接
 
+> 整合補註（2026-09-08）：以下保留本線交付當時的數字與 Git 狀態；整合修補、全域測試及 main／dev 收尾以 [三線整合驗收](LUNA_INTEGRATION_CLOSEOUT_2026_09_08.md) 為準。
+
 ## 1. 交付摘要
 
 - 工作線：LUNA C／投資研究 UI／UX。
 - 執行日期：2026-09-08（沿用工作線日期標籤 `2026-09-07`）。
 - 分支：`codex/luna-c-uiux`。
-- 交付：本文件與程式已在本分支單一 C commit；實際 hash 以 `git rev-parse HEAD` 為準（避免在 commit 內嵌自我雜湊）。
+- 交付：本文件與程式已在本分支單一 C commit；原交付 hash 為 `7868a5176ab51886059438c751cd0f25c0b94e16`（整合後 HEAD 會前進）。
 - 基線：`71500ef6fc834da285c19255e5c03f1846412329`；工作樹原先已有 A／B 整併的未提交變更，本工作線未重置、覆寫或整批清理。
 - 所有資料根目錄、輸出根目錄與暫存根目錄均指向 `output/luna_C/` 下的合成／隔離路徑；未連接真實交易、未啟用 scheduler、未寫正式資料或 promotion。
 - 交付檔：本文件與 `output/luna_C/manifest.json`；raw screenshots、QA logs 與隔離資料均不納入 Git。

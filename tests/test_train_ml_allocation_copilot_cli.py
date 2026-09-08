@@ -9,7 +9,7 @@ from pathlib import Path
 import joblib
 
 from scripts.train_ml_allocation_copilot import main
-from tests.test_ml_allocation_training_service import _sample
+from tests.fixtures.ml_allocation_training_support import _sample
 
 
 def _fold_payloads() -> list[dict[str, object]]:

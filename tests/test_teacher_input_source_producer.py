@@ -43,6 +43,10 @@ _STORE_ID = "teacher-source-test-store"
 _ZERO = "sha256:" + ("0" * 64)
 
 
+# 小型合成資料驗證使用可控容量；實體低空間另由專用capacity tests驗證。
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity")
+
+
 def _canonical(value: object) -> bytes:
     return json.dumps(
         value,

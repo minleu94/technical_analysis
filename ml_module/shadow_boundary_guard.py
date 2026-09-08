@@ -21,6 +21,10 @@ ALLOWED_READ_ONLY_PRODUCTION_ML_IMPORTS = {
         {
             "ml_module.allocation_contracts",
             "ml_module.allocation_training_service",
+            # 這兩個模組只保存 versioned integer inference contracts；不含
+            # application service 或任何資料／交易副作用。
+            "ml_module.allocation_family_weight_contract",
+            "ml_module.allocation_rank_contract",
         }
     ),
     "app_module/ml_allocation_shadow_evidence.py": frozenset(
@@ -39,6 +43,9 @@ ALLOWED_READ_ONLY_PRODUCTION_ML_IMPORTS = {
         {
             "ml_module.allocation_contracts",
             "ml_module.allocation_release_contract",
+            # application adapter 將自身實作註冊到中立 loader；producer
+            # 不再反向 import app_module。
+            "ml_module.allocation_release_loader",
         }
     ),
 }

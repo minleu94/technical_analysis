@@ -1,5 +1,12 @@
 # PROJECT_SNAPSHOT（必讀｜每次開新對話先看）
 
+## 2026-09-08 LUNA 三線工程整合驗收
+
+- A 的中立 release loader／teacher gate、B 的共用分析流程／fixture／清冊／依賴整理，以及 C 的 UI／Manual 已納入整合。修正漏接的合成容量 fixture、子程序 CLI 隔離與 UI 測試替身；中央 200 GiB reserve 沒有降低。完整 pytest **4,652 passed、3 skipped、67 warnings**；清冊 **743／743 檔、4,655 測項**，缺漏／漂移為零。UpdateView 81 passed、更新 QA 25 passed／4 skipped、mypy 565 files 與 Quant／ML boundary 均通過。
+- 真 MainWindow offscreen 驗證 8 個 tabs、1366×768／390×844 視窗及取消不寫入；尚未宣稱原生 DPI、真實來源與所有長文字版面驗收完成。舊工作線 handoff／查核保留為歷史，各輪失敗數不直接代表本次結果。
+- **正式 ML 仍未完成：正式輸入 0/3、formal_oos_allowed=false、production_alpha_bp=0、broker_order_allowed=false。** A 當輪 parent 的 3,347,662 rows 全現金；較早 3,353,096 rows 是不同 parent。既有 fold-004 v7 的 12 組淨報酬／最大回撤獨立重算吻合，不構成 alpha 或正式 OOS 信用；本輪沒有新 fit、fold-005 樣本讀取、正式資料更新或 promotion。
+- 最新工程驗收、限制與 Git 收尾見 [LUNA 三線整合驗收](../06_qa/LUNA_INTEGRATION_CLOSEOUT_2026_09_08.md)。下一步仍先補真實 teacher 三項來源與可追溯時間證據，不以反覆重訓全現金 targets 取代來源修復。
+
 ## 2026-09-07 V4 持續修復（尚未正式發布）
 
 - 跨年成交量缺口已在 v7 研究比較補回：原 Direct 年度 writer 重置 20 筆視窗，使 v6 在 2016 年初 19 個交易日沒有研究股票池；唯讀跨年 sidecar 恢復 16,488 筆 median，40,998 筆原有同年數值全部一致，另 180 筆仍缺。v7 的 63 個日期均有八檔共用股票池；root 獨立重算 12 組淨報酬與最大回撤全部吻合。這是修復資料缺口的探索證據，不是 ML 優勢；正式 Direct writer 的跨年延續與新區間讀取前強制方法檢查仍待完成，fold-005 尚未讀取。

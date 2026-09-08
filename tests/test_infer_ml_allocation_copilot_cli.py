@@ -18,7 +18,7 @@ from scripts.infer_ml_allocation_copilot import (
 )
 from tests.test_allocation_release_adapter import _write_release
 from tests.test_ml_allocation_inference_service import _inference_rows
-from tests.test_ml_allocation_training_service import (  # noqa: F401
+from tests.fixtures.ml_allocation_training_support import (  # noqa: F401
     folds,
     samples,
     training_result,

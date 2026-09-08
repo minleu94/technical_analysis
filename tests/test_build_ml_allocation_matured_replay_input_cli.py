@@ -37,6 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.fixture(scope="module")
 def training_publication(
     tmp_path_factory: pytest.TempPathFactory,
+    synthetic_ml_capacity_module: None,
 ) -> PortfolioMLDatasetPublication:
     root = tmp_path_factory.mktemp("matured-replay-publication")
     raw = _raw_publication(root)

@@ -1,0 +1,6 @@
+# Reproducible developer / QA environment: runtime plus verification tools.
+-r requirements-runtime.txt
+
+mypy>=1.10.0
+pytest>=8.0.0
+pytest-qt>=4.4.0

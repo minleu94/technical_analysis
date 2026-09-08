@@ -6,7 +6,7 @@
 
 > Evidence rehearsal closeout：[Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)（`engineering_rehearsal_complete`；不是 external completion）。
 
-> **最後整理**：2026-09-06
+> **最後整理**：2026-09-08
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
 >
 > **Current audit entry**：[Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)
@@ -25,6 +25,15 @@
 > Unified current artifact：8/30 `program_readiness_current_20260830.json`（TEMP，SHA-256=`5229F27373B0CF83E875E4B05D2867121D9E16D18813E91529C337F545720F6E`）由上述各 lane refresh 重建；不自動掃描、不授權 production。
 
 ---
+
+## 2026-09-08 整併與下一輪工作
+
+- [LUNA 三線整合驗收](../06_qa/LUNA_INTEGRATION_CLOSEOUT_2026_09_08.md)：三線判定、整合缺陷修補、全域驗證、正式 ML 限制與 Git 收尾。
+
+- [專案整併查核](../06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)：實際整理結果、驗證限制、邏輯衝突與重大改動判斷。
+- [LUNA 三線執行 companion](../07_guides/LUNA_PARALLEL_PLAN_2026_09_07.md)：共同基線、資源預算、A／B／C Prompt 與整合驗收。
+- [LUNA B 開發環境與依賴基線](../07_guides/LUNA_B_ENVIRONMENT_2026_09_07.md)：runtime／dev requirements、Windows／Python／TA-Lib／PySide6 邊界與已驗證版本限制。
+- [LUNA B 架構與 QA handoff](../06_qa/LUNA_B_HANDOFF_2026_09_07.md)：repo map、測試隔離、分析整併、依賴驗證、完整 suite 結果與 A／C 整合步驟。
 
 ## 0. 核心入口
 
@@ -262,18 +271,18 @@
 
 ### 2026-09-06 Master Goal 八卡工程交接
 
-[Master Goal Playbook](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/MASTER_GOAL_PLAYBOOK_2026_09_06.md) 保存任務拆解時的基線與白名單；後續實作以各卡 handoff 與目前 Scoped SSOT 為準。下表只導航工程證據，不授予來源 acceptance、Formal credit、正式 migration／writer 或 V4 closeout。
+[Master Goal Playbook](../07_guides/MASTER_GOAL_PLAYBOOK_2026_09_06.md) 保存任務拆解時的基線與白名單；後續實作以各卡 handoff 與目前 Scoped SSOT 為準。下表只導航工程證據，不授予來源 acceptance、Formal credit、正式 migration／writer 或 V4 closeout。
 
 | 文件 | 內容 |
 |---|---|
-| [TASK-01 DATA](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_01_HANDOFF.md) | 更新 DTO、唯讀狀態、冪等落地、單一寫入者、隔離 QA 與外部下載 skips |
-| [TASK-02 MARKET](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_02_HANDOFF.md) | 市場日期／品質 DTO、排名與 future-append 驗證 |
-| [TASK-03 RECO](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_03_HANDOFF.md) | 推薦 context／指紋、未知因子、PIT 產業拒用與 Profile 重播 |
-| [TASK-04 EXEC](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_04_HANDOFF.md) | 下一可交易開盤 v2、精確撮合、成本後基準、末端持倉／取消 |
-| [TASK-05 REGISTRY](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_05_HANDOFF.md) | 保存／顯式恢復、版本相容、故障注入、Evidence lineage 與 review proposal |
-| [TASK-06 PORT](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_06_HANDOFF.md) | candidate-only append 帳本、補償投影、副本遷移與缺真實 fills |
-| [TASK-07 DESK](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_07_HANDOFF.md) | 候選池／每日決策、來源鏈、完整 loop payload 及中央接線交棒 |
-| [TASK-08 OBS／整合](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md) | 08-A Runtime 觀測與 08-B 中央組裝、文件、inventory／全域驗收；依各階段紀錄判讀 |
+| [TASK-01 DATA](../06_qa/TASK_LOOP_01_HANDOFF.md) | 更新 DTO、唯讀狀態、冪等落地、單一寫入者、隔離 QA 與外部下載 skips |
+| [TASK-02 MARKET](../06_qa/TASK_LOOP_02_HANDOFF.md) | 市場日期／品質 DTO、排名與 future-append 驗證 |
+| [TASK-03 RECO](../06_qa/TASK_LOOP_03_HANDOFF.md) | 推薦 context／指紋、未知因子、PIT 產業拒用與 Profile 重播 |
+| [TASK-04 EXEC](../06_qa/TASK_LOOP_04_HANDOFF.md) | 下一可交易開盤 v2、精確撮合、成本後基準、末端持倉／取消 |
+| [TASK-05 REGISTRY](../06_qa/TASK_LOOP_05_HANDOFF.md) | 保存／顯式恢復、版本相容、故障注入、Evidence lineage 與 review proposal |
+| [TASK-06 PORT](../06_qa/TASK_LOOP_06_HANDOFF.md) | candidate-only append 帳本、補償投影、副本遷移與缺真實 fills |
+| [TASK-07 DESK](../06_qa/TASK_LOOP_07_HANDOFF.md) | 候選池／每日決策、來源鏈、完整 loop payload 及中央接線交棒 |
+| [TASK-08 OBS／整合](../06_qa/TASK_LOOP_08_HANDOFF.md) | 08-A Runtime 觀測與 08-B 中央組裝、文件、inventory／全域驗收；依各階段紀錄判讀 |
 
 | 文件 | 說明 |
 |---|---|

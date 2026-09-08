@@ -56,6 +56,7 @@ class _Fixture:
 @pytest.fixture(scope="module")
 def post_freeze_fixture(
     tmp_path_factory: pytest.TempPathFactory,
+    synthetic_ml_capacity_module: None,
 ) -> _Fixture:
     root = tmp_path_factory.mktemp("post-freeze-shadow-input")
     database = root / "source.db"

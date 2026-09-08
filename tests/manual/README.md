@@ -3,11 +3,16 @@
 此目錄保存早期探索性、互動式或依賴真實環境的驗證腳本，不屬於自動化
 pytest 契約，也不保證可直接執行。
 
-## 子目錄說明
+## 已整併移除的診斷
 
-* **[legacy_diagnostics](legacy_diagnostics/)**：保存 7 個被搬移的遺留診斷腳本（含硬編碼 `D:/...` 路徑、外部 API 請求、舊模組名稱引用或診斷日誌輸出）。
-  > [!NOTE]
-  > 本期為確保測試清冊治理之正確性，僅針對此 7 個 legacy candidates 進行有限度的移轉，不做整個 tests/ 目錄的重構或大範圍調整，以維持現有測試穩定與路徑正確。
+2026-09-07 移除 `legacy_diagnostics/` 的七份一次性腳本及重複 README：
+四份硬編碼 CSV 欄位列印、兩份外部 API／正式目錄診斷，以及引用已不存在
+`test_data_module` 的 runner。它們不是自動化測試，也沒有產品呼叫者。
+精確清單、備份與驗證見[專案整併查核](../../docs/06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)。
+原內容仍可由查核基線 Git commit 還原；不要恢復為預設 pytest 測試。
+技術指標與欄位行為請使用 `tests/test_analysis/` 與
+`tests/test_pattern_analysis/` 的合成資料測試；真實來源診斷須使用目前服務及
+明確的隔離資料／輸出目錄。
 
 ## 棄用與隔離原因
 

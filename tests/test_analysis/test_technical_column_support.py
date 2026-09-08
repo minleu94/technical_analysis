@@ -1,5 +1,6 @@
 import pandas as pd
 
+from analysis_module.column_support import resolve_column
 from analysis_module.technical_analysis import technical_column_support
 from analysis_module.technical_analysis.math_analyzer import (
     MathAnalyzer,
@@ -49,3 +50,11 @@ def test_technical_analysis_column_facades_match_shared_resolver():
                     eng_name,
                 )
             )
+
+
+def test_shared_column_resolver_preserves_lookup_order_and_missing_fallback():
+    reverse_mapping = {"Close": "收盤價", "Volume": "成交量"}
+
+    assert resolve_column(["Close", "收盤價"], reverse_mapping, "Close") == "收盤價"
+    assert resolve_column(["Close"], reverse_mapping, "Close") == "Close"
+    assert resolve_column(["Open"], reverse_mapping, "Close") is None

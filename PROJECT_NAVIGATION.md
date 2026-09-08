@@ -1,7 +1,7 @@
 ﻿# 專案導航文件
 
 **版本**：v1.4.10
-**最後更新**：2026-09-06
+**最後更新**：2026-09-07
 **目標讀者**：專案開發者、新加入工程師
 
 ---
@@ -16,13 +16,7 @@
 
 Evidence rehearsal 的唯讀工程預演底座已收口為 `engineering_rehearsal_complete`；它可重跑 replay / source shadow / ML shadow / lineage 的 coverage、quality、missingness 與 blocker 揭露，Workbench 只讀顯示、沒有 apply / promote。它不是 forward evidence，也不會把 External Validation Register 自動標為 complete；接手時先讀 `docs/06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md`，再依 register 的 owner 與 completion rule 累積真實資料、授權、時間與人工 Gate。
 
-2026-08-30 current rebaseline 入口為
-`docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md`：目前是 V3.3 engineering foundation
-完成、V4 evidence accumulation 中，整體仍 `action_required`，不是正式 V4.0。ML
-release_v4 cleanup 的 exact scope／retained chain／pointer／tombstone 則看
-`docs/06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md`；舊 6.11 GiB
-storage blocker 已被 8/30 fresh `headroom_ok`（約 338.9 GiB）觀察取代；Direct/OOC
-只完成 `preflight-only`，不代表長任務或 production writer 已啟動。
+本輪全專案整理與已知問題見[整併查核](docs/06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)，下一輪工作入口見[LUNA 三線計畫](docs/07_guides/LUNA_PARALLEL_PLAN_2026_09_07.md)。B 線環境與需求關係見[LUNA B 環境基線](docs/07_guides/LUNA_B_ENVIRONMENT_2026_09_07.md)；可重跑的 repo map 與候選引用證據由 `scripts/audit_luna_b_repo_map.py` 產生到 `output/luna_B/`。本導航不再複製 dated headroom 或 preflight-only 為目前執行狀態；容量以實際目的卷探針與 `data_module/ml_storage_capacity.py` 為準，執行／驗收現況回到 Snapshot 與綁定產物。
 
 2026-07-13 跨工作流工程整合入口為 `app_module/system_execution_blueprint_adapters.py`，純 JSON 驗證入口為 `scripts/verify_system_execution_blueprint.py`。兩者只組合／驗證 Evidence、PIT／source、ML shadow、dashboard 與 latency 的既有輸出，不改 Recommendation、Score、Advice、Portfolio 或 Exit。任一契約失敗時回到原 owner 修正；禁止在整合層補值、放寬 Gate 或把 `degraded` 改成 ready。
 
@@ -36,15 +30,15 @@ storage blocker 已被 8/30 fresh `headroom_ok`（約 338.9 GiB）觀察取代�
 
 | 要核對的契約 | 首要入口 |
 |---|---|
-| 更新／市場日期與品質 DTO | [update_loop_dtos.py](C:/Projects/PythonProjects/technical_analysis/app_module/dtos/update_loop_dtos.py)、[market_loop_dtos.py](C:/Projects/PythonProjects/technical_analysis/app_module/dtos/market_loop_dtos.py)；服務維持舊 API 相容，UI 不查 storage |
-| 推薦決策切片／輸入指紋 | [recommendation_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/recommendation_service.py)；`recommendation-context.v1`、未知因子與歷史產業 PIT 拒用 |
-| T+1 版本撮合／研究成本 | [broker_simulator.py](C:/Projects/PythonProjects/technical_analysis/backtest_module/broker_simulator.py)、[recommendation_portfolio_backtest_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/recommendation_portfolio_backtest_service.py)；v2 與 legacy 隔離 |
-| Registry／Evidence lineage | [research_run_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/research_run_service.py)、[evidence_event_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/evidence_event_service.py)；query 不 reconcile，review 僅提案 |
-| 候選 append 帳本／副本 migration | [portfolio_ledger_repository.py](C:/Projects/PythonProjects/technical_analysis/data_module/portfolio_ledger_repository.py)、[portfolio_ledger_migration.py](C:/Projects/PythonProjects/technical_analysis/data_module/portfolio_ledger_migration.py)；由 PortfolioService 明確注入，正式 JSONL 未切換 |
-| 候選池／Desk 來源鏈 | [watchlist_repository.py](C:/Projects/PythonProjects/technical_analysis/data_module/watchlist_repository.py)、[decision_desk_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/decision_desk_service.py)、[decision_desk_snapshot_repository.py](C:/Projects/PythonProjects/technical_analysis/app_module/decision_desk_snapshot_repository.py)；預設 JSON 未切換，loop payload 保留來源 |
-| Runtime 觀測／取消訂閱 | [event_bus.py](C:/Projects/PythonProjects/technical_analysis/app_module/runtime_services/event_bus.py)、[snapshot_service.py](C:/Projects/PythonProjects/technical_analysis/app_module/runtime_services/snapshot_service.py)；EventBus 非 durable queue，未知不當 IDLE |
+| 更新／市場日期與品質 DTO | [update_loop_dtos.py](app_module/dtos/update_loop_dtos.py)、[market_loop_dtos.py](app_module/dtos/market_loop_dtos.py)；服務維持舊 API 相容，UI 不查 storage |
+| 推薦決策切片／輸入指紋 | [recommendation_service.py](app_module/recommendation_service.py)；`recommendation-context.v1`、未知因子與歷史產業 PIT 拒用 |
+| T+1 版本撮合／研究成本 | [broker_simulator.py](backtest_module/broker_simulator.py)、[recommendation_portfolio_backtest_service.py](app_module/recommendation_portfolio_backtest_service.py)；v2 與 legacy 隔離 |
+| Registry／Evidence lineage | [research_run_service.py](app_module/research_run_service.py)、[evidence_event_service.py](app_module/evidence_event_service.py)；query 不 reconcile，review 僅提案 |
+| 候選 append 帳本／副本 migration | [portfolio_ledger_repository.py](data_module/portfolio_ledger_repository.py)、[portfolio_ledger_migration.py](data_module/portfolio_ledger_migration.py)；由 PortfolioService 明確注入，正式 JSONL 未切換 |
+| 候選池／Desk 來源鏈 | [watchlist_repository.py](data_module/watchlist_repository.py)、[decision_desk_service.py](app_module/decision_desk_service.py)、[decision_desk_snapshot_repository.py](app_module/decision_desk_snapshot_repository.py)；預設 JSON 未切換，loop payload 保留來源 |
+| Runtime 觀測／取消訂閱 | [event_bus.py](app_module/runtime_services/event_bus.py)、[snapshot_service.py](app_module/runtime_services/snapshot_service.py)；EventBus 非 durable queue，未知不當 IDLE |
 
-中央組裝、完整來源 hydrate、QA inventory 與當輪整合結果見 [TASK-08 交接](C:/Projects/PythonProjects/technical_analysis/docs/06_qa/TASK_LOOP_08_HANDOFF.md)；各卡入口由 [文件索引](C:/Projects/PythonProjects/technical_analysis/docs/00_core/DOCUMENTATION_INDEX.md) 導覽。現況／目標差距以 [架構](C:/Projects/PythonProjects/technical_analysis/docs/01_architecture/system_architecture.md) 與 [完整操作手冊](C:/Projects/PythonProjects/technical_analysis/docs/07_guides/APPLICATION_MANUAL.md) 為準。八卡工程不改 V4 Evidence Accumulation／action_required，不啟用正式 writer、scheduler、broker 或 Formal credit。
+中央組裝、完整來源 hydrate、QA inventory 與當輪整合結果見 [TASK-08 交接](docs/06_qa/TASK_LOOP_08_HANDOFF.md)；各卡入口由 [文件索引](docs/00_core/DOCUMENTATION_INDEX.md) 導覽。現況／目標差距以 [架構](docs/01_architecture/system_architecture.md) 與 [完整操作手冊](docs/07_guides/APPLICATION_MANUAL.md) 為準。八卡工程不改 V4 Evidence Accumulation／action_required，不啟用正式 writer、scheduler、broker 或 Formal credit。
 
 ### UI Layer（`ui_qt/`、`ui_app/`）
 

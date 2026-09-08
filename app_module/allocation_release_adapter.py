@@ -35,6 +35,7 @@ from ml_module.allocation_release_contract import (
     payload_hash,
 )
 from ml_module.allocation_contracts import PortfolioMLDatasetRow
+from ml_module.allocation_release_loader import register_release_loader
 
 
 @dataclass(frozen=True)
@@ -351,6 +352,10 @@ def load_allocation_release(
         release_root,
         expected_release_identity_hash=expected_release_identity_hash,
     )
+
+
+# 由 application boundary 提供實作，ML producer 只看中立 loader contract。
+register_release_loader(load_allocation_release)
 
 
 def _validate_artifact_lineage(

@@ -1,6 +1,6 @@
 ﻿# 專案盤點報告
 
-> **最後整理**：2026-08-30
+> **最後整理**：2026-09-07
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 >
 > **目前程式盤點**：七個 readiness lane、已完成工程、未完成產品 Gate 與推進順序見
@@ -9,6 +9,16 @@
 > 與歷史 tombstone 見
 > `docs/06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md`；8/30 P0 官方唯讀
 > refresh 見 `docs/06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md`；raw data 未納入清理。
+
+## 本輪結構整併入口
+
+- [整理結果與架構判斷](docs/06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)：全 tracked tree 清查、精確移除／回滾、保留邊界與本次驗證限制。
+- [LUNA 三線計畫](docs/07_guides/LUNA_PARALLEL_PLAN_2026_09_07.md)：資料／ML、架構／QA、UI／UX 各自的所有權與可貼用 Prompt。
+- [LUNA B 環境基線](docs/07_guides/LUNA_B_ENVIRONMENT_2026_09_07.md)：runtime／dev requirements、Windows／Python／TA-Lib／PySide6 驗證邊界。
+- `scripts/audit_luna_b_repo_map.py`：只讀 repo map；輸出 Git 分類清單、AST／引用證據與候選 keep／merge／remove／defer 判斷到 `output/luna_B/`。
+- `analysis_module/signal_combiner_support.py` 共用訊號流程；兩條歷史入口的可靠性／回測契約保留。
+- 七份固定路徑／失效 runner 的 manual diagnostics 與重複 README 已移除；雙入口欄位測試已參數化整併。其餘歷史／相容入口不因年代而刪除。
+- 測試逐檔清單以 `qa/full_app_healthcheck/test_inventory.py` 為準，數量由 audit tool 產生；不要在本文件再複製一份會漂移的完整清冊。
 
 ---
 
@@ -22,7 +32,10 @@
 | `PROJECT_INVENTORY.md` | 本文件，專案結構盤點摘要 | Active |
 | `AGENTS.md` | Codex 自動讀取的 repo 指令入口，導向 `docs/agents/` 完整 Agent 架構 | Active |
 | `GEMINI.md` | Antigravity 自動讀取的 repo 指令入口，導向 `docs/agents/antigravity/` 與 `.agent/rules/` | Active |
-| `requirements.txt` | Python 依賴 | Active |
+| `requirements.txt` | 向後相容的 all-in-one Python 依賴入口 | Active |
+| `requirements-runtime.txt` | 最小直接 runtime 依賴 | Active |
+| `requirements-dev.txt` | runtime 加 pytest／pytest-qt／mypy 的開發／QA 依賴 | Active |
+| `requirements-py311-windows.constraints.txt` | 現有 Windows x64／Python 3.11.9 的 direct constraints 快照 | Evidence |
 
 已移出或刪除：
 

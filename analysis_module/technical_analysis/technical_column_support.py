@@ -1,7 +1,4 @@
-def resolve_technical_column(columns, reverse_mapping, eng_name):
-    chinese_name = reverse_mapping.get(eng_name)
-    if chinese_name in columns:
-        return chinese_name
-    if eng_name in columns:
-        return eng_name
-    return None
+from analysis_module.column_support import resolve_column as resolve_technical_column
+
+
+__all__ = ["resolve_technical_column"]

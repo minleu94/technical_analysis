@@ -683,6 +683,13 @@ def test_ooc_training_gate_stops_before_output_or_fit(
         "_NumericStore",
         lambda *args, **kwargs: fake_store,
     )
+    preflight_calls: list[str] = []
+
+    def _unexpected_preflight(**kwargs: object) -> object:
+        preflight_calls.append(str(kwargs.get("stage")))
+        raise AssertionError("teacher rejection must precede capacity preflight")
+
+    monkeypatch.setattr(ooc_module, "preflight_capacity", _unexpected_preflight)
     output_root = tmp_path / "must-not-create"
     request = AllocationOutOfCoreTrainingRequest(
         store_manifest_path=tmp_path / "source-manifest.json",
@@ -697,6 +704,7 @@ def test_ooc_training_gate_stops_before_output_or_fit(
         match="allocation teacher eligibility gate blocked",
     ):
         AllocationOutOfCoreTrainingService().train(request)
+    assert preflight_calls == []
     assert not output_root.exists()
 
 

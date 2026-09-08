@@ -888,14 +888,6 @@ class AllocationOutOfCoreTrainingService:
     ) -> AllocationOutOfCoreTrainingPublication:
         capacity_budget = _capacity_budget_for_request(request)
         output_root = request.output_root.resolve()
-        initial_capacity = preflight_capacity(
-            probe_path=output_root,
-            budget=capacity_budget,
-            stage="ooc_before_output",
-        )
-        monitor = _PeakRSSMonitor(
-            memory_budget_mb=request.memory_budget_mb
-        )
         store = _NumericStore(
             request.store_manifest_path,
             shared_numeric_store_root=request.shared_numeric_store_root,
@@ -929,6 +921,18 @@ class AllocationOutOfCoreTrainingService:
                 f"{teacher_gate['status']}"
                 + (f"; reasons={reasons}" if reasons else "")
             )
+        # Teacher gate 只讀 manifest／target summary，不會建立輸出或 shared
+        # block。先在這裡拒絕退化／缺件來源，避免低容量環境的 filesystem
+        # preflight 先行失敗而掩蓋真正的資料資格原因；通過 gate 後才允許
+        # 啟動容量與 RSS 監控、建立 output 與任何 fit。
+        initial_capacity = preflight_capacity(
+            probe_path=output_root,
+            budget=capacity_budget,
+            stage="ooc_before_output",
+        )
+        monitor = _PeakRSSMonitor(
+            memory_budget_mb=request.memory_budget_mb
+        )
         shared_artifact_store = _build_shared_artifact_store(request)
         selected_horizons = (
             request.horizons if request.horizons else store.horizons

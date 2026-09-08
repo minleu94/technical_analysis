@@ -20,6 +20,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from data_module.ml_storage_capacity import StorageCapacityError  # noqa: E402
+# Importing the application adapter bootstraps the neutral release loader.  The
+# producer itself remains free of app_module imports, while published artifacts
+# still require the real adapter readback before the CLI can succeed.
+from app_module import allocation_release_adapter as _release_adapter  # noqa: E402,F401
 from ml_module.allocation_v3_linear_release import (  # noqa: E402
     DEFAULT_BATCH_SIZE,
     MAX_FIT_SAMPLE_ROWS,

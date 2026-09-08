@@ -271,7 +271,10 @@ def test_saved_result_identity_is_recorded_and_cleared_by_next_analysis(monkeypa
         profiles={}, recommendation_service=SimpleNamespace(last_run_context={}), universe_service=None,
         regime_service=None, current_result_id="old-rec", execute_btn=MagicMock(),
         progress_bar=MagicMock(), progress_label=MagicMock())
+    refreshed_result_ids = []
+    view._update_research_context_banner = lambda: refreshed_result_ids.append(view.current_result_id)
     module.RecommendationView._save_recommendation_result(view)
     assert not errors and view.current_result_id == "saved-rec-001"
     module.RecommendationView._on_recommendation_finished(view, [])
     assert view.current_result_id == ""
+    assert refreshed_result_ids == [""]

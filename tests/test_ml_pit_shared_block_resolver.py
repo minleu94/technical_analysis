@@ -30,9 +30,16 @@ from ml_module.allocation_out_of_core_training_service import (
     AllocationOutOfCoreTrainingRequest,
     AllocationOutOfCoreTrainingService,
 )
+from tests.fixtures.portfolio_ml_ooc_support import _long_raw_publication
 from tests.test_portfolio_ml_dataset_assembler import _database
-from tests.test_portfolio_ml_out_of_core_pipeline import _long_raw_publication
 from tests.ml_teacher_fixture import attach_synthetic_teacher_provenance
+
+
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity_module")
+
+
+# 小型合成資料驗證使用可控容量；實體低空間另由專用capacity tests驗證。
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity")
 
 
 def _sha256_bytes(raw: bytes) -> str:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -32,6 +34,10 @@ from tests.ml_teacher_fixture import attach_synthetic_teacher_provenance
 
 
 _SAFETY_RESERVE_BYTES = 200 * (1024**3)
+
+
+# 小型合成資料驗證使用可控容量；實體低空間另由專用capacity tests驗證。
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity")
 
 
 def _read_json(path: Path) -> dict[str, Any]:

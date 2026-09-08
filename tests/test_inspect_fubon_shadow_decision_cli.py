@@ -51,8 +51,14 @@ def test_cli_fails_closed_when_input_or_universe_missing() -> None:
     assert exit_code == 1
 
 
-def test_cli_rejects_unsafe_output_root() -> None:
-    data_root = Path("D:/Min/Python/Project/FA_Data").resolve()
+def test_cli_rejects_configured_formal_data_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_root = (tmp_path / "formal-data").resolve()
+    monkeypatch.setenv("DATA_ROOT", str(data_root))
+    monkeypatch.setenv("OUTPUT_ROOT", str(tmp_path / "formal-output"))
+
     with pytest.raises(ValueError, match="output_root cannot be inside formal data root"):
         validate_output_root(data_root)
 

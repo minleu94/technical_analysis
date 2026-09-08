@@ -37,7 +37,6 @@ from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from app_module.allocation_release_adapter import load_allocation_release
 from data_module.official_trading_calendar import OfficialTradingCalendar
 from data_module.ml_storage_capacity import (
     BYTES_PER_GIB,
@@ -54,6 +53,7 @@ from ml_module.allocation_out_of_core_training_service import (
     _NumericStore,
     _current_rss_bytes,
 )
+from ml_module.allocation_release_loader import load_allocation_release
 from ml_module.allocation_release_contract import (
     AllocationReleaseManifest,
     CalibrationBinding,

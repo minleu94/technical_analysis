@@ -46,21 +46,17 @@ def test_all_python_files_in_tests_are_registered_exactly_once():
     assert not extra, f"test_inventory.py 中有已註冊但實際不存在的檔案：\n" + "\n".join(extra)
 
 
-def test_legacy_diagnostics_relocated_paths_exist_and_classified():
-    moved_candidates = (
-        "tests/manual/legacy_diagnostics/run_market_index_test.py",
-        "tests/manual/legacy_diagnostics/run_technical_calc_test.py",
-        "tests/manual/legacy_diagnostics/run_tests.py",
-        "tests/manual/legacy_diagnostics/check_columns.py",
-        "tests/manual/legacy_diagnostics/check_processed_file.py",
-        "tests/manual/legacy_diagnostics/check_saved_file.py",
-        "tests/manual/legacy_diagnostics/check_signals_file.py",
-    )
-    for path in moved_candidates:
-        assert path in TEST_INVENTORY
-        assert get_category(path) == "legacy-or-low-priority"
+def test_retired_diagnostics_are_absent_from_inventory_and_filesystem():
+    project_root = Path(__file__).resolve().parent.parent
+    for name in (
+        "run_market_index_test.py", "run_technical_calc_test.py", "run_tests.py",
+        "check_columns.py", "check_processed_file.py", "check_saved_file.py",
+        "check_signals_file.py",
+    ):
+        path = f"tests/manual/legacy_diagnostics/{name}"
+        assert path not in TEST_INVENTORY
+        assert not (project_root / path).exists()
         assert not is_allowed_in_bridge(path)
-        assert get_reject_reason(path) is not None
 
 
 def test_safety_guardrails_reject_unauthorized_categories():
@@ -118,7 +114,7 @@ def test_inventory_exposes_bridge_candidate_and_reject_sets():
         "tests/test_ui_qt_watchlist_candidate_pool_copy_text.py",
     }
     assert "tests/test_ui_qt_recommendation_portfolio_results.py" in get_candidate_bridge_files()
-    assert "tests/manual/legacy_diagnostics/run_tests.py" in get_bridge_rejected_files()
+    assert "tests/manual/legacy_advanced_patterns_check.py" in get_bridge_rejected_files()
     assert "write-risk-dry-run-required" in BRIDGE_REJECTED_CATEGORIES
 
 
@@ -133,7 +129,14 @@ def test_inventory_exposes_pytest_collection_statuses():
         and path.endswith(".py")
     )
     assert PYTEST_COLLECTED_FILES == expected_collected
-    assert PYTEST_SUPPORT_FILES == frozenset({"tests/conftest.py"})
+    assert PYTEST_SUPPORT_FILES == frozenset(
+        {
+            "tests/conftest.py",
+            "tests/ml_teacher_fixture.py",
+            "tests/fixtures/ml_allocation_training_support.py",
+            "tests/fixtures/portfolio_ml_ooc_support.py",
+        }
+    )
     assert PYTEST_NOT_COLLECTED_FILES == (
         frozenset(TEST_INVENTORY)
         - PYTEST_COLLECTED_FILES
@@ -163,13 +166,22 @@ def test_inventory_exposes_pytest_collection_statuses():
         assert get_category(path) == "governance-doc-tooling"
         assert is_collected_by_default_pytest(path)
     assert get_pytest_collection_status("tests/conftest.py") == "support"
-    assert get_pytest_collection_status("tests/manual/legacy_diagnostics/run_tests.py") == "not-collected"
+    assert get_pytest_collection_status("tests/manual/legacy_advanced_patterns_check.py") == "not-collected"
+    assert get_pytest_collection_status("tests/ml_teacher_fixture.py") == "support"
+    assert (
+        get_pytest_collection_status("tests/fixtures/portfolio_ml_ooc_support.py")
+        == "support"
+    )
+    assert (
+        get_pytest_collection_status("tests/fixtures/ml_allocation_training_support.py")
+        == "support"
+    )
     assert get_pytest_collection_status("tests/does_not_exist.py") == "unknown"
 
 
 def test_inventory_can_query_category_groups():
     assert len(get_files_by_category("healthcheck-runner-owned")) == 29
-    assert len(get_files_by_category("legacy-or-low-priority")) == 10
+    assert len(get_files_by_category("legacy-or-low-priority")) == 3
 
     assert "tests/test_pattern_analysis/test_flag_pattern_robustness.py" in get_files_by_category(
         "service-oracle-research-backtest"

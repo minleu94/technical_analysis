@@ -74,7 +74,7 @@ def attach_synthetic_teacher_provenance(
         (start + timedelta(days=index)).isoformat()
         for index in range(decision_count)
     ]
-    decision_cutoffs = {
+    decision_cutoffs: dict[str, str] = {
         value: datetime.combine(
             date.fromisoformat(value),
             time(8, 30),
@@ -83,7 +83,7 @@ def attach_synthetic_teacher_provenance(
         for value in decision_dates
     }
     candidate_counts = _spread(input_count, decision_count, minimum_one=True)
-    decision_rows = [
+    decision_rows: list[dict[str, Any]] = [
         {
             "decision_date": decision_date,
             "candidate_row_count": candidate_count,

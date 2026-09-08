@@ -39,7 +39,7 @@ repo 根目錄的 `pytest.ini` 定義正式收集範圍：
 - `tests/test_backtest/` 及根目錄 backtest 測試：回測、時間軸與風險。
 - `tests/e2e/`：路徑隔離等跨元件契約。
 - `tests/manual/`：已棄用或需人工改寫後才能恢復的歷史情境。
-- `tests/manual/legacy_diagnostics/`：保存 7 個 Relocated Legacy 診斷腳本（本期僅做此 7 個檔案的搬移以利清冊治理，不做全量 tests 目錄重整）。
+- 七份固定路徑／舊 runner 的 `legacy_diagnostics` 已於 2026-09-07 移除；原因與回復見[整併查核](../06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)。其餘 manual 與外部來源 scripts 繼續隔離。
 - `tests/scripts/`：真實來源或人工操作檢查。
 
 ### 未來測試目錄整理規劃 (Proposal Only)

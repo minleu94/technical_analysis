@@ -1,12 +1,18 @@
 ﻿# 系統架構
 
-> **最後更新：2026-09-06｜V3.3 Engineering Complete / V4 Evidence Accumulation**。
-> `release_v4` 是 storage／engineering namespace，不代表正式 V4.0 product closeout。Current
-> architecture 已包含全欄位治理、年度 PIT shards、配置型 ML shadow co-pilot、Rule/ML 整數
-> bp 混合契約、deterministic risk projection、Decision／Evidence capture 與 T-1 Paper ledger
-> contract；目前 Formal inputs=`0/3`、Formal OOS=false、alpha=0、production scheduler／broker
-> orders 關閉，Paper ledger 實體仍 missing。Readiness UI 對明確 reference path 會標記較舊
-> artifact，但不自動替換或掃描未知檔案。Live broker execution 不在系統範圍。
+> **最後更新：2026-09-07｜目前程式結構；不代替運行狀態。**
+> `release_v4` 是 storage／engineering namespace，不等同正式 V4.0。配置 ML、Rule／ML bp 混合、風險投影、Decision／Evidence 與 Paper ledger 的責任邊界如下。Formal input 計數、ledger 是否已產生、scheduler 是否啟用、D 剩餘容量均是可變運行事實，須讀 Snapshot 與當次具 hash／時間的驗收產物；不再以本架構檔的舊值作現況。Live broker execution 不在此系統範圍。
+
+## 訊號分析共用與歷史相容邊界
+
+`analysis_module/signal_combiner_support.py` 的 `SignalCombinationMixin` 是兩個歷史 SignalCombiner 共用的訊號流程：組合分析、成交量觀察與訊號合成。兩個舊模組繼續提供原匯入及初始化 hook；可靠性與回測尚未統一，也不得因同名而互換。
+
+- `analysis_module.signal_analysis.SignalCombiner` 是 `analysis_module` 根入口所匯出的版本；可靠性映射固定，另提供方向欄位。
+- `analysis_module.pattern_analysis.SignalCombiner` 依 ADX 調整可靠性；歷史回測輸出契約也不同。
+- 本次只抽取 AST 完全相同的三個方法；40 組舊／新輸出 parity 與雙入口測試涵蓋這個邊界。沒有新加金融 float、改動成交時點或把既有 reliability 宣稱為預測機率。
+- 兩份 legacy backtest 的金融精度／同日成交與政策差異仍是待遷移問題，不能作為正式投資結果來源。正式研究流程的回測應依應用服務及 backtest domain 的既有契約執行。
+
+整併與其他已知依賴衝突見[本輪查核](../06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)。
 
 ## release_v4 配置決策工程資料流（非正式 V4.0 closeout）
 

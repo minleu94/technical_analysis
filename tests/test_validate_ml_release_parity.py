@@ -11,9 +11,6 @@ from tests.test_allocation_release_adapter import _write_release
 from tests.test_infer_ml_allocation_copilot_cli import _write_input
 
 
-pytest_plugins = ("tests.test_ml_allocation_training_service",)
-
-
 def test_validate_release_parity_cli_is_read_only_and_fail_closed(
     tmp_path: Path,
     training_result,

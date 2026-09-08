@@ -62,6 +62,10 @@ _BOUNDED_PIT_STORE = Path(
 )
 
 
+# 小型合成資料驗證使用可控容量；實體低空間另由專用capacity tests驗證。
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity")
+
+
 def test_synthetic_teacher_source_to_assembler_gate_is_explicitly_research_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -179,6 +179,7 @@ def test_capacity_checkpoint_counts_existing_temp_before_new_stage(
         )
 
 
+@pytest.mark.usefixtures("synthetic_ml_capacity")
 def test_assembler_capacity_callback_stops_after_observed_spool_growth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

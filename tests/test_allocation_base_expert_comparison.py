@@ -43,11 +43,14 @@ from ml_module.allocation_oos_replay_input_builder import (
 )
 
 
-pytest_plugins = ("tests.test_portfolio_ml_out_of_core_pipeline",)
-
-
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
+
+
+def _calculation(transition: dict[str, object]) -> dict[str, Any]:
+    value = transition["calculation"]
     assert isinstance(value, dict)
     return value
 
@@ -249,7 +252,7 @@ def test_execute_day_default_strict_contract_is_unchanged_by_research_option() -
     )
     assert default_metrics == explicit_strict_metrics
     assert default_transition == explicit_strict_transition
-    assert default_transition["calculation"]["holdings"] == []
+    assert _calculation(default_transition)["holdings"] == []
 
     research_metrics, research_transition = _execute_day(
         state=_LaneState(),
@@ -267,8 +270,8 @@ def test_execute_day_default_strict_contract_is_unchanged_by_research_option() -
         enforce_sector_cap=False,
     )
     assert research_metrics["turnover_bp"] > 0
-    assert research_transition["calculation"]["holdings"]
-    assert research_transition["calculation"]["holdings"][0][
+    assert _calculation(research_transition)["holdings"]
+    assert _calculation(research_transition)["holdings"][0][
         "post_trade_shares"
     ] > 0
 
@@ -307,8 +310,8 @@ def test_execute_day_band_freeze_preserves_lots_when_bp_floor_would_drop_one() -
     )
     assert metrics["turnover_bp"] == 0
     assert state.shares["AAA"] == 1_000
-    assert transition["calculation"]["transaction_cost_minor"] == 0
-    assert transition["calculation"]["holdings"][0]["post_trade_shares"] == 1_000
+    assert _calculation(transition)["transaction_cost_minor"] == 0
+    assert _calculation(transition)["holdings"][0]["post_trade_shares"] == 1_000
 
 
 def test_two_day_execute_day_equity_summary_keeps_overnight_holdings() -> None:
@@ -381,7 +384,7 @@ def test_two_day_execute_day_equity_summary_keeps_overnight_holdings() -> None:
             eligibility_fn=_research_no_sector_eligibility,
             enforce_sector_cap=False,
         )
-        calculation = transition["calculation"]
+        calculation = _calculation(transition)
         closing_minor = int(calculation["closing_value_minor"])
         cost_minor = int(calculation["transaction_cost_minor"])
         previous_net = (

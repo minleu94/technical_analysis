@@ -21,7 +21,7 @@ from ml_module.allocation_contracts import (
     PortfolioMLDatasetRow,
     post_freeze_shadow_decision_scope,
 )
-from tests.test_ml_allocation_training_service import (  # noqa: F401
+from tests.fixtures.ml_allocation_training_support import (  # noqa: F401
     _sample,
     folds,
     samples,

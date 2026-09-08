@@ -16,6 +16,10 @@ from data_module.ml_pit_year_shard_exporter import (
 )
 
 
+# 小型合成資料驗證使用可控容量；實體低空間另由專用capacity tests驗證。
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity")
+
+
 def _build_database(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         connection.executescript(

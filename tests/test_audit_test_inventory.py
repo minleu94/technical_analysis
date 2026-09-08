@@ -1,6 +1,13 @@
 from pathlib import Path
 import scripts.audit_test_inventory as audit_test_inventory
-from scripts.audit_test_inventory import run_test_inventory_audit, main
+from scripts.audit_test_inventory import (
+    FORMAL_ENTRY_REFERENCES,
+    _find_duplicate_current_sections,
+    _find_formal_entry_reference_errors,
+    _find_markdown_link_errors,
+    main,
+    run_test_inventory_audit,
+)
 
 
 def test_audit_test_inventory_passes_and_reports_zero_missing() -> None:
@@ -11,6 +18,9 @@ def test_audit_test_inventory_passes_and_reports_zero_missing() -> None:
     assert report["documentation_count_drift"] == {}
     assert report["collection_errors"] == []
     assert report["exact_duplicate_test_groups"]
+    assert report["markdown_link_errors"] == []
+    assert report["duplicate_current_sections"] == []
+    assert report["formal_entry_reference_errors"] == []
 
 
 def test_audit_test_inventory_cli(tmp_path: Path) -> None:
@@ -54,3 +64,38 @@ def test_read_documented_current_counts_accepts_a_new_machine_refresh_date(
         "total": 9,
         "service-oracle-data-market": 9,
     }
+
+
+def test_governance_markdown_checks_cover_positive_and_negative_fixtures(tmp_path: Path):
+    root = tmp_path
+    source = root / "docs" / "index.md"
+    target = root / "docs" / "target.md"
+    source.parent.mkdir(parents=True)
+    target.write_text("# target\n", encoding="utf-8")
+    source.write_text(
+        "[target](target.md) [external](https://example.com)\n",
+        encoding="utf-8",
+    )
+
+    assert _find_markdown_link_errors([source], project_root=root) == ([], [])
+
+    source.write_text("[missing](missing.md)\n", encoding="utf-8")
+    errors, warnings = _find_markdown_link_errors([source], project_root=root)
+    assert errors == ["docs/index.md:missing_local_link:missing.md"]
+    assert warnings == []
+
+
+def test_governance_current_section_and_formal_entry_checks_have_negative_fixtures(
+    tmp_path: Path,
+):
+    source = tmp_path / "governance.md"
+    source.write_text(
+        "## Current status\n\n## Current status\n",
+        encoding="utf-8",
+    )
+    assert _find_duplicate_current_sections([source], project_root=tmp_path)
+
+    index = tmp_path / "DOCUMENTATION_INDEX.md"
+    index.write_text(FORMAL_ENTRY_REFERENCES[0] + "\n", encoding="utf-8")
+    missing = _find_formal_entry_reference_errors(index, project_root=tmp_path)
+    assert len(missing) == len(FORMAL_ENTRY_REFERENCES) - 1

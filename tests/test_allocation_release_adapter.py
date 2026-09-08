@@ -26,9 +26,6 @@ from tests.test_ml_allocation_inference_service import (
 )
 
 
-pytest_plugins = ("tests.test_ml_allocation_training_service",)
-
-
 _MODEL_ID = "allocator-v4-release-test"
 _UNIVERSE_ID = "pit-universe-test"
 _POLICY_ID = "balanced-v1"

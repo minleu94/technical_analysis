@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import pytest
+
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+
+from tests.fixtures.portfolio_ml_ooc_support import run_synthetic_ml_cli
 
 from tests.test_portfolio_ml_dataset_assembler import (
     _official_corporate_action_publication,
@@ -18,6 +22,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = PROJECT_ROOT / "scripts" / "build_portfolio_ml_training_shards.py"
 
 
+# 小型合成資料驗證使用可控容量；實體低空間另由專用capacity tests驗證。
+pytestmark = pytest.mark.usefixtures("synthetic_ml_capacity")
+
+
 def test_cli_publishes_direct_training_input_without_touching_raw(
     tmp_path: Path,
 ) -> None:
@@ -28,7 +36,7 @@ def test_cli_publishes_direct_training_input_without_touching_raw(
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
 
-    result = subprocess.run(
+    result = run_synthetic_ml_cli(
         [
             sys.executable,
             str(SCRIPT),
@@ -94,7 +102,7 @@ def test_cli_blocks_unaccepted_sector_membership_sidecar(
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
 
-    result = subprocess.run(
+    result = run_synthetic_ml_cli(
         [
             sys.executable,
             str(SCRIPT),

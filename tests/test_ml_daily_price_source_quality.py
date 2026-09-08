@@ -326,6 +326,7 @@ def test_quarantine_report_cannot_overwrite_source_root(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.usefixtures("synthetic_ml_capacity")
 def test_pit_builder_runs_source_guard_before_creating_publication(
     tmp_path: Path,
 ) -> None:

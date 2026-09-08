@@ -3,17 +3,24 @@ import pandas as pd
 import pytest
 
 
+pytest_plugins = (
+    "tests.fixtures.portfolio_ml_ooc_support",
+    "tests.fixtures.ml_allocation_training_support",
+)
+
+
 @pytest.fixture(scope="session")
 def sample_market_data() -> pd.DataFrame:
     dates = pd.date_range("2024-01-01", "2024-01-10")
+    close = np.arange(100, 110, dtype=float)
     return pd.DataFrame(
         {
             "date": dates,
-            "open": np.random.normal(100, 10, len(dates)),
-            "high": np.random.normal(105, 10, len(dates)),
-            "low": np.random.normal(95, 10, len(dates)),
-            "close": np.random.normal(102, 10, len(dates)),
-            "volume": np.random.randint(1_000_000, 2_000_000, len(dates)),
+            "open": close - 1,
+            "high": close + 2,
+            "low": close - 2,
+            "close": close,
+            "volume": np.arange(1_000_000, 1_000_010, dtype=np.int64),
         }
     )
 
@@ -22,17 +29,18 @@ def sample_market_data() -> pd.DataFrame:
 def sample_stock_data() -> pd.DataFrame:
     dates = pd.date_range("2024-01-01", "2024-01-10")
     rows = []
-    for stock_id in ["2330", "2317", "2412"]:
-        for date in dates:
+    for stock_index, stock_id in enumerate(("2330", "2317", "2412")):
+        for day_index, date in enumerate(dates):
+            close = float(100 + stock_index * 20 + day_index)
             rows.append(
                 {
                     "date": date,
                     "stock_id": stock_id,
-                    "open": np.random.normal(100, 10),
-                    "high": np.random.normal(105, 10),
-                    "low": np.random.normal(95, 10),
-                    "close": np.random.normal(102, 10),
-                    "volume": np.random.randint(1_000_000, 2_000_000),
+                    "open": close - 1,
+                    "high": close + 2,
+                    "low": close - 2,
+                    "close": close,
+                    "volume": 1_000_000 + stock_index * 10_000 + day_index,
                 }
             )
     return pd.DataFrame(rows)
@@ -43,14 +51,14 @@ def sample_index_data() -> pd.DataFrame:
     dates = pd.date_range("2024-01-01", "2024-01-10")
     rows = []
     for index_name in ["半導體", "電子", "金融"]:
-        for date in dates:
+        for day_index, date in enumerate(dates):
             rows.append(
                 {
                     "date": date,
                     "index_name": index_name,
-                    "value": np.random.normal(1_000, 100),
-                    "change": np.random.normal(0, 10),
-                    "change_pct": np.random.normal(0, 1),
+                    "value": 1_000 + day_index,
+                    "change": day_index,
+                    "change_pct": day_index / 100,
                 }
             )
     return pd.DataFrame(rows)

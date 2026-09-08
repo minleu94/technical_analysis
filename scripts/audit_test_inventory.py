@@ -17,6 +17,7 @@ import re
 import subprocess
 import sys
 from typing import Any, Sequence
+from urllib.parse import unquote
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -28,6 +29,27 @@ from qa.full_app_healthcheck.test_inventory import (
     get_direct_bridge_files,
     get_files_by_category,
 )
+
+GOVERNANCE_MARKDOWN_PATHS = (
+    "PROJECT_NAVIGATION.md",
+    "PROJECT_INVENTORY.md",
+    "docs/00_core/DOCUMENTATION_INDEX.md",
+    "docs/07_guides/LUNA_PARALLEL_PLAN_2026_09_07.md",
+    "docs/07_guides/LUNA_PROMPT_B_ARCHITECTURE_2026_09_07.md",
+    "docs/07_guides/LUNA_B_ENVIRONMENT_2026_09_07.md",
+    "docs/06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md",
+    "docs/06_qa/LUNA_B_HANDOFF_2026_09_07.md",
+)
+FORMAL_ENTRY_REFERENCES = (
+    "PROJECT_SNAPSHOT.md",
+    "DEVELOPMENT_ROADMAP.md",
+    "system_architecture.md",
+    "target_system_architecture.md",
+    "APPLICATION_MANUAL.md",
+    "FORMAL_INPUT_READINESS_REFRESH_2026_08_30.md",
+)
+_MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[[^\]]+\]\(([^)\n]+)\)")
+_CURRENT_SECTION_TOKENS = ("current", "machine refresh", "目前", "現在")
 
 
 def run_test_inventory_audit(
@@ -70,6 +92,21 @@ def run_test_inventory_audit(
         for key, actual in sorted(expected_counts.items())
         if documented_counts.get(key) != actual
     }
+    governance_markdown_paths = [
+        PROJECT_ROOT / relative_path for relative_path in GOVERNANCE_MARKDOWN_PATHS
+    ]
+    markdown_link_errors, nonportable_markdown_links = _find_markdown_link_errors(
+        governance_markdown_paths,
+        project_root=PROJECT_ROOT,
+    )
+    duplicate_current_sections = _find_duplicate_current_sections(
+        governance_markdown_paths,
+        project_root=PROJECT_ROOT,
+    )
+    formal_entry_reference_errors = _find_formal_entry_reference_errors(
+        PROJECT_ROOT / "docs" / "00_core" / "DOCUMENTATION_INDEX.md",
+        project_root=PROJECT_ROOT,
+    )
 
     collected_test_count: int | None = None
     collection_errors = list(parse_errors)
@@ -107,11 +144,23 @@ def run_test_inventory_audit(
         machine_checkable_blockers.append(
             f"collection_errors:{len(collection_errors)}"
         )
+    if markdown_link_errors:
+        machine_checkable_blockers.append(
+            f"markdown_link_errors:{len(markdown_link_errors)}"
+        )
+    if duplicate_current_sections:
+        machine_checkable_blockers.append(
+            f"duplicate_current_sections:{len(duplicate_current_sections)}"
+        )
+    if formal_entry_reference_errors:
+        machine_checkable_blockers.append(
+            f"formal_entry_reference_errors:{len(formal_entry_reference_errors)}"
+        )
 
     overall_status = "passed" if not machine_checkable_blockers else "failed"
 
     return {
-        "schema_version": "test-inventory-audit.v1",
+        "schema_version": "test-inventory-audit.v2",
         "filesystem_test_file_count": len(found_files),
         "inventory_entry_count": len(TEST_INVENTORY),
         "collected_test_count": collected_test_count,
@@ -126,6 +175,14 @@ def run_test_inventory_audit(
         "candidate_bridge_files": candidate_bridge_files,
         "direct_bridge_files": direct_bridge_files,
         "documentation_count_drift": documentation_count_drift,
+        "governance_markdown_paths": [
+            path.relative_to(PROJECT_ROOT).as_posix()
+            for path in governance_markdown_paths
+        ],
+        "markdown_link_errors": markdown_link_errors,
+        "nonportable_markdown_links": nonportable_markdown_links,
+        "duplicate_current_sections": duplicate_current_sections,
+        "formal_entry_reference_errors": formal_entry_reference_errors,
         "machine_checkable_blockers": machine_checkable_blockers,
         "human_decision_required": human_decision_required,
         "automatic_fail_closed_dispositions": automatic_fail_closed_dispositions,
@@ -133,6 +190,107 @@ def run_test_inventory_audit(
         "external_environment_required": external_environment_required,
         "overall_status": overall_status,
     }
+
+
+def _find_markdown_link_errors(
+    paths: Sequence[Path],
+    *,
+    project_root: Path,
+) -> tuple[list[str], list[str]]:
+    """Check explicit local Markdown links and report absolute-path warnings."""
+    errors: list[str] = []
+    nonportable: list[str] = []
+    root = project_root.resolve()
+    for source_path in paths:
+        try:
+            content = source_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            errors.append(f"{source_path}:read_error:{type(exc).__name__}")
+            continue
+        source_label = _relative_label(source_path, root)
+        for match in _MARKDOWN_LINK_RE.finditer(content):
+            raw_target = match.group(1).strip()
+            if raw_target.startswith("<") and ">" in raw_target:
+                target = raw_target[1 : raw_target.index(">")]
+            else:
+                target = raw_target.split(maxsplit=1)[0]
+            target = unquote(target)
+            if (
+                not target
+                or target.startswith(("#", "http://", "https://", "mailto:", "codex://", "app://"))
+            ):
+                continue
+            target = target.split("#", maxsplit=1)[0].split("?", maxsplit=1)[0]
+            if not target:
+                continue
+            if re.match(r"^[A-Za-z]:[\\/]", target):
+                candidate = Path(target)
+                nonportable.append(f"{source_label}:{target}")
+            elif target.startswith("/"):
+                candidate = root / target.lstrip("/\\")
+            else:
+                candidate = source_path.parent / target
+            if not candidate.exists():
+                errors.append(f"{source_label}:missing_local_link:{target}")
+    return sorted(errors), sorted(nonportable)
+
+
+def _find_duplicate_current_sections(
+    paths: Sequence[Path],
+    *,
+    project_root: Path,
+) -> list[str]:
+    """Find repeated current-status headings within one governance document."""
+    heading_re = re.compile(r"^(#{1,6})\s+(.+?)\s*$", flags=re.MULTILINE)
+    duplicates: list[str] = []
+    root = project_root.resolve()
+    for source_path in paths:
+        try:
+            content = source_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        seen: dict[tuple[int, str], int] = {}
+        for match in heading_re.finditer(content):
+            title = re.sub(r"\s+", " ", match.group(2).strip()).casefold()
+            if not any(token in title for token in _CURRENT_SECTION_TOKENS):
+                continue
+            level = len(match.group(1))
+            key = (level, title)
+            line = content.count("\n", 0, match.start()) + 1
+            previous_line = seen.get(key)
+            if previous_line is not None:
+                duplicates.append(
+                    f"{_relative_label(source_path, root)}:duplicate_current_section:"
+                    f"line_{previous_line}_and_{line}:{match.group(2).strip()}"
+                )
+            else:
+                seen[key] = line
+    return sorted(duplicates)
+
+
+def _find_formal_entry_reference_errors(
+    index_path: Path,
+    *,
+    project_root: Path,
+) -> list[str]:
+    """Ensure the core Index retains the current/formal navigation anchors."""
+    try:
+        content = index_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return [f"{_relative_label(index_path, project_root.resolve())}:read_error:{type(exc).__name__}"]
+    label = _relative_label(index_path, project_root.resolve())
+    return [
+        f"{label}:missing_formal_entry_reference:{reference}"
+        for reference in FORMAL_ENTRY_REFERENCES
+        if reference not in content
+    ]
+
+
+def _relative_label(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def _find_exact_duplicate_test_groups(

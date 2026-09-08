@@ -11,6 +11,8 @@ import pytest
 
 from app_module.ml_allocation_inference_service import _parse_artifact
 from ml_module.allocation_out_of_core_training_service import TARGET_FIELDS
+from ml_module import allocation_release_loader
+import ml_module.allocation_v3_linear_release as v3_release_module
 from ml_module.allocation_training_service import (
     CLASSIFICATION_EXPERT_HEADS,
     EXPERT_HEAD_IDS,
@@ -39,6 +41,19 @@ from ml_module.allocation_v3_linear_release import (
     _validate_v3_rows,
 )
 from data_module.ml_storage_capacity import directory_size_bytes
+
+
+def test_release_readback_loader_is_neutral_and_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        v3_release_module.load_allocation_release
+        is allocation_release_loader.load_allocation_release
+    )
+
+    monkeypatch.setattr(allocation_release_loader, "_registered_loader", None)
+    with pytest.raises(RuntimeError, match="not registered"):
+        allocation_release_loader.load_allocation_release(Path("C:/missing-release"))
 
 
 def test_v3_scope_is_separated_and_bounded() -> None:
