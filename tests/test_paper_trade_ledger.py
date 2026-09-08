@@ -48,9 +48,12 @@ def test_paper_fill_is_decimal_and_roundtrips_append_only(tmp_path: Path) -> Non
 
     assert loaded == (fill,)
     assert loaded[0].total_cost == Decimal("23.00")
+    assert loaded[0].cash_settlement_cost == Decimal("15.00")
     assert loaded[0].gross_amount == Decimal("100080.00")
     assert loaded[0].cost_record_ready is True
     assert loaded[0].to_dict()["research_only"] is True
+    # 新的現金語意是 property，不改既有 payload/hash 欄位。
+    assert "cash_settlement_cost" not in loaded[0].to_dict()
 
 
 def test_partial_fill_requires_partial_quantity_and_gap() -> None:

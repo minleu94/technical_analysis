@@ -339,7 +339,16 @@ def _project_lane_metrics(lane: str, payload: Mapping[str, Any]) -> dict[str, An
     elif lane == "formal_ml":
         readiness = details.get("readiness")
         if isinstance(readiness, Mapping):
-            for key in ("ready_input_count", "input_count"):
+            for key in (
+                "ready_input_count",
+                "machine_verified_input_count",
+                "machine_candidate_input_count",
+                "formal_consumer_compatible_count",
+                "missing_input_count",
+                "unknown_input_count",
+                "invalid_input_count",
+                "input_count",
+            ):
                 _copy_nonnegative_int(readiness, key, metrics)
             _copy_short_status(readiness, "ready_input_ratio", metrics)
             _copy_short_status(readiness, "status", metrics, "readiness_status")

@@ -144,6 +144,18 @@ class PaperTradeFill:
         return (self.commission + self.tax + self.slippage_cost).quantize(MONEY_QUANTUM)
 
     @property
+    def cash_settlement_cost(self) -> Decimal:
+        """回傳會改變本筆成交現金結算的費用。
+
+        ``fill_price`` 已包含模型化 tick 滑價，因此 gross 已反映該價格差異。
+        ``slippage_cost`` 保留在 ``total_cost`` 作為歸因指標，投影現金時不能
+        再扣一次。本 property 不輸出至 :meth:`to_dict`，讓歷史 ledger payload
+        與 hash 維持位元相容。
+        """
+
+        return (self.commission + self.tax).quantize(MONEY_QUANTUM)
+
+    @property
     def gross_amount(self) -> Decimal:
         if self.fill_price is None:
             return Decimal("0.00")

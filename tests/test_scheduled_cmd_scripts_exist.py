@@ -8,6 +8,9 @@ SCHEDULED_DIR = ROOT / "scripts" / "scheduled"
 
 
 REQUIRED_CMD_FILES = (
+    "run_paper_execution_daily.cmd",
+    "run_paper_execution_daily_isolated.cmd",
+    "run_paper_execution_daily_isolated.py",
     "run_daily_data_update_quick.cmd",
     "run_daily_data_update_quick.py",
     "run_daily_data_freshness_check.cmd",
@@ -24,6 +27,10 @@ REQUIRED_CMD_FILES = (
     "run_decision_evidence_capture.cmd",
     "run_scheduled_decision_evidence_capture.py",
     "run_paper_portfolio_daily.cmd",
+    "run_formal_input_producer_daily.cmd",
+    "run_formal_input_producer_daily.py",
+    "register_formal_input_producer_task.cmd",
+    "register_paper_execution_task.cmd",
     "run_evidence_working_copy_smoke.cmd",
     "register_baldr_scheduled_tasks.cmd",
     "unregister_baldr_scheduled_tasks.cmd",

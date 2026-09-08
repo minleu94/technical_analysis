@@ -674,10 +674,13 @@ def _reconcile_cash(
     cash_delta = Decimal("0.00")
     for fill in fills:
         gross = fill.gross_amount
+        # gross 已含 fill_price 的 tick slippage；total_cost 的 slippage
+        # 僅作歸因，現金結算只扣 commission + tax。
+        settlement_cost = fill.cash_settlement_cost
         if fill.side == "buy":
-            cash_delta -= gross + fill.total_cost
+            cash_delta -= gross + settlement_cost
         elif fill.side == "sell":
-            cash_delta += gross - fill.total_cost
+            cash_delta += gross - settlement_cost
     cash_delta = cash_delta.quantize(Decimal("0.01"))
     expected_end = (start_cash + cash_delta).quantize(Decimal("0.01"))
     observed_delta = (end_cash - start_cash).quantize(Decimal("0.01"))

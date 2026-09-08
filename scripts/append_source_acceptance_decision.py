@@ -9,6 +9,12 @@ broker 權限。對 ``accepted``／``limited`` 決議，必須提供已通過
 必須能在 dossier evidence artifact ids 中找到，避免直接用手寫 JSON 升級來源。
 外部 ``source-acceptance-owner-review-decision.v1`` 只允許以
 ``deferred``／``rejected``／``disabled`` 形式讀取；其 attestation 不會被推導成 evidence IDs。
+
+另提供 ``--machine-evidence`` 唯讀入口：只有通過固定的
+``source-acceptance-machine-evidence.v1`` 結構、PIT／可得日／覆蓋率／品質／
+隔離／成熟度與 canonical hash 檢查，才會建立 machine actor 的
+``limited`` research-shadow 決議。此入口不需要 named reviewer，但不會把
+machine evidence 推導成正式、production、scheduler、broker 或投資有效性。
 """
 
 from __future__ import annotations
@@ -26,11 +32,15 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from data_module.p0_source_contract_registry import P0_SOURCE_IDS
 from data_module.source_acceptance_decision_registry import (
+    MACHINE_DECISION_ACTOR,
     SourceAcceptanceDecisionRevision,
     SourceAcceptanceDecisionRegistry,
     parse_source_acceptance_decision_revision,
 )
-from data_module.source_acceptance_governance import SourceAcceptanceDossier
+from data_module.source_acceptance_governance import (
+    SourceAcceptanceDossier,
+    SourceAcceptanceGovernance,
+)
 from scripts.inspect_p0_intake_readiness import inspect_p0_intake
 
 
@@ -52,15 +62,70 @@ def load_decision(path: Path) -> SourceAcceptanceDecisionRevision:
     return revision
 
 
+def build_machine_decision_from_evidence(
+    payload: Mapping[str, Any],
+    *,
+    evidence_root: Path | None = None,
+) -> SourceAcceptanceDecisionRevision:
+    """由 machine evidence 封套建立一筆受限決議，不開啟 registry。"""
+
+    review = SourceAcceptanceGovernance().evaluate_machine_evidence(
+        payload,
+        evidence_root=evidence_root,
+    )
+    if review.decision is None:
+        raise ValueError(review.reason)
+    return review.decision
+
+
+def load_machine_decision(path: Path) -> SourceAcceptanceDecisionRevision:
+    """讀取、hash 驗證並建立 machine evidence 決議。"""
+
+    return build_machine_decision_from_evidence(
+        _read_json_object(path), evidence_root=path.parent
+    )
+
+
 def inspect_decision_input(
     revision: SourceAcceptanceDecisionRevision,
     *,
     intake_path: Path | None = None,
+    machine_evidence_path: Path | None = None,
 ) -> dict[str, Any]:
     """建立不套用決議的 preview payload。"""
 
+    if intake_path is not None and machine_evidence_path is not None:
+        raise ValueError("--intake and --machine-evidence cannot be combined")
+    machine_binding: dict[str, Any] | None = None
+    is_machine_decision = revision.decision_actor == MACHINE_DECISION_ACTOR
+    if is_machine_decision:
+        if machine_evidence_path is None:
+            raise ValueError(
+                "machine evidence decision requires --machine-evidence for evidence binding"
+            )
+        machine_payload = _read_json_object(machine_evidence_path)
+        machine_review = SourceAcceptanceGovernance().evaluate_machine_evidence(
+            machine_payload,
+            evidence_root=machine_evidence_path.parent,
+        )
+        if machine_review.decision is None:
+            raise ValueError(machine_review.reason)
+        if machine_review.decision.content_hash != revision.content_hash:
+            raise ValueError("machine evidence decision content hash does not match revision")
+        if machine_review.evidence_content_hash != revision.decision_evidence_hash:
+            raise ValueError("machine evidence bundle hash does not match revision")
+        machine_binding = {
+            "path": str(machine_evidence_path.resolve()),
+            "evidence_content_hash": machine_review.evidence_content_hash,
+            "policy_version": machine_review.policy_version,
+            "review_status": machine_review.status,
+            "reason": machine_review.reason,
+        }
+    elif machine_evidence_path is not None:
+        raise ValueError("--machine-evidence can only bind a machine evidence decision")
+
     intake_binding: dict[str, Any] | None = None
-    if revision.status in _APPLYING_STATUSES and intake_path is None:
+    if revision.status in _APPLYING_STATUSES and intake_path is None and not is_machine_decision:
         raise ValueError(
             f"{revision.status} decision requires --intake to bind owner-reviewed evidence"
         )
@@ -97,6 +162,7 @@ def inspect_decision_input(
         "decision": revision.to_dict(),
         "decision_content_hash": revision.content_hash,
         "intake_binding": intake_binding,
+        "machine_evidence_binding": machine_binding,
         "registry_append_confirmed": False,
         "safety_flags": {
             "read_only": True,
@@ -114,10 +180,15 @@ def append_decision(
     *,
     registry_path: Path,
     intake_path: Path | None = None,
+    machine_evidence_path: Path | None = None,
 ) -> dict[str, Any]:
     """在所有 preview 檢查通過後，append 一筆 decision revision。"""
 
-    preview = inspect_decision_input(revision, intake_path=intake_path)
+    preview = inspect_decision_input(
+        revision,
+        intake_path=intake_path,
+        machine_evidence_path=machine_evidence_path,
+    )
     _require_registry_path(registry_path)
     registry = SourceAcceptanceDecisionRegistry(registry_path)
     before = len(registry.list_revisions(revision.source_id))
@@ -169,13 +240,32 @@ def render_markdown(payload: Mapping[str, Any]) -> str:
                 "",
             ]
         )
+    machine_binding = payload.get("machine_evidence_binding")
+    if isinstance(machine_binding, Mapping):
+        lines.extend(
+            [
+                "## Machine evidence binding",
+                "",
+                f"- Evidence hash: `{machine_binding.get('evidence_content_hash', 'unknown')}`",
+                f"- Policy version: `{machine_binding.get('policy_version', 'unknown')}`",
+                f"- Review status: `{machine_binding.get('review_status', 'unknown')}`",
+                f"- Reason: {machine_binding.get('reason', 'unknown')}",
+                "",
+            ]
+        )
     return "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--decision", type=Path, required=True, help="decision revision JSON")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--decision", type=Path, help="decision revision JSON")
+    mode.add_argument(
+        "--machine-evidence",
+        type=Path,
+        help="source-acceptance-machine-evidence.v1 JSON；建立受限 machine 決議",
+    )
     parser.add_argument(
         "--intake",
         type=Path,
@@ -192,7 +282,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        revision = load_decision(args.decision)
+        if args.machine_evidence is not None:
+            if args.intake is not None:
+                raise ValueError("--machine-evidence cannot be combined with --intake")
+            revision = load_machine_decision(args.machine_evidence)
+        else:
+            assert args.decision is not None
+            revision = load_decision(args.decision)
         if args.confirm_append:
             if args.registry is None:
                 raise ValueError("--confirm-append requires --registry")
@@ -200,9 +296,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 revision,
                 registry_path=args.registry,
                 intake_path=args.intake,
+                machine_evidence_path=args.machine_evidence,
             )
         else:
-            result = inspect_decision_input(revision, intake_path=args.intake)
+            result = inspect_decision_input(
+                revision,
+                intake_path=args.intake,
+                machine_evidence_path=args.machine_evidence,
+            )
         rendered = (
             json.dumps(result, ensure_ascii=False, indent=2) + "\n"
             if args.format == "json"

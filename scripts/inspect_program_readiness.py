@@ -440,11 +440,24 @@ def _inspect_formal_ml_lane(
             details={"error_type": type(error).__name__, "error": str(error)},
         )
 
-    blockers = [
-        f"formal_input_not_ready:{item.get('input')}"
-        for item in payload.get("inputs", [])
-        if isinstance(item, Mapping) and item.get("state") != "ready"
-    ]
+    blockers: list[str] = []
+    for item in payload.get("inputs", []):
+        if not isinstance(item, Mapping) or item.get("state") == "ready":
+            continue
+        input_name = item.get("input")
+        state = item.get("state")
+        if state == "machine_verified":
+            blockers.append(
+                f"formal_input_machine_candidate:{input_name}"
+            )
+        elif state == "missing":
+            blockers.append(f"formal_input_source_missing:{input_name}")
+        elif state == "invalid":
+            blockers.append(f"formal_input_evidence_invalid:{input_name}")
+        elif state == "unknown":
+            blockers.append(f"formal_input_evidence_unknown:{input_name}")
+        else:
+            blockers.append(f"formal_input_evidence_unclassified:{input_name}")
     if payload.get("formal_oos_allowed") is not True:
         blockers.append("formal_oos_disabled")
     ready_count = _as_int(payload.get("ready_input_count"), default=0)

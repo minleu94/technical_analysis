@@ -32,6 +32,12 @@ SAME_DAY_PREOPEN_OWNER_OVERRIDE_SCHEMA_VERSION = (
 SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON = (
     "owner_explicit_same_day_preopen_activation"
 )
+# 由既有 owner policy 與當日唯讀來源重新驗證出的 machine clock，不宣稱
+# 有新的人工簽名；它只允許在 PIT cutoff 前建立 candidate clock，仍維持
+# formal_oos／promotion／broker 全部關閉。
+SAME_DAY_PREOPEN_MACHINE_REVALIDATION_REASON = (
+    "machine_revalidated_same_day_preopen_activation"
+)
 TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 SHA256_PREFIX = "sha256:"
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -563,10 +569,20 @@ def _validate_activation_timing_override(
         raise ProspectiveFormalClockError(
             "activation_timing_override schema_version is invalid"
         )
-    _required_text(value.get("owner_override_id"), "owner_override_id")
-    if value.get("reason_code") != SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON:
+    override_id = _required_text(value.get("owner_override_id"), "owner_override_id")
+    reason_code = value.get("reason_code")
+    if reason_code not in {
+        SAME_DAY_PREOPEN_OWNER_OVERRIDE_REASON,
+        SAME_DAY_PREOPEN_MACHINE_REVALIDATION_REASON,
+    }:
         raise ProspectiveFormalClockError(
             "activation_timing_override reason_code is invalid"
+        )
+    if reason_code == SAME_DAY_PREOPEN_MACHINE_REVALIDATION_REASON and not override_id.startswith(
+        "machine-rule-source:"
+    ):
+        raise ProspectiveFormalClockError(
+            "machine activation timing override identity is invalid"
         )
     if (
         _parse_date(

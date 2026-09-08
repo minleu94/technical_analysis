@@ -12,13 +12,27 @@ param(
     [string]$MLPromotionAuthorityAt = "05:18",
     [string]$MLAllocationAt = "05:20",
     [string]$DecisionEvidenceAt = "05:25",
-    [string]$PaperPortfolioAt = "05:28",
+    # Pacific 16:30 在 PDT／PST 分別對應台北次日 07:30／08:30；adapter
+    # 以台北真實 08:30 cutoff guard 等待後才讀取來源，避免 PST 的 09:30
+    # 開盤後時間被誤稱為盤前，也避免 DST 漂移。
+    [string]$PaperPortfolioAt = "16:30",
+    [string]$PaperExecutionAt = "00:05",
+    # 21:25 Pacific maps to 12:25 Taipei in PDT and 13:25 in PST; both are
+    # inside the 09:00-13:30 Taiwan Rule capture window.
+    [string]$FormalInputAt = "21:25",
     [ValidateSet('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')]
     [string]$WeeklyDay = "Sunday",
     [string]$WeeklyAt = "18:00"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($Mode -ne 'DryRun') {
+    $localTimeZone = [TimeZoneInfo]::Local.Id
+    if ($localTimeZone -ne 'Pacific Standard Time') {
+        throw "Registration blocked: Windows timezone must be Pacific Standard Time; detected '$localTimeZone'."
+    }
+}
 
 function New-CmdAction([string]$ScriptPath) {
     $arguments = "/c `"$ScriptPath`""
@@ -76,9 +90,13 @@ $mlAllocationScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_allocation_c
 $mlPromotionAuthorityScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_promotion_authority.cmd"
 $decisionEvidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_decision_evidence_capture.cmd"
 $paperPortfolioScript = Join-Path $RepoRoot "scripts\scheduled\run_paper_portfolio_daily.cmd"
+$paperPortfolioRegistrationScript = Join-Path $RepoRoot "scripts\scheduled\register_paper_portfolio_task.cmd"
+$paperExecutionScript = Join-Path $RepoRoot "scripts\scheduled\run_paper_execution_daily_isolated.cmd"
+$formalInputScript = Join-Path $RepoRoot "scripts\scheduled\run_formal_input_producer_daily.cmd"
 $weeklyScript = Join-Path $RepoRoot "scripts\scheduled\run_v2_2_weekly_collection.cmd"
 
 $dailyTasks = @(
+    (New-DailyTaskSpec "baldr-paper-execution-eod-replay-daily" "Delayed EOD Paper execution candidate after the source availability cutoff." $paperExecutionScript $PaperExecutionAt),
     (New-DailyTaskSpec "baldr-data-update-quick-daily" "Non-UI baldr quick market data update." $updateScript $UpdateAt),
     (New-DailyTaskSpec "baldr-official-market-events-daily" "Append-only official market event publication." $officialEventsScript $OfficialEventsAt),
     (New-DailyTaskSpec "baldr-data-freshness-check-daily" "Read-only baldr data freshness check." $freshnessScript $FreshnessAt),
@@ -90,7 +108,8 @@ $dailyTasks = @(
     (New-DailyTaskSpec "baldr-ml-promotion-authority-daily" "Independent DPAPI-protected machine promotion authority for the next decision session." $mlPromotionAuthorityScript $MLPromotionAuthorityAt),
     (New-DailyTaskSpec "baldr-ml-allocation-copilot-daily" "Fail-closed baldr ML allocation co-pilot promotion evaluation." $mlAllocationScript $MLAllocationAt),
     (New-DailyTaskSpec "baldr-decision-evidence-capture-daily" "Idempotent Decision Desk snapshot and evidence event capture." $decisionEvidenceScript $DecisionEvidenceAt),
-    (New-DailyTaskSpec "baldr-paper-portfolio-daily" "Strict T-1 append-only Paper Portfolio daily valuation." $paperPortfolioScript $PaperPortfolioAt)
+    (New-DailyTaskSpec "baldr-paper-portfolio-daily" "Pacific 16:30 wake-up; Taipei 08:30 guarded repository-only Paper valuation." $paperPortfolioScript $PaperPortfolioAt),
+    (New-DailyTaskSpec "baldr-formal-input-producer-daily" "Bounded machine Rule, causal Paper ledger, and current PIT input handoff with durable receipts." $formalInputScript $FormalInputAt)
 )
 $weeklyTasks = @(
     (New-WeeklyTaskSpec "baldr-v2-2-weekly-collection" "Append-only weekly evidence collection with automatic maturity revalidation." $weeklyScript $WeeklyDay $WeeklyAt)
@@ -133,6 +152,15 @@ if ($Mode -eq "DryRun") {
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
 
 foreach ($task in $selectedTasks) {
+    if ($task.Name -eq "baldr-paper-portfolio-daily") {
+        # 既有 Paper task 只能由 dedicated /Change 路徑更新 trigger/action；
+        # 它會區分 not-found 與 query error，保留 principal 與其餘 settings。
+        & $paperPortfolioRegistrationScript register
+        if ($LASTEXITCODE -ne 0) {
+            throw "Paper Portfolio dedicated registration failed with exit code $LASTEXITCODE."
+        }
+        continue
+    }
     $action = New-CmdAction $task.ScriptPath
     if ($task.ScheduleType -eq "Daily") {
         $trigger = New-ScheduledTaskTrigger -Daily -At $task.At

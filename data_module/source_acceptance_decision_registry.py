@@ -14,6 +14,9 @@ from typing import Any
 
 DECISION_REVISION_SCHEMA_VERSION = "source-acceptance-decision-revision.v1"
 OWNER_REVIEW_DECISION_SCHEMA_VERSION = "source-acceptance-owner-review-decision.v1"
+MACHINE_DECISION_ACTOR = "machine:evidence_policy"
+MACHINE_DECISION_POLICY_VERSION = "source-acceptance-machine-review.v1"
+MACHINE_ALLOWED_USE_CASES = frozenset({"research_shadow", "diagnostics"})
 _DECISION_COLLECTION_FIELDS = (
     "allowed_use_cases",
     "blockers",
@@ -39,6 +42,12 @@ class SourceAcceptanceDecisionRevision:
     reviewer_role: str
     decided_at: str
     rollback_reference: str
+    # 這些欄位是 v1 payload 的附加資訊；human revision 保留歷史預設值，
+    # machine revision 必須指出政策與產生它的證據封套，不得虛構 reviewer。
+    decision_actor: str = "human"
+    decision_policy_version: str = ""
+    decision_evidence_hash: str = ""
+    decision_reason: str = ""
 
     @property
     def content_hash(self) -> str:
@@ -46,7 +55,7 @@ class SourceAcceptanceDecisionRevision:
         return f"sha256:{sha256(canonical.encode('utf-8')).hexdigest()}"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "schema_version": DECISION_REVISION_SCHEMA_VERSION,
             "source_id": self.source_id,
             "decision_revision_id": self.decision_revision_id,
@@ -62,6 +71,18 @@ class SourceAcceptanceDecisionRevision:
             "decided_at": self.decided_at,
             "rollback_reference": self.rollback_reference,
         }
+        # 保持歷史 human payload 的內容與 hash 不變。machine metadata 只會
+        # 出現在明確標記為 machine actor 的 revision，舊資料因此仍不可變。
+        if self.decision_actor != "human":
+            payload.update(
+                {
+                    "decision_actor": self.decision_actor,
+                    "decision_policy_version": self.decision_policy_version,
+                    "decision_evidence_hash": self.decision_evidence_hash,
+                    "decision_reason": self.decision_reason,
+                }
+            )
+        return payload
 
 
 def parse_source_acceptance_decision_revision(
@@ -308,13 +329,48 @@ def validate_source_acceptance_decision_revision(
         or not revision.decision_revision_id.strip()
     ):
         raise ValueError("source_id and decision_revision_id are required")
-    if (
-        not isinstance(revision.owner_role, str)
-        or not revision.owner_role.strip()
-        or not isinstance(revision.reviewer_role, str)
-        or not revision.reviewer_role.strip()
-    ):
-        raise ValueError("owner_role and reviewer_role are required")
+    if not isinstance(revision.decision_actor, str) or not revision.decision_actor.strip():
+        raise ValueError("decision_actor is required")
+    if not isinstance(revision.decision_policy_version, str):
+        raise TypeError("decision_policy_version must be a string")
+    if not isinstance(revision.decision_evidence_hash, str):
+        raise TypeError("decision_evidence_hash must be a string")
+    if not isinstance(revision.decision_reason, str):
+        raise TypeError("decision_reason must be a string")
+    if revision.decision_actor == "human":
+        if (
+            not isinstance(revision.owner_role, str)
+            or not revision.owner_role.strip()
+            or not isinstance(revision.reviewer_role, str)
+            or not revision.reviewer_role.strip()
+        ):
+            raise ValueError("owner_role and reviewer_role are required")
+        if any(
+            value.strip()
+            for value in (
+                revision.decision_policy_version,
+                revision.decision_evidence_hash,
+                revision.decision_reason,
+            )
+        ):
+            raise ValueError("human decisions must not carry machine evidence metadata")
+    elif revision.decision_actor == MACHINE_DECISION_ACTOR:
+        if revision.status != "limited":
+            raise ValueError("machine evidence decisions must use limited status")
+        if revision.owner_role != MACHINE_DECISION_ACTOR:
+            raise ValueError("machine evidence owner_role must identify the machine actor")
+        if not isinstance(revision.reviewer_role, str):
+            raise TypeError("reviewer_role must be a string")
+        if revision.reviewer_role.strip():
+            raise ValueError("machine evidence decisions must not invent a human reviewer")
+        if revision.decision_policy_version != MACHINE_DECISION_POLICY_VERSION:
+            raise ValueError("unsupported machine evidence policy version")
+        if not _is_sha256_hash(revision.decision_evidence_hash):
+            raise ValueError("machine evidence decision hash must be a SHA-256 digest")
+        if not revision.decision_reason.strip():
+            raise ValueError("machine evidence decision reason is required")
+    else:
+        raise ValueError(f"unsupported decision actor: {revision.decision_actor}")
     if not isinstance(revision.rollback_reference, str) or not revision.rollback_reference.strip():
         raise ValueError("rollback_reference is required")
     if not isinstance(revision.decided_at, str) or not revision.decided_at.strip():
@@ -375,9 +431,27 @@ def validate_source_acceptance_decision_revision(
         raise ValueError(
             "source acceptance registry cannot authorize formal or production use cases"
         )
+    if revision.decision_actor == MACHINE_DECISION_ACTOR:
+        if not set(revision.allowed_use_cases).issubset(MACHINE_ALLOWED_USE_CASES):
+            raise ValueError(
+                "machine evidence decisions are limited to research_shadow or diagnostics"
+            )
 
 
-# Kept as a private compatibility alias for older in-module callers.
+def _is_sha256_hash(value: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    digest = value.removeprefix("sha256:")
+    if len(digest) != 64:
+        return False
+    try:
+        int(digest, 16)
+    except ValueError:
+        return False
+    return True
+
+
+# 保留為舊模組內 caller 使用的私有相容別名。
 _validate_revision = validate_source_acceptance_decision_revision
 
 
@@ -397,4 +471,8 @@ def _from_payload(payload: str) -> SourceAcceptanceDecisionRevision:
         reviewer_role=values["reviewer_role"],
         decided_at=values["decided_at"],
         rollback_reference=values["rollback_reference"],
+        decision_actor=values.get("decision_actor", "human"),
+        decision_policy_version=values.get("decision_policy_version", ""),
+        decision_evidence_hash=values.get("decision_evidence_hash", ""),
+        decision_reason=values.get("decision_reason", ""),
     )

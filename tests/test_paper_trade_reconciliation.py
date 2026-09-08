@@ -12,6 +12,7 @@ from app_module.paper_portfolio_snapshot_repository import (
 from app_module.paper_trade_ledger import PaperTradeFill, PaperTradeLedgerRepository
 from app_module.paper_trade_reconciliation import (
     PaperTradeReconciliationService,
+    _reconcile_cash,
     render_markdown,
 )
 from scripts.inspect_paper_trade_reconciliation import main
@@ -148,7 +149,9 @@ def test_strict_cash_reconciliation_blocks_mismatched_snapshot(tmp_path: Path) -
 def test_strict_cash_reconciliation_can_match_exact_fill_cash_delta(tmp_path: Path) -> None:
     state_db = tmp_path / "paper_portfolio.sqlite"
     fills_csv = tmp_path / "fills.csv"
-    _snapshot_db(state_db, end_cash="87975.40")
+    # gross 已包含 fill_price 的滑價；現金只扣 commission + tax，
+    # 因此 90,000 - 2,001.60 - 15.00 - 0.00 = 87,983.40。
+    _snapshot_db(state_db, end_cash="87983.40")
     _write_csv(fills_csv)
 
     result = PaperTradeReconciliationService(state_db_path=state_db).inspect(
@@ -162,6 +165,68 @@ def test_strict_cash_reconciliation_can_match_exact_fill_cash_delta(tmp_path: Pa
     assert result.cash_reconciliation is not None
     assert result.cash_reconciliation.status == "matched"
     assert result.cash_reconciliation.difference == Decimal("0.00")
+
+
+def test_cash_reconciliation_charges_fees_once_and_keeps_slippage_attribution() -> None:
+    """固定 15bp（最低 20）／賣出稅 30bp 的兩筆手算結算。"""
+
+    buy = PaperTradeFill(
+        fill_id="buy-hand-calc",
+        order_id="order-buy-hand-calc",
+        portfolio_id="paper-main",
+        event_date="2026-08-27",
+        stock_code="2317",
+        side="buy",
+        requested_quantity=1000,
+        filled_quantity=1000,
+        reference_price=Decimal("10.00"),
+        fill_price=Decimal("10.05"),
+        commission=Decimal("20.00"),
+        tax=Decimal("0.00"),
+        slippage_cost=Decimal("50.00"),
+        turnover_bp=1000,
+        execution_gap_bp=50,
+        status="filled",
+        source_event_id="event-buy-hand-calc",
+    )
+    sell = PaperTradeFill(
+        fill_id="sell-hand-calc",
+        order_id="order-sell-hand-calc",
+        portfolio_id="paper-main",
+        event_date="2026-08-27",
+        stock_code="2330",
+        side="sell",
+        requested_quantity=1000,
+        filled_quantity=1000,
+        reference_price=Decimal("10.00"),
+        fill_price=Decimal("9.99"),
+        commission=Decimal("20.00"),
+        tax=Decimal("29.97"),
+        slippage_cost=Decimal("10.00"),
+        turnover_bp=1000,
+        execution_gap_bp=-10,
+        status="filled",
+        source_event_id="event-sell-hand-calc",
+    )
+
+    # 10.00→10.05 buy：gross=10,050，15bp 手續費低於最低 20；
+    # 10.00→9.99 sell：gross=9,990，手續費=20、30bp 稅=29.97。
+    # 100,000 - (10,050 + 20) + (9,990 - 20 - 29.97) = 99,870.03.
+    result = _reconcile_cash(
+        start_cash=Decimal("100000.00"),
+        end_cash=Decimal("99870.03"),
+        fills=(buy, sell),
+    )
+
+    assert buy.gross_amount == Decimal("10050.00")
+    assert sell.gross_amount == Decimal("9990.00")
+    assert buy.total_cost == Decimal("70.00")
+    assert sell.total_cost == Decimal("59.97")
+    assert buy.cash_settlement_cost == Decimal("20.00")
+    assert sell.cash_settlement_cost == Decimal("49.97")
+    assert result.status == "matched"
+    assert result.fill_cash_delta == Decimal("-129.97")
+    assert result.expected_end_cash == Decimal("99870.03")
 
 
 def test_invalid_input_and_existing_fill_collision_fail_closed(tmp_path: Path) -> None:

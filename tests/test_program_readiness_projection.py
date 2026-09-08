@@ -207,10 +207,64 @@ def test_projection_keeps_bounded_lane_progress_without_nested_details(tmp_path:
     assert "formal credit=未授權" in evidence_progress
 
     blockers = format_program_readiness_blockers(
-        ["source_acceptance_decision_missing", "formal_input_not_ready:pit_sector_membership"]
+        ["source_acceptance_decision_missing", "formal_input_source_missing:pit_sector_membership"]
     )
     assert "尚未提供來源接受決議（source_acceptance_decision_missing）" in blockers
-    assert "Formal 輸入未就緒：pit_sector_membership" in blockers
+    assert "Formal 來源資料缺件：pit_sector_membership" in blockers
+
+
+def test_formal_progress_explains_evidence_states_without_named_reviewer_gate(
+    tmp_path: Path,
+):
+    payload = _payload()
+    payload["workstreams"]["formal_ml"] = {
+        "status": "action_required",
+        "blockers": [
+            "formal_input_source_missing:causal_non_cash_portfolio_ledger",
+            "formal_input_source_missing:formal_rule_champion_snapshot_history",
+            "formal_input_machine_candidate:pit_sector_membership",
+        ],
+        "next_actions": ["補齊正式來源 evidence"],
+        "external_input_required": True,
+        "details": {
+            "readiness": {
+                "status": "waiting_for_formal_inputs",
+                "ready_input_count": 0,
+                "machine_verified_input_count": 1,
+                "machine_candidate_input_count": 1,
+                "formal_consumer_compatible_count": 0,
+                "missing_input_count": 2,
+                "unknown_input_count": 0,
+                "invalid_input_count": 0,
+                "input_count": 3,
+                "ready_input_ratio": "0/3",
+            }
+        },
+    }
+    path = tmp_path / "program-readiness-formal.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    formal = load_program_readiness(path)["workstreams"]["formal_ml"]
+    assert formal["metrics"] == {
+        "ready_input_count": 0,
+        "machine_verified_input_count": 1,
+        "machine_candidate_input_count": 1,
+        "formal_consumer_compatible_count": 0,
+        "missing_input_count": 2,
+        "unknown_input_count": 0,
+        "invalid_input_count": 0,
+        "input_count": 3,
+        "ready_input_ratio": "0/3",
+        "readiness_status": "waiting_for_formal_inputs",
+    }
+    progress = format_program_readiness_lane_progress("formal_ml", formal)
+    assert "formal consumer verified 0/3" in progress
+    assert "機器候選 1" in progress
+    assert "來源缺件 2" in progress
+    blockers = format_program_readiness_blockers(formal["blockers"])
+    assert "Formal 來源資料缺件：causal_non_cash_portfolio_ledger" in blockers
+    assert "Formal 僅有機器候選：pit_sector_membership" in blockers
+    assert "具名" not in blockers
 
 
 def test_projection_surfaces_performance_owner_packet_review_state(tmp_path: Path):

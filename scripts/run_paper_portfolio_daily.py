@@ -1,8 +1,11 @@
-"""以嚴格 T-1 行情更新 append-only Paper Portfolio 每日估值。
+"""以嚴格 T-1 行情更新 append-only Paper Portfolio 每日 preopen 估值。
 
 本工具只寫 ``OUTPUT_ROOT/paper_portfolio`` 的研究帳本與排程狀態；正式行情
-SQLite 固定以 ``mode=ro`` / ``query_only`` 開啟。它不產生調倉、不改 Advice，
-也不具任何券商執行能力。
+SQLite 固定以 ``mode=ro`` / ``query_only`` 開啟。snapshot 代表台北 08:30
+preopen 的 T-1 mark-to-market 狀態；T+1 session-open Paper transition 由
+獨立 producer／ledger 提供。下一個 preopen 會以 `--ledger-db` 唯讀投影已 append
+的 research-only transition，再建立新的 snapshot。它不產生調倉、不改 Advice，也
+不具任何券商執行能力。
 """
 
 from __future__ import annotations
@@ -10,6 +13,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, time, timedelta
 from decimal import Decimal, ROUND_DOWN
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -32,6 +36,7 @@ from app_module.paper_portfolio_snapshot_repository import (  # noqa: E402
     PaperPortfolioSnapshot,
     PaperPortfolioSnapshotRepository,
 )
+from app_module.paper_trade_ledger import PaperTradeFill  # noqa: E402
 from data_module.config import TWStockConfig  # noqa: E402
 from data_module.official_trading_calendar import (  # noqa: E402
     OfficialTradingCalendar,
@@ -42,6 +47,14 @@ from runtime.console_encoding import configure_utf8_console  # noqa: E402
 TAIPEI = ZoneInfo("Asia/Taipei")
 PORTFOLIO_ID = "paper-main"
 SCHEMA_VERSION = "paper-portfolio-daily-status.v1"
+SNAPSHOT_SEMANTICS = "preopen_t_minus_one_mark_to_market"
+EXECUTION_TRANSITION_CONTRACT = "t_plus_one_next_official_session_open"
+PAPER_EXECUTION_SOURCE_TYPES = frozenset(
+    {
+        "paper_daily_execution_delayed_eod_replay_v1",
+        "paper_daily_execution_v1",
+    }
+)
 
 
 def _next_decision_at(
@@ -188,6 +201,179 @@ def _latest_prices(
     return tuple(observations)
 
 
+def _project_paper_ledger_transitions(
+    prior: PaperPortfolioSnapshot,
+    *,
+    ledger_db: Path | None,
+    before_date: str,
+) -> tuple[PaperPortfolioSnapshot, tuple[str, ...]]:
+    """把已驗證的 EOD Paper transition 投影到下一個 preopen 起始狀態。
+
+    EOD writer 不回寫當日 preopen snapshot。下一個自然日建立 snapshot 時，
+    才以唯讀 ledger 讀取 ``prior.decision_date <= event_date < before_date``
+    的成交，重算現金與股數；ledger 內容／hash 若在讀取期間變動則 fail closed。
+    """
+
+    if ledger_db is None:
+        return prior, ()
+    resolved = ledger_db.expanduser().resolve()
+    if not resolved.exists():
+        return prior, ()
+    if not resolved.is_file():
+        raise ValueError("paper ledger transition path is not a file")
+    before_hash = _sha256_file(resolved)
+    uri = f"file:{resolved.as_posix()}?mode=ro"
+    required = {
+        "schema_version",
+        "fill_id",
+        "order_id",
+        "portfolio_id",
+        "event_date",
+        "stock_code",
+        "side",
+        "requested_quantity",
+        "filled_quantity",
+        "reference_price",
+        "fill_price",
+        "commission",
+        "tax",
+        "slippage_cost",
+        "turnover_bp",
+        "execution_gap_bp",
+        "status",
+        "source_event_id",
+        "override_reason",
+        "source_type",
+        "research_only",
+        "broker_order_allowed",
+        "auto_rebalance_allowed",
+    }
+    try:
+        with sqlite3.connect(uri, uri=True) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+            columns = {
+                str(row[1])
+                for row in connection.execute('PRAGMA table_info("paper_trade_ledger")')
+            }
+            if not required.issubset(columns):
+                raise ValueError("paper trade ledger schema is incomplete")
+            rows = connection.execute(
+                "SELECT * FROM paper_trade_ledger "
+                "WHERE portfolio_id = ? AND event_date >= ? AND event_date < ? "
+                "ORDER BY event_date, fill_id",
+                (prior.portfolio_id, prior.decision_date, before_date),
+            ).fetchall()
+            fills = tuple(_paper_fill_from_row(row) for row in rows)
+    except (OSError, sqlite3.Error, TypeError, ValueError) as error:
+        raise ValueError(
+            f"paper ledger transition read failed:{type(error).__name__}:{error}"
+        ) from error
+    after_hash = _sha256_file(resolved)
+    if before_hash != after_hash:
+        raise ValueError("paper ledger changed during read")
+    if not fills:
+        return prior, ()
+
+    cash = prior.cash.quantize(Decimal("0.01"))
+    quantities = {item.stock_code: item.quantity for item in prior.positions}
+    marks = {item.stock_code: item.mark_price for item in prior.positions}
+    diagnostics: list[str] = []
+    for fill in fills:
+        if fill.source_type not in PAPER_EXECUTION_SOURCE_TYPES:
+            raise ValueError(
+                f"paper ledger transition source is unsupported:{fill.source_type}"
+            )
+        if fill.portfolio_id != prior.portfolio_id:
+            raise ValueError("paper ledger transition portfolio is invalid")
+        if fill.filled_quantity == 0:
+            diagnostics.append(f"paper_ledger_transition_applied:{fill.fill_id}:zero_fill")
+            continue
+        current = quantities.get(fill.stock_code, 0)
+        # fill_price 已含 tick slippage；gross 已反映該價格，現金只再結算
+        # commission + tax。total_cost 仍保留 slippage 歸因，不能重扣。
+        settlement_cost = fill.cash_settlement_cost
+        if fill.side == "buy":
+            quantities[fill.stock_code] = current + fill.filled_quantity
+            cash = (cash - fill.gross_amount - settlement_cost).quantize(Decimal("0.01"))
+        elif fill.side == "sell":
+            if fill.filled_quantity > current:
+                raise ValueError(f"paper ledger sell exceeds holding:{fill.fill_id}")
+            quantities[fill.stock_code] = current - fill.filled_quantity
+            cash = (cash + fill.gross_amount - settlement_cost).quantize(Decimal("0.01"))
+        else:  # pragma: no cover - PaperTradeFill validates this
+            raise ValueError(f"paper ledger side is invalid:{fill.fill_id}")
+        if cash < Decimal("0"):
+            raise ValueError("paper ledger transition cash is negative")
+        if fill.fill_price is not None:
+            marks[fill.stock_code] = fill.fill_price
+        diagnostics.append(f"paper_ledger_transition_applied:{fill.fill_id}")
+
+    positions = tuple(
+        PaperPortfolioPositionSnapshot(
+            stock_code=symbol,
+            quantity=quantity,
+            mark_price=marks[symbol],
+            market_value=(marks[symbol] * quantity).quantize(Decimal("0.01")),
+            weight_bp=0,
+        )
+        for symbol, quantity in sorted(quantities.items())
+        if quantity > 0
+    )
+    total = (cash + sum((item.market_value for item in positions), Decimal("0"))).quantize(
+        Decimal("0.01")
+    )
+    if total <= Decimal("0"):
+        raise ValueError("paper ledger transition total value is invalid")
+    projected = PaperPortfolioSnapshot(
+        snapshot_id=prior.snapshot_id,
+        portfolio_id=prior.portfolio_id,
+        decision_date=prior.decision_date,
+        source_result_id=prior.source_result_id,
+        cash=cash,
+        total_value=total,
+        positions=positions,
+    )
+    return projected, tuple(diagnostics)
+
+
+def _paper_fill_from_row(row: sqlite3.Row) -> PaperTradeFill:
+    return PaperTradeFill(
+        fill_id=str(row["fill_id"]),
+        order_id=str(row["order_id"]),
+        portfolio_id=str(row["portfolio_id"]),
+        event_date=str(row["event_date"]),
+        stock_code=str(row["stock_code"]),
+        side=str(row["side"]),
+        requested_quantity=int(row["requested_quantity"]),
+        filled_quantity=int(row["filled_quantity"]),
+        reference_price=Decimal(str(row["reference_price"])),
+        fill_price=(None if row["fill_price"] is None else Decimal(str(row["fill_price"]))),
+        commission=Decimal(str(row["commission"])),
+        tax=Decimal(str(row["tax"])),
+        slippage_cost=Decimal(str(row["slippage_cost"])),
+        turnover_bp=(None if row["turnover_bp"] is None else int(row["turnover_bp"])),
+        execution_gap_bp=(
+            None if row["execution_gap_bp"] is None else int(row["execution_gap_bp"])
+        ),
+        status=str(row["status"]),
+        source_event_id=str(row["source_event_id"]),
+        override_reason=(None if row["override_reason"] is None else str(row["override_reason"])),
+        source_type=str(row["source_type"]),
+        research_only=bool(row["research_only"]),
+        broker_order_allowed=bool(row["broker_order_allowed"]),
+        auto_rebalance_allowed=bool(row["auto_rebalance_allowed"]),
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def run(
     *,
     baseline_path: Path,
@@ -197,6 +383,7 @@ def run(
     decision_at: datetime,
     calendar: OfficialTradingCalendar | None = None,
     now: datetime | None = None,
+    ledger_db: Path | None = None,
 ) -> dict[str, Any]:
     if decision_at.tzinfo is None or decision_at.utcoffset() is None:
         raise ValueError("decision_at must include timezone")
@@ -222,6 +409,8 @@ def run(
             "decision_at": decision_at.isoformat(timespec="seconds"),
             "decision_date": decision_at.date().isoformat(),
             "checked_at": checked_at.isoformat(timespec="seconds"),
+            "snapshot_semantics": SNAPSHOT_SEMANTICS,
+            "execution_transition_contract": EXECUTION_TRANSITION_CONTRACT,
             "trading_calendar_validated": False,
             "trading_calendar_is_open": None,
             "trading_calendar_reason": "decision_at_not_reached",
@@ -260,6 +449,8 @@ def run(
             ),
             "decision_at": decision_at.isoformat(timespec="seconds"),
             "decision_date": decision_at.date().isoformat(),
+            "snapshot_semantics": SNAPSHOT_SEMANTICS,
+            "execution_transition_contract": EXECUTION_TRANSITION_CONTRACT,
             "trading_calendar_validated": is_trading_day is False,
             "trading_calendar_is_open": is_trading_day,
             "trading_calendar_reason": calendar_reason,
@@ -295,6 +486,7 @@ def run(
     snapshot_id = f"{PORTFOLIO_ID}-{decision_date.replace('-', '')}"
     duplicate = repository.get(snapshot_id)
     diagnostics: tuple[str, ...]
+    ledger_diagnostics: tuple[str, ...] = ()
     if duplicate is not None:
         result_snapshot = duplicate
         diagnostics = ("snapshot_already_exists",)
@@ -302,6 +494,11 @@ def run(
     else:
         if prior.decision_date >= decision_date:
             raise ValueError("decision date must be after the latest paper snapshot")
+        prior, ledger_diagnostics = _project_paper_ledger_transitions(
+            prior,
+            ledger_db=ledger_db,
+            before_date=decision_date,
+        )
         observations = _latest_prices(
             market_db,
             symbols=tuple(row.stock_code for row in prior.positions),
@@ -314,7 +511,7 @@ def run(
         )
         result_snapshot = result.snapshot
         repository.append(result_snapshot)
-        diagnostics = result.diagnostics
+        diagnostics = ledger_diagnostics + result.diagnostics
         appended = True
 
     status: dict[str, Any] = {
@@ -322,6 +519,8 @@ def run(
         "status": "passed",
         "decision_at": decision_at.isoformat(timespec="seconds"),
         "decision_date": decision_date,
+        "snapshot_semantics": SNAPSHOT_SEMANTICS,
+        "execution_transition_contract": EXECUTION_TRANSITION_CONTRACT,
         "trading_calendar_validated": True,
         "trading_calendar_is_open": True,
         "trading_calendar_reason": calendar_reason,
@@ -334,6 +533,12 @@ def run(
         "snapshot_appended": appended,
         "skipped_duplicate": not appended,
         "diagnostics": list(diagnostics),
+        "paper_ledger_db": (
+            None if ledger_db is None else str(ledger_db.expanduser().resolve())
+        ),
+        "paper_ledger_transitions_applied": sum(
+            item.startswith("paper_ledger_transition_applied:") for item in diagnostics
+        ),
         "state_db": str(state_db.resolve()),
         "market_db_mode": "ro/query_only",
         "writes_market_db": False,
@@ -387,6 +592,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--state-db", type=Path)
     parser.add_argument("--market-db", type=Path)
+    parser.add_argument(
+        "--ledger-db",
+        type=Path,
+        help="已 append-only Paper fill ledger；只讀投影至下一個 preopen snapshot",
+    )
     parser.add_argument("--output-root", type=Path)
     parser.add_argument("--decision-at")
     args = parser.parse_args(argv)
@@ -399,6 +609,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline = args.baseline or output_root / "paper_portfolio" / "baseline_20260712.json"
     state_db = args.state_db or output_root / "paper_portfolio" / "paper_portfolio.sqlite"
     market_db = args.market_db or config.db_file
+    ledger_db = args.ledger_db or (
+        Path(os.environ["PAPER_EXECUTION_LEDGER_DB"])
+        if os.environ.get("PAPER_EXECUTION_LEDGER_DB")
+        else output_root / "paper_portfolio" / "paper_trade_ledger.sqlite"
+    )
     try:
         payload = run(
             baseline_path=baseline,
@@ -406,6 +621,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             market_db=market_db,
             output_root=output_root,
             decision_at=_latest_reached_decision_at(args.decision_at),
+            ledger_db=ledger_db,
         )
     except Exception as exc:
         failed = {

@@ -223,7 +223,11 @@ def resolve_mops_numeric_pit_source_mapping(
     if num_id not in {"mops.t163sb06.financial_ratio", "mops.financial_statement.raw"}:
         blockers.append("unmapped_numeric_source_id")
 
-    if avail_id not in {"mops.document_listing.statement_publication", "mops.t57sb01.statement_publication"}:
+    if avail_id not in {
+        "mops.document_listing.statement_publication",
+        "mops.t57sb01.statement_publication",
+        "mops.ezsearch.statement_publication",
+    }:
         blockers.append("unmapped_availability_source_id")
 
     governance_source_id = "pit.quarterly_financials" if not blockers else None

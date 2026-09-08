@@ -21,6 +21,7 @@ def test_confirm_is_not_embedded_in_general_scheduled_cmd_or_ps1_wrappers() -> N
         assert "--confirm" not in lowered or name in {
             "run_evidence_working_copy_smoke.ps1",
             "run_evidence_working_copy_smoke.cmd",
+            "run_paper_execution_daily.cmd",
         }
         assert "--allow-production-db-confirm" not in lowered
     readme = (SCHEDULED_DIR / "README.md").read_text(encoding="utf-8").lower()
@@ -43,3 +44,14 @@ def test_general_daily_tasks_remain_read_only_or_dry_run() -> None:
     assert "mode=ro" in freshness_probe_text
     assert "update_daily" not in freshness_probe_text
     assert "sync_source_to_sqlite" not in freshness_probe_text
+
+
+def test_paper_eod_wrapper_only_appends_research_ledger_with_explicit_opt_out() -> None:
+    text = (SCHEDULED_DIR / "run_paper_execution_daily.cmd").read_text(encoding="utf-8").lower()
+
+    assert "--recommendation-root" in text
+    assert "--receipt-root" in text
+    assert "--confirm-append-paper-ledger" in text
+    assert "paper_execution_append" in text
+    assert "paper_execution_append=0" in text
+    assert "paper_execution_ledger_db" in text

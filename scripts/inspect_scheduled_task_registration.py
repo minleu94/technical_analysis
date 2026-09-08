@@ -23,6 +23,7 @@ DEFAULT_TIMEOUT_SECONDS = 15
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_TASKS: tuple[dict[str, str], ...] = (
+    {"name": "baldr-paper-execution-eod-replay-daily", "schedule": "DAILY 00:05", "required": "true"},
     {"name": "baldr-data-update-quick-daily", "schedule": "DAILY 04:20", "required": "true"},
     {"name": "baldr-official-market-events-daily", "schedule": "DAILY 04:50", "required": "true"},
     {"name": "baldr-data-freshness-check-daily", "schedule": "DAILY 05:00", "required": "true"},
@@ -34,11 +35,15 @@ EXPECTED_TASKS: tuple[dict[str, str], ...] = (
     {"name": "baldr-ml-allocation-copilot-daily", "schedule": "DAILY 05:20", "required": "true"},
     {"name": "baldr-decision-evidence-capture-daily", "schedule": "DAILY 05:25", "required": "true"},
     {"name": "baldr-paper-portfolio-daily", "schedule": "DAILY 05:28", "required": "true"},
+    {"name": "baldr-pit-sector-membership-preopen-capture-daily", "schedule": "DAILY 16:00", "required": "true"},
+    {"name": "baldr-formal-pit-sidecar-postcutoff-daily", "schedule": "DAILY 18:00", "required": "true"},
+    {"name": "baldr-formal-input-producer-daily", "schedule": "DAILY 21:25", "required": "true"},
     {"name": "baldr-ml-direct-chain-maintainer", "schedule": "DAILY 05:30", "required": "true"},
     {"name": "baldr-v2-2-weekly-collection", "schedule": "WEEKLY SUN 18:00", "required": "true"},
 )
 
 TASK_WRAPPER_PATHS: dict[str, str] = {
+    "baldr-paper-execution-eod-replay-daily": "scripts/scheduled/run_paper_execution_daily_isolated.cmd",
     "baldr-data-update-quick-daily": "scripts/scheduled/run_daily_data_update_quick.cmd",
     "baldr-official-market-events-daily": "scripts/scheduled/run_official_market_event_backfill.cmd",
     "baldr-data-freshness-check-daily": "scripts/scheduled/run_daily_data_freshness_check.cmd",
@@ -50,6 +55,9 @@ TASK_WRAPPER_PATHS: dict[str, str] = {
     "baldr-ml-allocation-copilot-daily": "scripts/scheduled/run_ml_allocation_copilot.cmd",
     "baldr-decision-evidence-capture-daily": "scripts/scheduled/run_decision_evidence_capture.cmd",
     "baldr-paper-portfolio-daily": "scripts/scheduled/run_paper_portfolio_daily.cmd",
+    "baldr-pit-sector-membership-preopen-capture-daily": "scripts/scheduled/run_pit_sector_membership_preopen_capture.cmd",
+    "baldr-formal-pit-sidecar-postcutoff-daily": "scripts/scheduled/run_formal_pit_sidecar_postcutoff.cmd",
+    "baldr-formal-input-producer-daily": "scripts/scheduled/run_formal_input_producer_daily.cmd",
     "baldr-ml-direct-chain-maintainer": "scripts/scheduled/run_ml_direct_chain_maintenance.cmd",
     "baldr-v2-2-weekly-collection": "scripts/scheduled/run_v2_2_weekly_collection.cmd",
 }
@@ -60,6 +68,14 @@ _SAFE_SUMMARY_KEYS = (
     "next_run_time",
     "last_run_time",
     "last_result",
+    "logon_mode",
+    "run_only_if_user_is_logged_on",
+    "stop_if_the_computer_switches_to_battery_power",
+    "start_the_task_only_if_the_computer_is_on_ac_power",
+    "power_management",
+    "scheduled_task_state",
+    "execution_time_limit",
+    "multiple_instances_policy",
 )
 
 

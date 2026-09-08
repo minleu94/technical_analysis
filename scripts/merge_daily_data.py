@@ -8,16 +8,103 @@ import tempfile
 import argparse
 import sys
 from typing import Callable, Iterator
+import hashlib
+import json
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from data_module.backup_retention import create_retained_backup
+from data_module.daily_price_source_guard import (
+    AGGREGATE_SOURCE_VERSION,
+    DailyPriceSourceError,
+    aggregate_receipt_path,
+    discover_daily_price_csvs,
+    source_date_from_path,
+    validate_daily_price_frame_date,
+)
 
 # 設置日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _normalize_source_date(value: object) -> str:
+    """將日期欄正規化成 YYYYMMDD，供檔名／內容一致性檢查。"""
+
+    if value is None or pd.isna(value):
+        raise DailyPriceSourceError("每日股價檔含空日期")
+    text = str(value).strip()
+    try:
+        if len(text) == 8 and text.isdigit():
+            datetime.strptime(text, "%Y%m%d")
+            return text
+        parsed = pd.to_datetime(text, errors="raise")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise DailyPriceSourceError(
+            f"每日股價檔含無法解析日期：{text}"
+        ) from exc
+    return parsed.strftime("%Y%m%d")
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while chunk := stream.read(1 << 20):
+            digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def _write_aggregate_receipt(
+    output_file: Path,
+    *,
+    merged_data: pd.DataFrame,
+) -> Path:
+    """在整合檔原子提交後保存內容綁定 receipt。"""
+
+    receipt = aggregate_receipt_path(output_file)
+    dates = sorted(
+        {
+            str(value).strip()
+            for value in merged_data["日期"].dropna().map(str)
+            if str(value).strip()
+        }
+    )
+    body = {
+        "schema_version": AGGREGATE_SOURCE_VERSION,
+        "source_version": AGGREGATE_SOURCE_VERSION,
+        "quality_status": "accepted",
+        "source_path": str(output_file.resolve()),
+        "source_sha256": _file_sha256(output_file),
+        "date_keys": dates,
+        "row_count": int(len(merged_data)),
+        "producer": "scripts.merge_daily_data.merge_daily_data",
+        "producer_contract": "daily-price-writer-source-guard.v1",
+    }
+    encoded = (
+        json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode("utf-8")
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    temporary_fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{receipt.name}.",
+        suffix=".part",
+        dir=str(receipt.parent),
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(temporary_fd, "wb") as stream:
+            temporary_fd = -1
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, receipt)
+    finally:
+        if temporary_fd >= 0:
+            os.close(temporary_fd)
+        temporary_path.unlink(missing_ok=True)
+    return receipt
 
 def merge_daily_data(
     force_all: bool = False,
@@ -195,10 +282,13 @@ def merge_daily_data(
                 'merged_files': 0,
                 'total_records': 0,
             }
-        all_csv_files: list[Path] = []
-        for source_dir in source_dirs:
-            if source_dir.exists():
-                all_csv_files.extend(source_dir.glob("*.csv"))
+        valid_csv_files, invalid_csv_files = discover_daily_price_csvs(source_dirs)
+        if invalid_csv_files:
+            names = ", ".join(path.name for path in invalid_csv_files)
+            raise DailyPriceSourceError(
+                "每日股價 writer 拒絕未綁定日期的來源檔：" + names
+            )
+        all_csv_files = list(valid_csv_files)
         emit_progress(f"掃描到 {len(all_csv_files)} 個每日 CSV", 10)
         if not all_csv_files:
             raise FileNotFoundError(f"在 {daily_price_dir} 或 {tpex_daily_price_dir} 中找不到CSV文件")
@@ -208,13 +298,9 @@ def merge_daily_data(
             # ✅ 修復：確保文件名也是正確格式，並正確比較
             csv_files = []
             for f in all_csv_files:
-                file_stem = str(f.stem)
-                # 確保文件名是8位數
-                if len(file_stem) == 8 and file_stem.isdigit():
-                    if file_stem > last_date:
-                        csv_files.append(f)
-                else:
-                    logger.warning(f"文件名格式異常，跳過: {f.name} (stem: {file_stem})")
+                file_stem = source_date_from_path(f)
+                if file_stem > last_date:
+                    csv_files.append(f)
             
             if not csv_files:
                 # 獲取最新文件名用於日誌
@@ -263,8 +349,8 @@ def merge_daily_data(
                     'total_records': sum(len(item) for item in all_data),
                 }
             try:
-                # 從文件名獲取日期
-                date = file.stem
+                # 來源檔名已在 writer 入口驗證，這裡再次綁定每個讀取批次。
+                date = source_date_from_path(file)
 
                 # 逐批讀取單一 CSV，讓大型單檔也能在安全邊界觀測取消；
                 # 只有整個檔案讀完才加入 all_data，避免半個檔案被誤當成
@@ -289,8 +375,14 @@ def merge_daily_data(
                     if chunk.empty:
                         continue
 
-                    # 添加日期列並確保證券代號是 4 位數字串。
-                    chunk['日期'] = date
+                    # 明確日期欄也必須與已驗證檔名一致；沒有日期欄時才由
+                    # 檔名補入，不能以覆寫方式掩蓋錯誤來源。
+                    chunk = validate_daily_price_frame_date(
+                        chunk,
+                        path=file,
+                        normalize_date=_normalize_source_date,
+                    )
+                    # 確保證券代號是 4 位數字串。
                     chunk['證券代號'] = chunk['證券代號'].astype(str).str.zfill(4)
                     file_chunks.append(chunk)
                     emit_progress(
@@ -319,6 +411,9 @@ def merge_daily_data(
                     20 + (file_index * 45 // total_files),
                 )
                 
+            except DailyPriceSourceError:
+                logger.exception("每日股價來源契約拒絕檔案 %s", file.name)
+                raise
             except Exception as e:
                 logger.error(f"處理文件 {file.name} 時出錯: {str(e)}")
                 emit_progress(
@@ -434,6 +529,10 @@ def merge_daily_data(
                 os.close(temporary_fd)
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
+        source_receipt = _write_aggregate_receipt(
+            output_file,
+            merged_data=merged_data,
+        )
         logger.info(f"成功保存合併後的數據到 {output_file}")
         
         # 顯示數據統計
@@ -452,6 +551,7 @@ def merge_daily_data(
             'total_records': len(merged_data),
             'latest_date': str(date_max),
             'output_file': str(output_file),
+            'source_receipt': str(source_receipt),
         }
         
     except Exception as e:

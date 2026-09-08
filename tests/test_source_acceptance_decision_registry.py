@@ -1,4 +1,6 @@
 from pathlib import Path
+from hashlib import sha256
+import json
 
 import pytest
 
@@ -42,6 +44,34 @@ def test_append_is_hash_idempotent_and_preserves_history(tmp_path: Path) -> None
     assert duplicate == first
     assert registry.list_revisions("institutional_flows") == (first, second)
     assert registry.current("institutional_flows") == second
+
+
+def test_legacy_human_payload_hash_remains_immutable_after_machine_metadata_addition() -> None:
+    payload = {
+        "schema_version": "source-acceptance-decision-revision.v1",
+        "source_id": "institutional_flows",
+        "decision_revision_id": "rev-legacy",
+        "parent_revision_id": None,
+        "status": "deferred",
+        "allowed_use_cases": [],
+        "blockers": ["missing_license"],
+        "license_evidence_ids": [],
+        "quality_evidence_ids": [],
+        "pit_evidence_ids": [],
+        "owner_role": "Data Source Owner",
+        "reviewer_role": "Data Governance Owner",
+        "decided_at": "2026-07-13T09:00:00+08:00",
+        "rollback_reference": "decision:future-disable-revision",
+    }
+    legacy_canonical = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
+    expected_hash = f"sha256:{sha256(legacy_canonical.encode('utf-8')).hexdigest()}"
+
+    revision = parse_source_acceptance_decision_revision(payload)
+
+    assert revision.content_hash == expected_hash
+    assert revision.to_dict() == payload
 
 
 def test_append_requires_an_initial_revision_then_same_source_parent_lineage(tmp_path: Path) -> None:

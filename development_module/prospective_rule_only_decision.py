@@ -85,6 +85,7 @@ def produce_prospective_rule_only_decision(
     universe_symbols_json: str | Path,
     owner_acceptance_json: str | Path,
     now: datetime | None = None,
+    allow_post_activation: bool = False,
 ) -> dict[str, object]:
     """Create one real activation-time prospective Rule-only source.
 
@@ -98,7 +99,11 @@ def produce_prospective_rule_only_decision(
         clock = load_clock_manifest_for_capture(
             Path(clock_manifest_path), now=observed
         )
-        _validate_activation_boundary(clock, observed)
+        _validate_activation_boundary(
+            clock,
+            observed,
+            allow_post_activation=allow_post_activation,
+        )
         acceptance, acceptance_hash = _load_owner_acceptance(
             Path(owner_acceptance_json), clock
         )
@@ -369,8 +374,13 @@ def _require_taipei_session(value: datetime) -> datetime:
 def _validate_activation_boundary(
     clock: ProspectiveFormalClock,
     observed: datetime,
+    *,
+    allow_post_activation: bool = False,
 ) -> None:
-    if observed.date() != clock.activation_trading_day:
+    if allow_post_activation:
+        if observed.date() < clock.activation_trading_day:
+            raise ProspectiveRuleOnlyDecisionError("prospective_rule_session_precedes_activation")
+    elif observed.date() != clock.activation_trading_day:
         raise ProspectiveRuleOnlyDecisionError("prospective_rule_session_mismatch")
     decision_time = time.fromisoformat(str(clock.payload["decision_time"]))
     if observed.timetz().replace(tzinfo=None) < decision_time:

@@ -10,13 +10,15 @@
 from __future__ import annotations
 
 import argparse
-from datetime import date
+from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
 import sys
 import tempfile
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -26,6 +28,23 @@ from data_module.p0_source_contract_registry import P0_SOURCE_IDS
 from data_module.p0_source_acquisition_routes import (
     P0AcquisitionRouteRegistry,
     build_p0_acquisition_route_registry,
+)
+from data_module.p0_official_source_parsers import (
+    OfficialParserResult,
+    RawFetchEnvelope,
+    parse_monthly_revenue_open_data,
+)
+from data_module.source_acceptance_decision_registry import (
+    MACHINE_DECISION_POLICY_VERSION,
+)
+from data_module.source_acceptance_governance import (
+    MACHINE_EVIDENCE_SCHEMA_VERSION,
+    SourceAcceptanceGovernance,
+    calculate_machine_evidence_hash,
+)
+from scripts.capture_p0_license_evidence import (
+    MACHINE_LICENSE_SCOPE_POLICIES,
+    build_machine_license_artifact,
 )
 from scripts.run_p0_candidate_audit import (
     LIVE_PROBE_SOURCE_MAP,
@@ -117,6 +136,25 @@ SOURCE_PROVIDER_INFO: dict[str, tuple[str, str, str]] = {
     "tpex.monthly_revenue_announcement": ("TPEx", "openapi:mopsfin_t187ap05_O", "bounded_live_probe"),
     "pit.quarterly_financials": ("MOPS", "statement:publication_artifact", "existing_artifact"),
 }
+
+# 本輪只把一條已有 parser 的官方 source 接成 machine producer。其餘來源
+# 仍由既有 P0 matrix 投影為 candidate／degraded，避免把未完成的三 formal
+# inputs 或其他 route 誤標成已接線。
+MACHINE_SOURCE_PRODUCER_CONFIG: dict[str, dict[str, Any]] = {
+    "twse.monthly_revenue_announcement": {
+        "source_version": "twse-t187ap05_L.v1",
+        "endpoint_id": "twse:opendata:t187ap05_L",
+        "acquisition_route_id": "twse.openapi.t187ap05_L",
+        "source_url": "https://openapi.twse.com.tw/v1/opendata/t187ap05_L",
+        "universe_source_id": "twse.listed_company_registry",
+        "universe_url": "https://openapi.twse.com.tw/v1/opendata/t187ap03_L",
+        "license_url": "https://www.twse.com.tw/zh/terms/use.html",
+    }
+}
+MACHINE_SOURCE_MAX_BYTES = 8 * 1024 * 1024
+MACHINE_SOURCE_TIMEOUT_SECONDS = 30.0
+MACHINE_ARTIFACT_DIRNAME = "artifacts"
+MACHINE_INPUT_DIRNAME = "inputs"
 
 REDACT_KEYS = {"api_key", "cookie", "credential", "password", "authorization", "secret", "token"}
 
@@ -341,6 +379,747 @@ def redact_secrets(data: Any) -> Any:
     if isinstance(data, list):
         return [redact_secrets(item) for item in data]
     return data
+
+
+def build_machine_evidence_bundle(
+    decision_date: date,
+    *,
+    source_id: str,
+    license_capture_path: Path,
+    output_path: Path,
+    audit_payload: Mapping[str, Any] | None = None,
+    opener: Callable[..., Any] | None = None,
+    timeout_seconds: float = MACHINE_SOURCE_TIMEOUT_SECONDS,
+    max_bytes: int = MACHINE_SOURCE_MAX_BYTES,
+) -> dict[str, Any]:
+    """由官方唯讀 response 產生一條 machine evidence producer 鏈。
+
+    這個入口只支援本輪已具備 parser、官方資料端點與獨立上市 universe
+    的月營收 source。它會把 response bytes、獨立 universe bytes、license
+    capture、四個 artifact 與最外層 envelope 全部保存於呼叫端指定的 TEMP
+    目錄；不讀寫正式資料根目錄。``audit_payload`` 僅作為同次 P0 audit 的
+    provenance 參考，品質與 coverage 仍重新解析本次 response，不接受 caller
+    自填的 accepted／coverage 布林值。
+
+    ``available_at`` 固定使用本次實際 fetch 的 aware timestamp，並在 artifact
+    中明示這是 first-observed shadow evidence；不得解讀為歷史 PIT 或官方
+    發布時間。machine evaluator 只會因此建立 limited research-shadow /
+    diagnostics 決議。
+    """
+
+    config = MACHINE_SOURCE_PRODUCER_CONFIG.get(source_id)
+    if config is None:
+        raise ValueError(
+            f"machine producer is not implemented for source: {source_id}"
+        )
+    if not validate_approved_output_path(output_path):
+        raise ValueError("machine evidence output must be inside the operating-system TEMP directory")
+    if not validate_approved_output_path(license_capture_path):
+        raise ValueError("license capture must be inside the operating-system TEMP directory")
+    if timeout_seconds <= 0 or timeout_seconds > 60:
+        raise ValueError("machine source timeout_seconds must be in (0, 60]")
+    if max_bytes <= 0 or max_bytes > 32 * 1024 * 1024:
+        raise ValueError("machine source max_bytes must be in (0, 32MiB]")
+
+    output_dir = output_path.resolve().parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+    input_dir = output_dir / MACHINE_INPUT_DIRNAME
+    artifact_dir = output_dir / MACHINE_ARTIFACT_DIRNAME
+    input_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    license_capture_bytes = license_capture_path.read_bytes()
+    copied_license_path = input_dir / "license_capture.json"
+    copied_license_path.write_bytes(license_capture_bytes)
+    license_capture_payload = json.loads(license_capture_bytes.decode("utf-8"))
+    if not isinstance(license_capture_payload, Mapping):
+        raise ValueError("license capture JSON must be an object")
+
+    selected_opener = opener or urlopen
+    license_policy = MACHINE_LICENSE_SCOPE_POLICIES.get(str(config["license_url"]))
+    if not isinstance(license_policy, Mapping):
+        raise ValueError(
+            "machine source license policy is not registered for this endpoint"
+        )
+    policy_source_scopes = license_policy.get("source_scopes")
+    policy_source_scope = (
+        policy_source_scopes.get(source_id)
+        if isinstance(policy_source_scopes, Mapping)
+        else None
+    )
+    if not isinstance(policy_source_scope, Mapping):
+        raise ValueError(
+            "machine source endpoint is outside the registered license scope"
+        )
+    government_dataset = policy_source_scope.get("government_dataset")
+    if not isinstance(government_dataset, Mapping):
+        raise ValueError(
+            "machine source requires a government platform dataset mapping"
+        )
+
+    government_metadata_capture = _fetch_machine_source(
+        str(government_dataset["metadata_url"]),
+        opener=selected_opener,
+        timeout_seconds=timeout_seconds,
+        max_bytes=max_bytes,
+    )
+    government_metadata_path = input_dir / "data_gov_dataset_18420.json"
+    government_metadata_bytes = government_metadata_capture["payload"]
+    government_metadata_path.write_bytes(government_metadata_bytes)
+    government_api_doc_capture = _fetch_machine_source(
+        str(government_dataset["api_documentation_url"]),
+        opener=selected_opener,
+        timeout_seconds=timeout_seconds,
+        max_bytes=max_bytes,
+    )
+    government_api_doc_path = input_dir / "twse_openapi_swagger.json"
+    government_api_doc_path.write_bytes(government_api_doc_capture["payload"])
+    government_api_doc_evidence = _validate_government_openapi_mapping(
+        government_api_doc_capture,
+        government_api_doc_path,
+        expected=government_dataset,
+        output_dir=output_dir,
+    )
+    government_dataset_binding = _validate_government_dataset_metadata(
+        government_metadata_capture,
+        government_metadata_path,
+        expected=government_dataset,
+        output_dir=output_dir,
+        api_documentation_evidence=government_api_doc_evidence,
+    )
+
+    source_capture = _fetch_machine_source(
+        str(config["source_url"]),
+        opener=selected_opener,
+        timeout_seconds=timeout_seconds,
+        max_bytes=max_bytes,
+    )
+    universe_capture = _fetch_machine_source(
+        str(config["universe_url"]),
+        opener=selected_opener,
+        timeout_seconds=timeout_seconds,
+        max_bytes=max_bytes,
+    )
+    source_bytes = source_capture["payload"]
+    universe_bytes = universe_capture["payload"]
+    source_hash = _sha256_prefixed(source_bytes)
+    universe_hash = _sha256_prefixed(universe_bytes)
+    source_input_path = input_dir / "official_source_payload.bin"
+    universe_input_path = input_dir / "official_listed_universe_payload.json"
+    source_input_path.write_bytes(source_bytes)
+    universe_input_path.write_bytes(universe_bytes)
+
+    source_fetched_at = source_capture["fetched_at"]
+    source_envelope = RawFetchEnvelope(
+        source_id=source_id,
+        source_version=str(config["source_version"]),
+        endpoint_id=str(config["endpoint_id"]),
+        request_parameters={},
+        fetched_at=source_fetched_at,
+        http_status=int(source_capture["http_status"]),
+        http_headers=source_capture["headers"],
+        payload=source_bytes,
+    )
+    parser_result = parse_monthly_revenue_open_data(source_envelope)
+    universe_codes, universe_as_of_date = _parse_independent_listed_universe(
+        universe_bytes
+    )
+    accepted_symbols = {
+        observation.symbol.strip()
+        for observation in parser_result.accepted
+        if observation.symbol.strip()
+    }
+    covered_symbols = accepted_symbols.intersection(universe_codes)
+    report_dates = {
+        observation.observation_date
+        for observation in parser_result.accepted
+    }
+    if not parser_result.accepted or len(report_dates) != 1:
+        raise ValueError(
+            "official monthly revenue response must contain accepted rows for exactly one report date"
+        )
+    if len(accepted_symbols) != len(parser_result.accepted):
+        raise ValueError(
+            "official monthly revenue response contains duplicate stock symbols; producer refuses to infer coverage"
+        )
+    if not covered_symbols:
+        raise ValueError(
+            "official monthly revenue response has no symbols in independent listed universe"
+        )
+
+    raw_count = parser_result.raw_row_count
+    accepted_count = parser_result.accepted_row_count
+    quarantine_count = parser_result.quarantine_row_count
+    blocked_count = parser_result.blocked_row_count
+    if raw_count <= 0 or accepted_count <= 0:
+        raise ValueError("official source parser returned no usable rows")
+    if accepted_count + quarantine_count + blocked_count != raw_count:
+        raise ValueError("official source parser row conservation failed")
+    if len(covered_symbols) * 10000 < len(universe_codes) * 8000:
+        raise ValueError(
+            "official source coverage is below the machine minimum of 8000bp"
+        )
+    coverage_bp = (len(covered_symbols) * 10000) // len(universe_codes)
+    quality_score_bp = ((accepted_count - quarantine_count) * 10000) // raw_count
+    quality_score_bp = max(0, min(10000, quality_score_bp))
+    if quality_score_bp < 9500:
+        raise ValueError(
+            "official source quality is below the machine minimum of 9500bp"
+        )
+
+    source_observation_date = next(iter(report_dates))
+    missing_symbols = sorted(universe_codes - covered_symbols)
+    unexpected_symbols = sorted(accepted_symbols - universe_codes)
+
+    # 統一以 producer 對原始 bytes 的 hash 作為 quality／PIT／availability
+    # 的 subject content hash；artifact 檔案本身另由 envelope hash 綁定。
+    source_binding = {
+        "path": _relative_candidate_path(source_input_path, output_dir),
+        "content_sha256": source_hash,
+        "bytes": len(source_bytes),
+        "kind": "official_source_payload",
+        "source_url": str(config["source_url"]),
+        "endpoint_id": str(config["endpoint_id"]),
+        "acquisition_route_id": str(config["acquisition_route_id"]),
+        "fetched_at_utc": source_fetched_at.isoformat(),
+        "http_status": int(source_capture["http_status"]),
+    }
+    universe_binding = {
+        "path": _relative_candidate_path(universe_input_path, output_dir),
+        "content_sha256": universe_hash,
+        "bytes": len(universe_bytes),
+        "kind": "independent_official_universe_payload",
+        "source_id": str(config["universe_source_id"]),
+        "source_url": str(config["universe_url"]),
+        "fetched_at_utc": universe_capture["fetched_at"].isoformat(),
+        "http_status": int(universe_capture["http_status"]),
+    }
+
+    license_artifact_path = artifact_dir / "license.json"
+    license_envelope = build_machine_license_artifact(
+        license_capture_payload,
+        source_id=source_id,
+        output_path=license_artifact_path,
+        capture_path=copied_license_path,
+        capture_root=output_dir,
+        government_dataset_evidence=government_dataset_binding,
+    )
+    license_envelope["artifact_path"] = _relative_candidate_path(
+        license_artifact_path, output_dir
+    )
+
+    shadow_available_at = source_fetched_at.isoformat()
+    shadow_available_date = source_fetched_at.date().isoformat()
+    source_payload_digest = source_hash
+    quality_id = f"quality:{source_id}:{source_payload_digest.removeprefix('sha256:')[:16]}"
+    pit_id = f"pit:{source_id}:{source_payload_digest.removeprefix('sha256:')[:16]}"
+    availability_id = (
+        f"availability:{source_id}:{source_payload_digest.removeprefix('sha256:')[:16]}"
+    )
+    expected_universe = {
+        "source_id": source_id,
+        "evidence_id": (
+            f"universe:{source_id}:"
+            f"{universe_hash.removeprefix('sha256:')[:16]}"
+        ),
+        "content_sha256": universe_hash,
+        "count": len(universe_codes),
+        "as_of_date": universe_as_of_date,
+        "basis": "independent_official_twse_listed_registry_unique_symbols",
+        "input_artifact": universe_binding,
+    }
+    coverage = {
+        "numerator": len(covered_symbols),
+        "denominator": len(universe_codes),
+        "expected_universe_count": len(universe_codes),
+        "coverage_bp": coverage_bp,
+        "basis": "official_twse_listed_registry_unique_symbol_intersection",
+        "covered_symbol_sha256": _hash_symbol_set(covered_symbols),
+        "missing_symbols": missing_symbols,
+        "missing_count": len(missing_symbols),
+        "missing_symbol_sha256": _hash_symbol_set(missing_symbols),
+        "unexpected_symbols": unexpected_symbols,
+        "unexpected_count": len(unexpected_symbols),
+        "unexpected_symbol_sha256": _hash_symbol_set(unexpected_symbols),
+        "source_observation_date": source_observation_date,
+        "expected_universe_as_of_date": universe_as_of_date,
+        "temporal_alignment": (
+            "source_report_date_precedes_expected_universe_snapshot"
+            if source_observation_date < universe_as_of_date
+            else "source_report_date_matches_expected_universe_snapshot"
+            if source_observation_date == universe_as_of_date
+            else "source_report_date_follows_expected_universe_snapshot"
+        ),
+    }
+    row_conservation = {
+        "raw": raw_count,
+        "accepted": accepted_count,
+        "quarantine": quarantine_count,
+        "blocked": blocked_count,
+    }
+    quarantine = {
+        "status": "verified",
+        "policy": "official parser quarantines malformed rows without dropping them",
+        "quarantined_rows": quarantine_count,
+        "blocked_rows": blocked_count,
+        "reason_codes": sorted(
+            record.reason_code for record in parser_result.quarantine
+        ),
+    }
+    maturity = {
+        "status": "mature",
+        "completed_periods": 1,
+        "minimum_periods": 1,
+        "lineage_complete": True,
+        "policy": "bounded_live_shadow_snapshot_only",
+        "source_observation_date": source_observation_date,
+        "formal_oos_allowed": False,
+    }
+    quality_artifact = {
+        "schema_version": "source-acceptance-quality-evidence.v1",
+        "producer": "run_p0_source_evidence_audit.py",
+        "producer_code_sha256": _producer_code_sha256(),
+        "source_id": source_id,
+        "source_version": str(config["source_version"]),
+        "evidence_id": quality_id,
+        "status": "verified",
+        "quality_score_bp": quality_score_bp,
+        "content_sha256": source_payload_digest,
+        "auto_verifiable": [
+            "schema_validation_passed",
+            "row_conservation_verified",
+            "isolation_guaranteed",
+            "payload_hash_verified",
+            "maturity_window_verified",
+            "official_source_payload_reparsed",
+            "independent_universe_verified",
+        ],
+        "checks": {
+            "schema_valid": True,
+            "reconciled": True,
+            "quarantine_complete": True,
+            "source_payload_reparsed": True,
+            "independent_universe_reconciled": True,
+        },
+        "expected_universe": expected_universe,
+        "coverage": coverage,
+        "row_conservation": row_conservation,
+        "quarantine": quarantine,
+        "maturity": maturity,
+        "input_artifact": source_binding,
+        "government_dataset_evidence": government_dataset_binding,
+        "audit_provenance": {
+            "audit_schema_version": "p0-source-evidence-audit.v1",
+            "audit_payload_sha256": _canonical_mapping_hash(audit_payload)
+            if audit_payload is not None
+            else None,
+            "selected_route_id": str(config["acquisition_route_id"]),
+        },
+    }
+    quality_artifact_path = artifact_dir / "quality.json"
+    quality_envelope = _write_machine_artifact(
+        quality_artifact_path, quality_artifact, output_dir
+    )
+
+    lineage_hashes = [source_hash, universe_hash]
+    pit_artifact = {
+        "schema_version": "source-acceptance-pit-evidence.v1",
+        "producer": "run_p0_source_evidence_audit.py",
+        "producer_code_sha256": _producer_code_sha256(),
+        "source_id": source_id,
+        "source_version": str(config["source_version"]),
+        "evidence_id": pit_id,
+        "status": "verified",
+        "lineage_complete": True,
+        "content_sha256": source_payload_digest,
+        "auto_verifiable": ["payload_hash_verified", "source_payload_reparsed"],
+        "lineage_artifact_hashes": lineage_hashes,
+        "input_artifact": source_binding,
+        "observations": [
+            {
+                "source_id": source_id,
+                "source_version": str(config["source_version"]),
+                "available_date": shadow_available_date,
+                "available_at": shadow_available_at,
+                "status": "shadow_ready",
+                "source_observation_date": source_observation_date,
+                "availability_basis": "first_observed_at",
+                "official_publication_timestamp_proven": False,
+                "accepted_row_count": accepted_count,
+                "accepted_symbol_sha256": _hash_symbol_set(accepted_symbols),
+            }
+        ],
+    }
+    pit_artifact_path = artifact_dir / "pit.json"
+    pit_envelope = _write_machine_artifact(pit_artifact_path, pit_artifact, output_dir)
+
+    availability_artifact = {
+        "schema_version": "source-acceptance-availability-evidence.v1",
+        "producer": "run_p0_source_evidence_audit.py",
+        "producer_code_sha256": _producer_code_sha256(),
+        "source_id": source_id,
+        "evidence_id": availability_id,
+        "status": "available",
+        "content_sha256": source_payload_digest,
+        "available_date": shadow_available_date,
+        "available_at": shadow_available_at,
+        "observed_at": shadow_available_at,
+        "availability_basis": "first_observed_at",
+        "official_publication_timestamp_proven": False,
+        "input_artifact": source_binding,
+    }
+    availability_artifact_path = artifact_dir / "availability.json"
+    availability_envelope = _write_machine_artifact(
+        availability_artifact_path, availability_artifact, output_dir
+    )
+
+    decision_timestamp = datetime.now(timezone.utc)
+    if decision_timestamp.date() != decision_date:
+        raise ValueError(
+            "machine evidence decision_date must equal the producer's current UTC date"
+        )
+    machine_payload: dict[str, Any] = {
+        "schema_version": MACHINE_EVIDENCE_SCHEMA_VERSION,
+        "policy_version": MACHINE_DECISION_POLICY_VERSION,
+        "source_id": source_id,
+        "decision_date": decision_date.isoformat(),
+        "decision_timestamp": decision_timestamp.isoformat(),
+        "decision_revision_id": (
+            f"machine:{source_id}:"
+            f"{source_payload_digest.removeprefix('sha256:')[:16]}"
+        ),
+        "parent_revision_id": None,
+        "source_version": str(config["source_version"]),
+        "license": license_envelope,
+        "quality": quality_envelope,
+        "pit": pit_envelope,
+        "coverage": coverage,
+        "row_conservation": row_conservation,
+        "quarantine": quarantine,
+        "availability": availability_envelope,
+        "maturity": maturity,
+        "allowed_use_cases": ["research_shadow", "diagnostics"],
+        "rollback_reference": f"decision:disable:{source_id}:machine",
+    }
+    machine_payload["content_sha256"] = calculate_machine_evidence_hash(
+        machine_payload
+    )
+    output_path.write_text(
+        json.dumps(machine_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    review = SourceAcceptanceGovernance().evaluate_machine_evidence(
+        machine_payload, evidence_root=output_dir
+    )
+    if review.decision is None:
+        raise ValueError(
+            "machine evidence producer output did not pass evaluator: "
+            + ", ".join(review.blockers)
+        )
+    return machine_payload
+
+
+def _fetch_machine_source(
+    url: str,
+    *,
+    opener: Callable[..., Any],
+    timeout_seconds: float,
+    max_bytes: int,
+) -> dict[str, Any]:
+    """取得一個 bounded 官方 response，並保留真實抓取時間與 transport metadata。"""
+
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "technical-analysis-p0-machine-producer/1.0",
+            "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.7",
+        },
+    )
+    fetched_at = datetime.now(timezone.utc)
+    with opener(request, timeout=timeout_seconds) as response:
+        status_value = getattr(response, "status", None)
+        if status_value is None:
+            getcode = getattr(response, "getcode", None)
+            status_value = getcode() if callable(getcode) else None
+        if isinstance(status_value, bool) or not isinstance(status_value, int):
+            raise ValueError(f"official response status is invalid: {url}")
+        if status_value < 200 or status_value >= 300:
+            raise ValueError(f"official response status is not successful: {url} ({status_value})")
+        raw = response.read(max_bytes + 1)
+        if not isinstance(raw, bytes):
+            raw = bytes(raw)
+        if len(raw) > max_bytes:
+            raise ValueError(f"official response exceeded bounded size: {url}")
+        headers = getattr(response, "headers", None)
+        header_map: dict[str, object] = {}
+        if isinstance(headers, Mapping):
+            header_map = {
+                name: value
+                for name, value in headers.items()
+                if str(name).lower() in {"date", "last-modified", "etag", "content-type"}
+            }
+        else:
+            getter = getattr(headers, "get", None)
+            if callable(getter):
+                for name in ("Date", "Last-Modified", "ETag", "Content-Type"):
+                    value = getter(name)
+                    if value is not None:
+                        header_map[name] = str(value)
+        final_url = str(getattr(response, "geturl", lambda: url)() or url)
+        if urlparse(final_url).netloc.lower() != urlparse(url).netloc.lower():
+            raise ValueError(f"official response redirected outside its source host: {url}")
+    return {
+        "payload": raw,
+        "fetched_at": fetched_at,
+        "http_status": status_value,
+        "headers": header_map,
+        "requested_url": url,
+        "final_url": final_url,
+    }
+
+
+def _validate_government_dataset_metadata(
+    capture: Mapping[str, Any],
+    path: Path,
+    *,
+    expected: Mapping[str, Any],
+    output_dir: Path,
+    api_documentation_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    """核對 data.gov.tw dataset metadata 與已登錄的官方 source scope。"""
+
+    payload = capture.get("payload")
+    if not isinstance(payload, bytes):
+        raise ValueError("government dataset metadata payload is not bytes")
+    declared_hash = _sha256_prefixed(payload)
+    if declared_hash != expected.get("metadata_content_sha256"):
+        raise ValueError("government dataset metadata content hash changed")
+    expected_bytes = expected.get("metadata_content_bytes")
+    if (
+        isinstance(expected_bytes, bool)
+        or not isinstance(expected_bytes, int)
+        or len(payload) != expected_bytes
+    ):
+        raise ValueError("government dataset metadata size changed")
+    if capture.get("http_status") not in range(200, 300):
+        raise ValueError("government dataset metadata response is not successful")
+    if capture.get("final_url") != expected.get("metadata_url"):
+        raise ValueError("government dataset metadata redirected to an unexpected URL")
+    try:
+        decoded = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("government dataset metadata JSON is invalid") from exc
+    if not isinstance(decoded, Mapping):
+        raise ValueError("government dataset metadata must be an object")
+    result = decoded.get("result")
+    if not isinstance(result, Mapping):
+        raise ValueError("government dataset metadata result is missing")
+    for field_name in (
+        "datasetId",
+        "identifier",
+        "title",
+        "dataProvider",
+        "publisherOID",
+        "license",
+        "modifiedDate",
+    ):
+        expected_name = {
+            "datasetId": "dataset_id",
+            "identifier": "identifier",
+            "title": "title",
+            "dataProvider": "data_provider_id",
+            "publisherOID": "publisher_oid",
+            "license": "license_code",
+            "modifiedDate": "metadata_modified",
+        }[field_name]
+        if result.get(field_name) != expected.get(expected_name):
+            raise ValueError(
+                f"government dataset metadata field changed: {field_name}"
+            )
+    distribution = result.get("distribution")
+    if isinstance(distribution, (str, bytes)) or not isinstance(
+        distribution, Sequence
+    ):
+        raise ValueError("government dataset distribution is missing")
+    resource_urls = {
+        str(item.get("resourceDownloadUrl"))
+        for item in distribution
+        if isinstance(item, Mapping) and item.get("resourceDownloadUrl")
+    }
+    if expected.get("resource_url") not in resource_urls:
+        raise ValueError("government dataset resource URL is not the registered one")
+    notes = str(result.get("notes") or "")
+    if str(expected.get("api_documentation_url")) not in notes:
+        raise ValueError("government dataset OpenAPI documentation mapping is missing")
+    fetched_at_value = capture.get("fetched_at")
+    if not isinstance(fetched_at_value, datetime):
+        raise ValueError("government dataset metadata capture time is missing")
+    binding = {
+        "path": _relative_candidate_path(path, output_dir),
+        "content_sha256": declared_hash,
+        "bytes": len(payload),
+        "kind": "official_data_gov_dataset_metadata",
+        "metadata_url": expected.get("metadata_url"),
+        "dataset_url": expected.get("dataset_url"),
+        "dataset_id": result.get("datasetId"),
+        "identifier": result.get("identifier"),
+        "title": result.get("title"),
+        "data_provider_id": result.get("dataProvider"),
+        "publisher_oid": result.get("publisherOID"),
+        "license_code": result.get("license"),
+        "license_version": expected.get("license_version"),
+        "license_url": expected.get("license_url"),
+        "endpoint_url": expected.get("endpoint_url"),
+        "resource_url": expected.get("resource_url"),
+        "api_documentation_url": expected.get("api_documentation_url"),
+        "api_documentation_evidence": dict(api_documentation_evidence),
+        "metadata_modified": result.get("modifiedDate"),
+        "http_status": capture.get("http_status"),
+        "final_url": capture.get("final_url"),
+        "fetched_at_utc": fetched_at_value.isoformat(),
+    }
+    return binding
+
+
+def _validate_government_openapi_mapping(
+    capture: Mapping[str, Any],
+    path: Path,
+    *,
+    expected: Mapping[str, Any],
+    output_dir: Path,
+) -> dict[str, Any]:
+    """確認官方 Swagger 確實列出本次採集的 OpenAPI resource path。"""
+
+    payload = capture.get("payload")
+    if not isinstance(payload, bytes) or not payload:
+        raise ValueError("government OpenAPI metadata payload is empty")
+    if capture.get("http_status") not in range(200, 300):
+        raise ValueError("government OpenAPI metadata response is not successful")
+    if capture.get("final_url") != expected.get("api_documentation_url"):
+        raise ValueError("government OpenAPI metadata redirected unexpectedly")
+    try:
+        decoded = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("government OpenAPI metadata JSON is invalid") from exc
+    if not isinstance(decoded, Mapping):
+        raise ValueError("government OpenAPI metadata must be an object")
+    endpoint_url = str(expected.get("endpoint_url") or "")
+    endpoint_path = urlparse(endpoint_url).path
+    paths = decoded.get("paths")
+    base_path = str(decoded.get("basePath") or "").rstrip("/")
+    candidate_paths = [endpoint_path]
+    if base_path and endpoint_path.startswith(base_path + "/"):
+        candidate_paths.append(endpoint_path[len(base_path) :])
+    swagger_path = next(
+        (candidate for candidate in candidate_paths if isinstance(paths, Mapping) and candidate in paths),
+        None,
+    )
+    if swagger_path is None:
+        raise ValueError("government OpenAPI metadata does not map the source endpoint")
+    fetched_at_value = capture.get("fetched_at")
+    if not isinstance(fetched_at_value, datetime):
+        raise ValueError("government OpenAPI metadata capture time is missing")
+    return {
+        "path": _relative_candidate_path(path, output_dir),
+        "content_sha256": _sha256_prefixed(payload),
+        "bytes": len(payload),
+        "kind": "official_twse_openapi_swagger",
+        "metadata_url": expected.get("api_documentation_url"),
+        "endpoint_url": endpoint_url,
+        "endpoint_path": endpoint_path,
+        "swagger_path": swagger_path,
+        "http_status": capture.get("http_status"),
+        "final_url": capture.get("final_url"),
+        "fetched_at_utc": fetched_at_value.isoformat(),
+    }
+
+
+def _parse_independent_listed_universe(payload: bytes) -> tuple[set[str], str]:
+    try:
+        decoded = json.loads(payload.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("independent listed universe JSON is invalid") from exc
+    if not isinstance(decoded, list):
+        raise ValueError("independent listed universe must be a JSON array")
+    codes: set[str] = set()
+    as_of_dates: set[str] = set()
+    for row in decoded:
+        if not isinstance(row, Mapping):
+            raise ValueError("independent listed universe row must be an object")
+        code = str(row.get("公司代號") or row.get("SecuritiesCompanyCode") or "").strip()
+        # TWSE 上市清冊同時包含四碼普通股與六碼存託憑證代號；
+        # 兩者都屬於獨立的官方市場成分，不能為了四碼假設而漏掉六碼成分。
+        if not code or not code.isdigit() or len(code) not in {4, 6}:
+            raise ValueError("independent listed universe contains invalid stock code")
+        codes.add(code)
+        raw_date = str(row.get("出表日期") or row.get("Date") or "").strip()
+        if len(raw_date) == 7 and raw_date.isdigit():
+            as_of_dates.add(
+                f"{int(raw_date[:3]) + 1911:04d}-{raw_date[3:5]}-{raw_date[5:7]}"
+            )
+        elif len(raw_date) == 8 and raw_date.isdigit():
+            as_of_dates.add(f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}")
+    if not codes:
+        raise ValueError("independent listed universe is empty")
+    if len(as_of_dates) != 1:
+        raise ValueError("independent listed universe must have one as-of date")
+    return codes, next(iter(as_of_dates))
+
+
+def _write_machine_artifact(
+    path: Path,
+    payload: Mapping[str, Any],
+    output_dir: Path,
+) -> dict[str, Any]:
+    if not validate_approved_output_path(path):
+        raise ValueError("machine artifact must be inside the operating-system TEMP directory")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_canonical_json_bytes(payload))
+    return {
+        "evidence_id": payload.get("evidence_id"),
+        "artifact_path": _relative_candidate_path(path, output_dir),
+        "content_sha256": _sha256_prefixed(path.read_bytes()),
+    }
+
+
+def _canonical_json_bytes(payload: Mapping[str, Any]) -> bytes:
+    return (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _canonical_mapping_hash(payload: Mapping[str, Any] | None) -> str | None:
+    if payload is None:
+        return None
+    return _sha256_prefixed(_canonical_json_bytes(payload))
+
+
+def _sha256_prefixed(value: bytes) -> str:
+    return f"sha256:{sha256(value).hexdigest()}"
+
+
+def _relative_candidate_path(path: Path, root: Path) -> str:
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError("candidate artifact path escaped its output root") from exc
+
+
+def _producer_code_sha256() -> str:
+    return _sha256_prefixed(Path(__file__).resolve().read_bytes())
+
+
+def _hash_symbol_set(symbols: Sequence[str] | set[str]) -> str:
+    canonical = "\n".join(sorted(str(symbol).strip() for symbol in symbols))
+    return _sha256_prefixed(canonical.encode("utf-8"))
 
 
 def _route_probe_status(
@@ -1000,6 +1779,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--confirm-live-readonly", action="store_true", help="確認執行唯讀 bounded live 探測")
     parser.add_argument("--mops-quarterly-artifact", type=Path, help="唯讀載入已保存的 MOPS 季報 artifact JSON")
     parser.add_argument("--fubon-projection", type=Path, help="唯讀載入富邦 research projection JSON")
+    parser.add_argument(
+        "--license-capture",
+        type=Path,
+        help="machine producer 使用的 bounded license capture JSON（必須位於 TEMP）",
+    )
+    parser.add_argument(
+        "--machine-evidence-output",
+        type=Path,
+        help="產出 source-acceptance-machine-evidence.v1（必須位於 TEMP；需搭配 --live）",
+    )
+    parser.add_argument(
+        "--machine-source-id",
+        choices=tuple(MACHINE_SOURCE_PRODUCER_CONFIG),
+        default="twse.monthly_revenue_announcement",
+        help="machine producer 本輪唯一支援的官方 source",
+    )
     args = parser.parse_args(argv)
 
     fubon_projection = (
@@ -1021,6 +1816,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         confirm_live_readonly=args.confirm_live_readonly,
         output_path=args.output,
     )
+
+    if args.machine_evidence_output is not None or args.license_capture is not None:
+        if args.machine_evidence_output is None or args.license_capture is None:
+            raise ValueError(
+                "--machine-evidence-output and --license-capture must be provided together"
+            )
+        if not args.live:
+            raise ValueError("machine producer requires --live for an official bounded fetch")
+        machine_payload = build_machine_evidence_bundle(
+            args.decision_date,
+            source_id=args.machine_source_id,
+            license_capture_path=args.license_capture,
+            output_path=args.machine_evidence_output,
+            audit_payload=payload,
+        )
+        # 只在 stdout 顯示 machine producer 的 hash／scope 摘要；完整 artifact
+        # 留在 TEMP，避免把官方 raw bytes 或大筆 row lineage 展開到 console。
+        payload["machine_producer"] = {
+            "status": "machine_verified",
+            "source_id": machine_payload["source_id"],
+            "path": str(args.machine_evidence_output.resolve()),
+            "content_sha256": machine_payload["content_sha256"],
+            "allowed_use_cases": machine_payload["allowed_use_cases"],
+            "formal_oos_allowed": False,
+            "production_scheduler_allowed": False,
+        }
+        if args.output is not None:
+            args.output.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
     export_p0_13_handoff_json(payload)
 
