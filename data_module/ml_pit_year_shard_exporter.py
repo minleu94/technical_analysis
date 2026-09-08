@@ -12,7 +12,7 @@ shard，不會混入正式訓練。
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import gzip
@@ -28,9 +28,18 @@ import uuid
 from zoneinfo import ZoneInfo
 
 from data_module.ml_storage_capacity import (
+    heavy_chain_capacity_budget,
     MLStorageCapacityBudget,
     directory_size_bytes,
     preflight_capacity,
+)
+from data_module.ml_daily_price_source_quality import (
+    DailyPriceSourceQualityError,
+    assert_daily_price_source_quality,
+    write_quarantine_report,
+)
+from data_module.statement_report_basis_contract import (
+    resolve_statement_report_basis,
 )
 from ml_module.feature_eligibility import (
     ALL_FIELD_SOURCE_TABLES,
@@ -78,6 +87,7 @@ _BAD_QUALITY_TOKENS = frozenset(
         "unavailable",
     }
 )
+_REPORT_BASES = frozenset({"consolidated", "individual"})
 
 
 @dataclass(frozen=True)
@@ -101,6 +111,12 @@ class PITYearShardBuildRequest:
     persistent_storage_budget_bytes: int | None = None
     persistent_new_bytes_budget: int | None = None
     safety_reserve_bytes: int | None = None
+    # Optional source guard.  Production callers may supply the canonical
+    # daily CSV root; omitted keeps legacy fixture/API behaviour unchanged.
+    daily_price_source_dir: Path | None = None
+    source_quality_report_path: Path | None = None
+    # 來源 receipt 的實際可得時間；不提供時不得以 mtime 或當前時間代替。
+    source_quality_known_at: str | None = None
 
     def __post_init__(self) -> None:
         if not str(self.decision_at).strip():
@@ -166,6 +182,12 @@ class PITYearShardPublication:
     dataset_manifest_paths: Mapping[str, Path]
     shard_count: int
     row_count: int
+    # 執行期間最後一次容量 checkpoint；這些 telemetry 不進 publication
+    # manifest 的 logical hash，只供 orchestration 的 bounded QA 使用。
+    capacity_preflight: Mapping[str, Any] = field(default_factory=dict)
+    temporary_peak_bytes_observed: int | None = None
+    capacity_checkpoint_count: int = 0
+    capacity_last_stage: str = ""
 
     def __post_init__(self) -> None:
         if not self.publication_id.strip():
@@ -175,6 +197,22 @@ class PITYearShardPublication:
         for count in (self.shard_count, self.row_count):
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError("publication counts must be non-negative integers")
+        if self.temporary_peak_bytes_observed is not None and (
+            isinstance(self.temporary_peak_bytes_observed, bool)
+            or not isinstance(self.temporary_peak_bytes_observed, int)
+            or self.temporary_peak_bytes_observed < 0
+        ):
+            raise ValueError(
+                "temporary_peak_bytes_observed must be non-negative integer or None"
+            )
+        if (
+            isinstance(self.capacity_checkpoint_count, bool)
+            or not isinstance(self.capacity_checkpoint_count, int)
+            or self.capacity_checkpoint_count < 0
+        ):
+            raise ValueError("capacity_checkpoint_count must be non-negative integer")
+        if not isinstance(self.capacity_last_stage, str):
+            raise TypeError("capacity_last_stage must be a string")
 
 
 def _capacity_budget_for_request(
@@ -183,15 +221,10 @@ def _capacity_budget_for_request(
     persistent_budget = request.persistent_storage_budget_bytes
     if persistent_budget is None:
         persistent_budget = request.persistent_new_bytes_budget
-    safety_reserve = request.safety_reserve_bytes
-    if safety_reserve is None:
-        # Keep the old builder callable without capacity arguments, while
-        # applying the shared default reserve to new standalone invocations.
-        safety_reserve = 20 * 1024**3
-    return MLStorageCapacityBudget(
+    return heavy_chain_capacity_budget(
         persistent_new_bytes_budget=persistent_budget,
         temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
-        safety_reserve_bytes=safety_reserve,
+        safety_reserve_bytes=request.safety_reserve_bytes,
     )
 
 
@@ -200,6 +233,7 @@ class _RuntimeTablePolicy:
     identity_columns: tuple[str, ...]
     stock_column: str | None
     industry_column: str | None = None
+    optional_identity_columns: tuple[str, ...] = ()
 
 
 _RUNTIME_POLICIES: dict[str, _RuntimeTablePolicy] = {
@@ -211,7 +245,9 @@ _RUNTIME_POLICIES: dict[str, _RuntimeTablePolicy] = {
         ("stock_code", "period"), "stock_code"
     ),
     "fundamental_statement_items": _RuntimeTablePolicy(
-        ("stock_code", "statement_type", "period", "item_code"), "stock_code"
+        ("stock_code", "statement_type", "period", "item_code"),
+        "stock_code",
+        optional_identity_columns=("report_basis",),
     ),
     "fundamental_valuation_metrics": _RuntimeTablePolicy(
         ("stock_code", "metric_name"), "stock_code"
@@ -482,16 +518,50 @@ class PITYearShardExporter:
             budget=capacity_budget,
             stage="raw_before_output",
         )
-        output_root.mkdir(parents=True, exist_ok=True)
-        runs_root = output_root / "runs"
-        persistent_baseline_bytes = directory_size_bytes(runs_root)
-        runs_root.mkdir(parents=True, exist_ok=True)
         decision = _decision_datetime(request.decision_at)
         history_start = _date_value(request.history_start_date)
         if history_start > decision.date():
             raise ValueError("history_start_date must not exceed decision_at")
         if request.years and max(request.years) > decision.year:
             raise ValueError("requested shard year must not exceed decision year")
+
+        if request.daily_price_source_dir is not None:
+            try:
+                source_quality = assert_daily_price_source_quality(
+                    sqlite_path=database_path,
+                    canonical_daily_price_dir=(
+                        request.daily_price_source_dir
+                    ),
+                    start_date=history_start.isoformat(),
+                    end_date=decision.date().isoformat(),
+                    quality_mode="ingest_guard",
+                    quality_known_at=request.source_quality_known_at,
+                )
+            except DailyPriceSourceQualityError as exc:
+                if request.source_quality_report_path is not None:
+                    write_quarantine_report(
+                        request.source_quality_report_path,
+                        exc.report,
+                        source_roots=(
+                            database_path.parent,
+                            request.daily_price_source_dir,
+                        ),
+                    )
+                raise
+            if request.source_quality_report_path is not None:
+                write_quarantine_report(
+                    request.source_quality_report_path,
+                    source_quality,
+                    source_roots=(
+                        database_path.parent,
+                        request.daily_price_source_dir,
+                    ),
+                )
+
+        output_root.mkdir(parents=True, exist_ok=True)
+        runs_root = output_root / "runs"
+        persistent_baseline_bytes = directory_size_bytes(runs_root)
+        runs_root.mkdir(parents=True, exist_ok=True)
 
         source_stat_before = database_path.stat()
         staging: Path | None = None
@@ -524,10 +594,13 @@ class PITYearShardExporter:
                 temporary_roots=temporary_roots,
                 temporary_peak_bytes_observed=peak_temporary_bytes,
             )
-            peak_temporary_bytes = max(
-                peak_temporary_bytes,
-                result.temporary_peak_bytes_observed,
-            )
+            observed_temporary_bytes = result.temporary_peak_bytes_observed
+            if observed_temporary_bytes is not None:
+                # 容量預算可允許 unknown；已觀測值存在時才更新峰值。
+                peak_temporary_bytes = max(
+                    peak_temporary_bytes,
+                    observed_temporary_bytes,
+                )
             last_capacity_preflight = result.as_dict()
             capacity_checkpoint_count += 1
             capacity_last_stage = stage
@@ -812,6 +885,10 @@ class PITYearShardExporter:
                     int(manifest["row_count"])
                     for manifest in dataset_manifests.values()
                 ),
+                capacity_preflight=dict(last_capacity_preflight),
+                temporary_peak_bytes_observed=peak_temporary_bytes,
+                capacity_checkpoint_count=capacity_checkpoint_count,
+                capacity_last_stage=capacity_last_stage,
             )
         except Exception:
             writers.close_all()
@@ -845,6 +922,14 @@ class PITYearShardExporter:
         table_manifest_records = manifest.for_table(table_name)
         column_names = {record.column_name for record in table_manifest_records}
         runtime = _RUNTIME_POLICIES[table_name]
+        identity_columns = (
+            *runtime.identity_columns,
+            *tuple(
+                column
+                for column in runtime.optional_identity_columns
+                if column in column_names
+            ),
+        )
         if not table_manifest_records:
             return _blocked_table_result(
                 table_name, "schema_has_no_columns"
@@ -853,7 +938,7 @@ class PITYearShardExporter:
         missing_required = sorted(
             {
                 time_policy.event_at,
-                *runtime.identity_columns,
+                *identity_columns,
             }
             - column_names
         )
@@ -907,7 +992,7 @@ class PITYearShardExporter:
             )
 
         select_parts: list[str] = []
-        for index, column_name in enumerate(runtime.identity_columns):
+        for index, column_name in enumerate(identity_columns):
             select_parts.append(
                 f"{_quote_identifier(column_name)} AS "
                 f"{_quote_identifier(f'__identity_{index}')}"
@@ -924,6 +1009,7 @@ class PITYearShardExporter:
             "revision_id": time_policy.revision_id,
             "quality": "quality" if "quality" in column_names else None,
             "source": "source" if "source" in column_names else None,
+            "source_version": "source_version" if "source_version" in column_names else None,
         }
         for alias, metadata_column_name in metadata_columns.items():
             if (
@@ -1000,11 +1086,16 @@ class PITYearShardExporter:
             # 避免為不可能出現的同鍵 row 做全表右側排序。
             order_columns = [
                 *runtime.identity_columns,
+                *(
+                    column
+                    for column in identity_columns
+                    if column not in runtime.identity_columns
+                ),
                 time_policy.event_at,
             ]
         else:
             order_columns = [
-                *runtime.identity_columns,
+                *identity_columns,
                 time_policy.event_at,
                 *(
                     (time_policy.revision_id,)
@@ -1070,10 +1161,25 @@ class PITYearShardExporter:
                 revision_id = _row_optional_text(row, "__revision_id")
                 quality = _row_optional_text(row, "__quality") or "not_provided"
                 source = _row_optional_text(row, "__source")
+                source_version = _row_optional_text(row, "__source_version")
                 entity_id = "|".join(
                     _required_identity(row[f"__identity_{index}"])
-                    for index in range(len(runtime.identity_columns))
+                    for index in range(len(identity_columns))
                 )
+                report_basis: str | None = None
+                if table_name == "fundamental_statement_items":
+                    report_basis = resolve_statement_report_basis(
+                        explicit_value=(
+                            row[
+                                f"__identity_{identity_columns.index('report_basis')}"
+                            ]
+                            if "report_basis" in identity_columns
+                            else None
+                        ),
+                        explicit_column_present="report_basis" in column_names,
+                        source=source,
+                        source_version=source_version,
+                    )
                 derived_values: dict[str, _DerivedFeatureValue] = {}
                 if table_name == "daily_prices":
                     selected_input = _select_technical_input(
@@ -1165,6 +1271,11 @@ class PITYearShardExporter:
                             "source_id": group_records[0].source_id,
                             "family": group_records[0].family,
                             "entity_id": entity_id,
+                            **(
+                                {"report_basis": report_basis}
+                                if report_basis is not None
+                                else {}
+                            ),
                             "event_at": event_at.isoformat(),
                             "available_at": available_at.isoformat(),
                             "announced_at": (

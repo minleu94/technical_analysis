@@ -4,6 +4,8 @@ import hashlib
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 from data_module.ml_all_field_snapshot_provider import MLAllFieldSnapshotProvider
 from ml_module.feature_eligibility import (
     ALL_FIELD_SOURCE_TABLES,
@@ -245,6 +247,57 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _insert_statement_row(
+    database: Path,
+    *,
+    source: str,
+    source_version: str,
+    report_basis: str | None = None,
+    add_report_basis_column: bool = False,
+) -> None:
+    with sqlite3.connect(database) as connection:
+        if add_report_basis_column:
+            connection.execute(
+                "ALTER TABLE fundamental_statement_items ADD COLUMN report_basis TEXT"
+            )
+        columns = (
+            "stock_code, statement_type, period, as_of_date, announced_date, "
+            "available_date, item_code, item_name, value, source, source_version, "
+            "quality, created_at"
+        )
+        values: tuple[object, ...] = (
+            "2330",
+            "income_statement",
+            "2024-Q1",
+            "2024-03-31",
+            None,
+            "2024-04-05",
+            "Revenue",
+            "Revenue",
+            "100",
+            source,
+            source_version,
+            "observed",
+            "2024-04-05T00:00:00+00:00",
+        )
+        if add_report_basis_column:
+            columns += ", report_basis"
+            values += (report_basis,)
+        placeholders = ", ".join("?" for _ in values)
+        connection.execute(
+            f"INSERT INTO fundamental_statement_items({columns}) VALUES ({placeholders})",
+            values,
+        )
+
+
+def _load_statement_rows(database: Path):
+    return MLAllFieldSnapshotProvider(database).load(
+        decision_at="2024-05-01T08:30:00+08:00",
+        history_start_date="2024-01-01",
+        symbols=("2330",),
+    )
+
+
 def _table_state(snapshot, table_name: str):
     return next(
         table
@@ -442,3 +495,137 @@ def test_missing_and_empty_optional_tables_degrade_without_writes(tmp_path: Path
         before_stat.st_size,
         before_stat.st_mtime_ns,
     )
+
+
+def test_statement_report_basis_is_a_preserved_snapshot_dimension(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-basis.db"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "ALTER TABLE fundamental_statement_items ADD COLUMN report_basis TEXT"
+        )
+        connection.executemany(
+            """
+            INSERT INTO fundamental_statement_items(
+                stock_code, statement_type, period, as_of_date,
+                announced_date, available_date, item_code, item_name,
+                value, source, source_version, quality, created_at, report_basis
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    "2330",
+                    "income_statement",
+                    "2023-Q4",
+                    "2023-12-31",
+                    None,
+                    "2024-01-04",
+                    "Revenue",
+                    "Revenue",
+                    "100",
+                    "official",
+                    "basis-c",
+                    "observed",
+                    "2024-01-04T00:00:00+00:00",
+                    "consolidated",
+                ),
+                (
+                    "2330",
+                    "income_statement",
+                    "2024-Q1",
+                    "2024-03-31",
+                    None,
+                    "2024-04-04",
+                    "Revenue",
+                    "Revenue",
+                    "110",
+                    "official",
+                    "basis-i",
+                    "observed",
+                    "2024-04-04T00:00:00+00:00",
+                    "individual",
+                ),
+            ),
+        )
+
+    provider = MLAllFieldSnapshotProvider(database)
+    manifest = provider.inspect_eligibility()
+    basis_record = manifest.get("fundamental_statement_items", "report_basis")
+    assert basis_record is not None
+    assert basis_record.eligibility_status == "excluded_identifier"
+
+    snapshot = provider.load(
+        decision_at="2024-05-01T08:30:00+08:00",
+        history_start_date="2023-01-01",
+        symbols=("2330",),
+    )
+    rows = [
+        row
+        for row in snapshot.observations
+        if row.source_table == "fundamental_statement_items"
+        and any(value.feature_id.endswith(".value") for value in row.values)
+    ]
+    assert {row.entity_id for row in rows} == {
+        "2330|income_statement|2023-Q4|Revenue|consolidated",
+        "2330|income_statement|2024-Q1|Revenue|individual",
+    }
+    assert {row.report_basis for row in rows} == {"consolidated", "individual"}
+
+
+def test_statement_report_basis_legacy_default_requires_known_source_contract(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-legacy-basis.db"
+    _database(database)
+    _insert_statement_row(
+        database,
+        source="mops.financial_statement.raw",
+        source_version=(
+            "mops-t164-consolidated-statements-with-t57sb01-"
+            "xbrl-row-codes.v3:content:legacy"
+        ),
+    )
+
+    snapshot = _load_statement_rows(database)
+    rows = [
+        row
+        for row in snapshot.observations
+        if row.source_table == "fundamental_statement_items"
+    ]
+    assert len(rows) == 1
+    assert rows[0].report_basis == "consolidated"
+    assert rows[0].entity_id.endswith("|Revenue")
+
+
+def test_statement_report_basis_unknown_source_cannot_use_implicit_default(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-unknown-basis.db"
+    _database(database)
+    _insert_statement_row(
+        database,
+        source="official",
+        source_version="basis-without-contract",
+    )
+
+    with pytest.raises(ValueError, match="report_basis"):
+        _load_statement_rows(database)
+
+
+def test_statement_report_basis_empty_explicit_value_is_rejected(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-empty-basis.db"
+    _database(database)
+    _insert_statement_row(
+        database,
+        source="official",
+        source_version="basis-explicit-empty",
+        report_basis="",
+        add_report_basis_column=True,
+    )
+
+    with pytest.raises(ValueError, match="report_basis"):
+        _load_statement_rows(database)

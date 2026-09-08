@@ -162,6 +162,61 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _build_statement_database(
+    path: Path,
+    *,
+    source: str,
+    source_version: str,
+    report_basis: str | None = None,
+) -> None:
+    _build_database(path)
+    with sqlite3.connect(path) as connection:
+        report_basis_column = ", report_basis TEXT" if report_basis is not None else ""
+        connection.execute(
+            f"""
+            CREATE TABLE fundamental_statement_items (
+                stock_code TEXT NOT NULL,
+                statement_type TEXT NOT NULL,
+                period TEXT NOT NULL,
+                as_of_date TEXT NOT NULL,
+                announced_date TEXT,
+                available_at TEXT,
+                item_code TEXT NOT NULL,
+                item_name TEXT,
+                value TEXT,
+                source TEXT,
+                source_version TEXT,
+                quality TEXT{report_basis_column}
+            )
+            """
+        )
+        columns = (
+            "stock_code, statement_type, period, as_of_date, announced_date, "
+            "available_at, item_code, item_name, value, source, source_version, quality"
+        )
+        values: tuple[object, ...] = (
+            "2330",
+            "income_statement",
+            "2024-Q1",
+            "2024-03-31",
+            None,
+            "2024-04-05",
+            "Revenue",
+            "Revenue",
+            "100",
+            source,
+            source_version,
+            "accepted",
+        )
+        if report_basis is not None:
+            columns += ", report_basis"
+            values += (report_basis,)
+        connection.execute(
+            f"INSERT INTO fundamental_statement_items({columns}) VALUES ({', '.join('?' for _ in values)})",
+            values,
+        )
+
+
 def _json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(value, dict)
@@ -448,4 +503,192 @@ def test_request_rejects_implicit_empty_universe_and_invalid_batch(
             decision_at="2024-01-01",
             symbols=None,
             batch_size=0,
+        )
+
+
+def test_statement_report_basis_survives_into_shadow_shard_identity(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-basis.db"
+    _build_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE fundamental_statement_items (
+                stock_code TEXT NOT NULL,
+                statement_type TEXT NOT NULL,
+                period TEXT NOT NULL,
+                as_of_date TEXT NOT NULL,
+                announced_date TEXT,
+                available_at TEXT,
+                item_code TEXT NOT NULL,
+                item_name TEXT,
+                value TEXT,
+                source TEXT,
+                source_version TEXT,
+                quality TEXT,
+                report_basis TEXT
+            )
+            """
+        )
+        connection.executemany(
+            """
+            INSERT INTO fundamental_statement_items(
+                stock_code, statement_type, period, as_of_date,
+                announced_date, available_at, item_code, item_name,
+                value, source, source_version, quality, report_basis
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    "2330",
+                    "income_statement",
+                    "2023-Q4",
+                    "2023-12-31",
+                    None,
+                    "2024-01-05",
+                    "Revenue",
+                    "Revenue",
+                    "100",
+                    "official",
+                    "basis-c",
+                    "accepted",
+                    "consolidated",
+                ),
+                (
+                    "2330",
+                    "income_statement",
+                    "2024-Q1",
+                    "2024-03-31",
+                    None,
+                    "2024-04-05",
+                    "Revenue",
+                    "Revenue",
+                    "110",
+                    "official",
+                    "basis-i",
+                    "accepted",
+                    "individual",
+                ),
+            ),
+        )
+
+    publication = PITYearShardExporter().build(
+        PITYearShardBuildRequest(
+            database_path=database,
+            output_root=tmp_path / "shards",
+            decision_at="2024-05-01T08:30:00+08:00",
+            history_start_date="2023-01-01",
+            symbols=("2330",),
+            years=(2024,),
+            batch_size=2,
+        )
+    )
+    shadow_manifest = _json(
+        publication.dataset_manifest_paths["research_shadow_all_fields"]
+    )
+    shadow_rows = [
+        row
+        for shard in shadow_manifest["shards"]
+        for row in _read_jsonl_gzip(
+            publication.publication_directory / shard["path"]
+        )
+        if row["source_table"] == "fundamental_statement_items"
+    ]
+    assert {row["entity_id"] for row in shadow_rows} == {
+        "2330|income_statement|2023-Q4|Revenue|consolidated",
+        "2330|income_statement|2024-Q1|Revenue|individual",
+    }
+    assert {row["report_basis"] for row in shadow_rows} == {
+        "consolidated",
+        "individual",
+    }
+
+
+def test_statement_report_basis_legacy_default_requires_known_source_contract(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-legacy-basis.db"
+    _build_statement_database(
+        database,
+        source="mops.financial_statement.raw",
+        source_version=(
+            "mops-t164-consolidated-statements-with-t57sb01-"
+            "xbrl-row-codes.v3:content:legacy"
+        ),
+    )
+
+    publication = PITYearShardExporter().build(
+        PITYearShardBuildRequest(
+            database_path=database,
+            output_root=tmp_path / "shards",
+            decision_at="2024-05-01T08:30:00+08:00",
+            history_start_date="2024-01-01",
+            symbols=("2330",),
+            years=(2024,),
+            batch_size=2,
+        )
+    )
+    shadow_manifest = _json(
+        publication.dataset_manifest_paths["research_shadow_all_fields"]
+    )
+    shadow_rows = [
+        row
+        for shard in shadow_manifest["shards"]
+        for row in _read_jsonl_gzip(
+            publication.publication_directory / shard["path"]
+        )
+        if row["source_table"] == "fundamental_statement_items"
+    ]
+    assert len(shadow_rows) == 1
+    assert shadow_rows[0]["report_basis"] == "consolidated"
+    assert shadow_rows[0]["entity_id"] == "2330|income_statement|2024-Q1|Revenue"
+
+
+def test_statement_report_basis_unknown_source_cannot_use_implicit_default(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-unknown-basis.db"
+    _build_statement_database(
+        database,
+        source="official",
+        source_version="basis-without-contract",
+    )
+
+    with pytest.raises(ValueError, match="report_basis"):
+        PITYearShardExporter().build(
+            PITYearShardBuildRequest(
+                database_path=database,
+                output_root=tmp_path / "shards",
+                decision_at="2024-05-01T08:30:00+08:00",
+                history_start_date="2024-01-01",
+                symbols=("2330",),
+                years=(2024,),
+                batch_size=2,
+            )
+        )
+
+
+def test_statement_report_basis_empty_explicit_value_is_rejected(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "statement-empty-basis.db"
+    _build_statement_database(
+        database,
+        source="official",
+        source_version="basis-explicit-empty",
+        report_basis="",
+    )
+
+    with pytest.raises(ValueError, match="report_basis"):
+        PITYearShardExporter().build(
+            PITYearShardBuildRequest(
+                database_path=database,
+                output_root=tmp_path / "shards",
+                decision_at="2024-05-01T08:30:00+08:00",
+                history_start_date="2024-01-01",
+                symbols=("2330",),
+                years=(2024,),
+                batch_size=2,
+            )
         )

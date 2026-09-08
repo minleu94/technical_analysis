@@ -338,6 +338,19 @@ class PortfolioMLOutOfCoreStoreBuilder:
                 "assembly_blockers",
                 [],
             ),
+            # 轉存 teacher provenance，讓下游 OOC fit 能在任何模型 artifact
+            # 建立前執行 eligibility gate；不把成熟後 label 變化當成輸入
+            # 完整性的替代證據。
+            "teacher_target_diagnostics": source_manifest.get(
+                "teacher_target_diagnostics",
+                {},
+            ),
+            # 只有具備三來源 readback、逐決策日覆蓋及 hash binding 的
+            # provenance 才能讓下游 teacher gate 通過；缺值必須保留為
+            # None，不能由 counters 推導出正式輸入完整性。
+            "teacher_input_provenance": source_manifest.get(
+                "teacher_input_provenance",
+            ),
             "execution": {
                 "streaming_jsonl": True,
                 "annual_memmap": True,
@@ -777,6 +790,7 @@ class PortfolioMLOutOfCoreStoreBuilder:
         folds: tuple[dict[str, Any], ...],
         year_manifests: Sequence[Mapping[str, Any]],
         batch_size: int,
+        year_rows_paths: Mapping[int, Path] | None = None,
     ) -> list[dict[str, Any]]:
         folds_directory = run_directory / "folds"
         folds_directory.mkdir(parents=True, exist_ok=True)
@@ -817,9 +831,13 @@ class PortfolioMLOutOfCoreStoreBuilder:
                     year = int(year_manifest["year"])
                     ordinal = int(year_manifest["year_ordinal"])
                     rows_path = (
-                        run_directory
-                        / f"year={year:04d}"
-                        / "rows.sqlite"
+                        year_rows_paths[year]
+                        if year_rows_paths is not None and year in year_rows_paths
+                        else (
+                            run_directory
+                            / f"year={year:04d}"
+                            / "rows.sqlite"
+                        )
                     )
                     connection = sqlite3.connect(
                         f"file:{rows_path.as_posix()}?mode=ro",

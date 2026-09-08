@@ -59,6 +59,10 @@ from ml_module.allocation_training_service import (
     AllocationHorizonLabel,
     AllocationTrainingSample,
 )
+from data_module.ml_pit_shared_block_resolver import (
+    pit_dataset_feature_contract_hash,
+    resolve_pit_shard_record,
+)
 
 
 TRAINING_JSONL_SCHEMA_VERSION = "allocation-training-jsonl-v2"
@@ -93,6 +97,7 @@ _PRICE_TECHNICAL_TABLES = frozenset(
 _LONG_FORMAT_TABLES = frozenset(
     {"fundamental_statement_items", "fundamental_valuation_metrics"}
 )
+_REPORT_BASES = frozenset({"consolidated", "individual"})
 _BUY_COST_BP = 25
 _SELL_COST_BP = 55
 _ZERO_SHA256 = "sha256:" + ("0" * 64)
@@ -149,6 +154,9 @@ class PortfolioMLDatasetAssemblyRequest:
     embargo_trading_days: int = 5
     batch_size: int = 2_048
     compression_level: int = 6
+    shared_block_store_root: Path | None = None
+    # 由 bounded orchestrator 注入的唯讀容量觀測；None 保留既有 API。
+    capacity_callback: Callable[[str], None] | None = None
 
     def __post_init__(self) -> None:
         _available_datetime(
@@ -261,6 +269,7 @@ _CurrentFeatureCache = dict[
     str,
     dict[str, dict[str, _CurrentValue]],
 ]
+TeacherDiagnostics = dict[str, int]
 
 
 @dataclass(frozen=True)
@@ -410,6 +419,29 @@ class _CorporateActionCustody:
         }
 
 
+def build_teacher_source_row_provenance_for_assembly(
+    *,
+    source_paths: Mapping[str, Path],
+    output_root: Path,
+    decision_dates: Sequence[str],
+    decision_cutoffs: Mapping[str, datetime | str],
+    decision_rows: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """由 assembler 接線讀回三個實際 teacher source rows。"""
+
+    from data_module.teacher_input_source_producer import (  # noqa: PLC0415
+        build_teacher_input_provenance,
+    )
+
+    return build_teacher_input_provenance(
+        source_paths=source_paths,
+        output_root=output_root,
+        decision_dates=decision_dates,
+        decision_cutoffs=decision_cutoffs,
+        decision_rows=decision_rows,
+    )
+
+
 class PortfolioMLDatasetAssembler:
     """以 bounded-memory pipeline 發佈年度 training JSONL shards。"""
 
@@ -419,6 +451,14 @@ class PortfolioMLDatasetAssembler:
         manifest_path = request.dataset_manifest_path.resolve()
         raw_manifest = _read_json(manifest_path)
         _validate_raw_dataset_manifest(raw_manifest)
+        shared_contract = _validate_shared_block_dataset_manifest(raw_manifest)
+        if (
+            shared_contract is not None
+            and request.shared_block_store_root is None
+        ):
+            raise ValueError(
+                "shared_block_store_root is required for shared PIT dataset"
+            )
         dataset_id = str(raw_manifest["dataset_id"])
         if dataset_id not in _FORMAL_DATASETS:
             raise ValueError("research-shadow raw dataset cannot become training input")
@@ -454,6 +494,8 @@ class PortfolioMLDatasetAssembler:
             compression_level=request.compression_level,
         )
         try:
+            if request.capacity_callback is not None:
+                request.capacity_callback("assembly_spool_created")
             connection = sqlite3.connect(spool_directory / "assembly.sqlite")
             connection.row_factory = sqlite3.Row
             _initialize_spool(connection)
@@ -467,6 +509,8 @@ class PortfolioMLDatasetAssembler:
                 definitions=runtime_definitions,
                 source_digest=source_digest,
                 batch_size=request.batch_size,
+                shared_block_store_root=request.shared_block_store_root,
+                progress_callback=request.capacity_callback,
             )
             _finalize_long_format_definitions(
                 runtime_definitions=runtime_definitions,
@@ -513,6 +557,8 @@ class PortfolioMLDatasetAssembler:
                     corporate_action_custody.effective_dates_by_symbol
                 ),
             )
+            if request.capacity_callback is not None:
+                request.capacity_callback("assembly_label_spool_complete")
             corporate_action_excluded_label_count = int(
                 connection.execute(
                     "SELECT COUNT(*) FROM label_exclusions "
@@ -693,6 +739,8 @@ class PortfolioMLDatasetAssembler:
                 header_common["formal_rule_champion_history"] = (
                     formal_rule_champion_custody.custody_payload()
                 )
+            teacher_diagnostics: TeacherDiagnostics = {}
+            teacher_decision_rows: list[dict[str, Any]] = []
             teacher_incomplete_count, sample_count = self._assemble_samples(
                 connection=connection,
                 definitions=feature_definitions,
@@ -708,13 +756,65 @@ class PortfolioMLDatasetAssembler:
                 portfolio_state_replay=portfolio_state_replay,
                 years=request.years,
                 batch_size=request.batch_size,
+                teacher_diagnostics=teacher_diagnostics,
+                teacher_decision_rows=teacher_decision_rows,
+                progress_callback=request.capacity_callback,
             )
+            if request.capacity_callback is not None:
+                request.capacity_callback("assembly_samples_complete")
             if sample_count == 0:
                 raise ValueError("no mature PortfolioMLDatasetRow samples were emitted")
             if teacher_incomplete_count:
                 assembly_blockers.add(
                     "teacher_search_incomplete_for_one_or_more_decision_dates"
                 )
+            teacher_input_provenance = raw_manifest.get(
+                "teacher_input_provenance"
+            )
+            source_paths = {
+                "pit_sector_membership": request.sector_membership_path,
+                "causal_non_cash_portfolio_ledger": (
+                    request.formal_portfolio_ledger_path
+                ),
+                "formal_rule_champion_snapshot_history": (
+                    request.formal_rule_champion_history_path
+                ),
+            }
+            if all(path is not None for path in source_paths.values()):
+                try:
+                    teacher_input_provenance = (
+                        build_teacher_source_row_provenance_for_assembly(
+                            source_paths={
+                                name: path
+                                for name, path in source_paths.items()
+                                if path is not None
+                            },
+                            output_root=(
+                                output_root / "teacher_input_provenance"
+                            ),
+                            decision_dates=tuple(
+                                row["decision_date"]
+                                for row in teacher_decision_rows
+                            ),
+                            decision_cutoffs={
+                                str(row["decision_date"]): datetime.combine(
+                                    date.fromisoformat(
+                                        str(row["decision_date"])
+                                    ),
+                                    _DECISION_TIME,
+                                    tzinfo=_TAIPEI,
+                                )
+                                for row in teacher_decision_rows
+                            },
+                            decision_rows=teacher_decision_rows,
+                        )
+                    )
+                except Exception as error:  # noqa: BLE001 - publish blocker
+                    teacher_input_provenance = None
+                    assembly_blockers.add(
+                        "teacher_input_provenance_build_failed:"
+                        + type(error).__name__
+                    )
             writers.close_all()
             shard_payloads = writers.manifest_payloads(staging=staging)
             publication_identity = {
@@ -766,6 +866,15 @@ class PortfolioMLDatasetAssembler:
                 "fold_count": len(fold_windows),
                 "sample_count": sample_count,
                 "teacher_incomplete_decision_count": teacher_incomplete_count,
+                # 這些 bounded counters 只記錄 teacher 形成 target 時看見的
+                # 候選與狀態；OOC fit 前 gate 會重新驗證，不能用成熟後
+                # label 變化替缺少的 PIT／ledger／Rule 證據。
+                "teacher_target_diagnostics": dict(
+                    sorted(teacher_diagnostics.items())
+                ),
+                # 來源 readback 必須由受控 formal input producer 明確提供；
+                # assembler 不以自身 counters 補造 provenance。
+                "teacher_input_provenance": teacher_input_provenance,
                 "sector_membership_count": sector_count,
                 "sector_benchmark_price_count": industry_price_count,
                 "sector_manifest_hash": sector_manifest_hash,
@@ -887,10 +996,22 @@ class PortfolioMLDatasetAssembler:
         definitions: dict[str, _FeatureDefinition],
         source_digest: Any,
         batch_size: int,
+        shared_block_store_root: Path | None = None,
         progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[int, int]:
         publication_root = dataset_manifest_path.parent.parent.resolve()
         dataset_id = str(manifest["dataset_id"])
+        shared_contract = _validate_shared_block_dataset_manifest(manifest)
+        has_shared_reference = any(
+            shard.get("block_reference") is not None
+            for shard in _mapping_sequence(
+                manifest.get("shards"), field_name="shards"
+            )
+        )
+        if has_shared_reference and shared_block_store_root is None:
+            raise ValueError(
+                "shared_block_store_root is required for shared PIT dataset"
+            )
         raw_row_count = 0
         raw_value_count = 0
         observation_batch: list[tuple[object, ...]] = []
@@ -898,11 +1019,32 @@ class PortfolioMLDatasetAssembler:
         for shard in _mapping_sequence(
             manifest.get("shards"), field_name="shards"
         ):
-            shard_path = (publication_root / str(shard["path"])).resolve()
-            if not shard_path.is_relative_to(publication_root):
-                raise ValueError("raw shard path escapes publication root")
-            if _file_sha256(shard_path) != str(shard["compressed_sha256"]):
-                raise ValueError(f"raw shard compressed hash mismatch: {shard_path}")
+            if shared_block_store_root is None:
+                shard_path = (publication_root / str(shard["path"])).resolve()
+                if not shard_path.is_relative_to(publication_root):
+                    raise ValueError("raw shard path escapes publication root")
+                if _file_sha256(shard_path) != str(shard["compressed_sha256"]):
+                    raise ValueError(
+                        f"raw shard compressed hash mismatch: {shard_path}"
+                    )
+            else:
+                resolved_shard = resolve_pit_shard_record(
+                    record=shard,
+                    publication_root=publication_root,
+                    shared_store_root=Path(shared_block_store_root).resolve(),
+                    expected_feature_contract_hash=(
+                        shared_contract[0] if shared_contract is not None else None
+                    ),
+                    expected_maturity_policy=(
+                        shared_contract[1] if shared_contract is not None else None
+                    ),
+                    expected_lane=(
+                        shared_contract[2] if shared_contract is not None else None
+                    ),
+                )
+                # resolver 已以串流 hash 驗證 object；此後 assembler 直接以
+                # gzip.open 逐行消費，避免 shared shard 先被 read_bytes 載入。
+                shard_path = resolved_shard.path
             content_digest = hashlib.sha256()
             shard_row_count = 0
             shard_value_count = 0
@@ -1083,9 +1225,20 @@ class PortfolioMLDatasetAssembler:
                     if len(observation_batch) >= batch_size:
                         _insert_observations(connection, observation_batch)
                         observation_batch.clear()
+                        if progress_callback is not None:
+                            # Capacity callbacks inspect on-disk bytes.  Flush
+                            # the SQLite transaction before reporting a batch;
+                            # otherwise pages may remain in the connection
+                            # cache and the bounded caller can undercount the
+                            # growing spool.
+                            connection.commit()
+                            progress_callback("raw_spool_observations_batch_written")
                     if len(price_batch) >= batch_size:
                         _insert_prices(connection, price_batch)
                         price_batch.clear()
+                        if progress_callback is not None:
+                            connection.commit()
+                            progress_callback("raw_spool_prices_batch_written")
             if (
                 f"sha256:{content_digest.hexdigest()}"
                 != str(shard["content_sha256"])
@@ -1105,9 +1258,15 @@ class PortfolioMLDatasetAssembler:
             if observation_batch:
                 _insert_observations(connection, observation_batch)
                 observation_batch.clear()
+                if progress_callback is not None:
+                    connection.commit()
+                    progress_callback("raw_spool_observations_batch_written")
             if price_batch:
                 _insert_prices(connection, price_batch)
                 price_batch.clear()
+                if progress_callback is not None:
+                    connection.commit()
+                    progress_callback("raw_spool_prices_batch_written")
             connection.commit()
             if progress_callback is not None:
                 progress_callback(
@@ -1116,8 +1275,14 @@ class PortfolioMLDatasetAssembler:
                 )
         if observation_batch:
             _insert_observations(connection, observation_batch)
+            if progress_callback is not None:
+                connection.commit()
+                progress_callback("raw_spool_observations_final_batch_written")
         if price_batch:
             _insert_prices(connection, price_batch)
+            if progress_callback is not None:
+                connection.commit()
+                progress_callback("raw_spool_prices_final_batch_written")
         connection.commit()
         return raw_row_count, raw_value_count
 
@@ -1139,6 +1304,8 @@ class PortfolioMLDatasetAssembler:
         years: tuple[int, ...],
         batch_size: int,
         initial_current_feature_cache: _CurrentFeatureCache | None = None,
+        teacher_diagnostics: TeacherDiagnostics | None = None,
+        teacher_decision_rows: list[dict[str, Any]] | None = None,
         progress_callback: Callable[[str], None] | None = None,
     ) -> tuple[int, int]:
         del benchmark_returns  # 已於 label spool 使用，保留參數作稽核邊界。
@@ -1226,6 +1393,28 @@ class PortfolioMLDatasetAssembler:
             labels_by_symbol = _labels_for_decision(connection, decision_date)
             if not labels_by_symbol:
                 continue
+            if teacher_diagnostics is not None:
+                teacher_diagnostics["decision_date_count"] = (
+                    teacher_diagnostics.get("decision_date_count", 0) + 1
+                )
+                teacher_diagnostics["label_row_count"] = (
+                    teacher_diagnostics.get("label_row_count", 0)
+                    + len(labels_by_symbol)
+                )
+                label20_values = tuple(
+                    label.excess_return_bp
+                    for labels in labels_by_symbol.values()
+                    for label in labels
+                    if label.horizon == 20
+                )
+                teacher_diagnostics["label20_nonzero_row_count"] = (
+                    teacher_diagnostics.get("label20_nonzero_row_count", 0)
+                    + sum(value != 0 for value in label20_values)
+                )
+                teacher_diagnostics["label20_zero_row_count"] = (
+                    teacher_diagnostics.get("label20_zero_row_count", 0)
+                    + sum(value == 0 for value in label20_values)
+                )
             sectors = _sectors_for_decision(
                 connection,
                 decision_date=decision_date,
@@ -1235,6 +1424,34 @@ class PortfolioMLDatasetAssembler:
                 labels_by_symbol=labels_by_symbol,
                 sectors=sectors,
             )
+            if teacher_diagnostics is not None:
+                input_count = len(candidate_rows)
+                eligible_count = sum(
+                    candidate.eligible for candidate in candidate_rows
+                )
+                unknown_sector_count = sum(
+                    candidate.sector_id == "UNKNOWN"
+                    for candidate in candidate_rows
+                )
+                teacher_diagnostics["input_candidate_count"] = (
+                    teacher_diagnostics.get("input_candidate_count", 0)
+                    + input_count
+                )
+                teacher_diagnostics["eligible_candidate_count"] = (
+                    teacher_diagnostics.get("eligible_candidate_count", 0)
+                    + eligible_count
+                )
+                teacher_diagnostics["unknown_sector_candidate_count"] = (
+                    teacher_diagnostics.get("unknown_sector_candidate_count", 0)
+                    + unknown_sector_count
+                )
+                teacher_diagnostics["sector_observed_candidate_count"] = (
+                    teacher_diagnostics.get(
+                        "sector_observed_candidate_count", 0
+                    )
+                    + input_count
+                    - unknown_sector_count
+                )
             state = portfolio_state_replay.state_for(decision_date)
             teacher_result = teacher.build_targets(
                 CausalTeacherRequest(
@@ -1243,7 +1460,61 @@ class PortfolioMLDatasetAssembler:
                     portfolio_state=state,
                     candidates=candidate_rows,
                 )
-            )
+                )
+            if teacher_decision_rows is not None:
+                teacher_decision_rows.append(
+                    {
+                        "decision_date": decision_date,
+                        "candidate_row_count": len(candidate_rows),
+                        "eligible_candidate_count": sum(
+                            candidate.eligible for candidate in candidate_rows
+                        ),
+                        "complete_candidate_set": bool(
+                            teacher_result.formal_label_eligible
+                        ),
+                        "target_mode": (
+                            "non_cash"
+                            if teacher_result.targets.target_weights.positions_bp
+                            else "cash_only"
+                        ),
+                    }
+                )
+            if teacher_diagnostics is not None:
+                teacher_diagnostics["search_candidate_count"] = (
+                    teacher_diagnostics.get("search_candidate_count", 0)
+                    + teacher_result.search_candidate_count
+                )
+                teacher_diagnostics["teacher_incomplete_decision_count"] = (
+                    teacher_diagnostics.get(
+                        "teacher_incomplete_decision_count", 0
+                    )
+                    + int(not teacher_result.formal_label_eligible)
+                )
+                target_positions = teacher_result.targets.target_weights.positions_bp
+                teacher_diagnostics["non_cash_target_decision_count"] = (
+                    teacher_diagnostics.get(
+                        "non_cash_target_decision_count", 0
+                    )
+                    + int(bool(target_positions))
+                )
+                teacher_diagnostics["cash_only_target_decision_count"] = (
+                    teacher_diagnostics.get(
+                        "cash_only_target_decision_count", 0
+                    )
+                    + int(not target_positions)
+                )
+                teacher_diagnostics["target_nonzero_symbol_count"] = (
+                    teacher_diagnostics.get(
+                        "target_nonzero_symbol_count", 0
+                    )
+                    + len(target_positions)
+                )
+                teacher_diagnostics["state_cash_only_decision_count"] = (
+                    teacher_diagnostics.get(
+                        "state_cash_only_decision_count", 0
+                    )
+                    + int(not state.weights.positions_bp)
+                )
             if not teacher_result.formal_label_eligible:
                 teacher_incomplete_count += 1
             market_current = current_feature_cache["market"].get(
@@ -1590,9 +1861,12 @@ def _long_format_dimension(table_name: str, entity_id: str) -> tuple[str, ...]:
     parts = tuple(entity_id.split("|"))
     dimension: tuple[str, ...]
     if table_name == "fundamental_statement_items":
-        if len(parts) < 4:
+        if len(parts) not in {4, 5}:
             raise ValueError("statement item identity is incomplete")
-        dimension = (parts[1], parts[3])
+        report_basis = parts[4] if len(parts) == 5 else "consolidated"
+        if report_basis not in _REPORT_BASES:
+            raise ValueError("statement report_basis is unsupported")
+        dimension = (parts[1], parts[3], report_basis)
     elif table_name == "fundamental_valuation_metrics":
         if len(parts) < 2:
             raise ValueError("valuation metric identity is incomplete")
@@ -1703,13 +1977,54 @@ def _spool_sector_memberships(
     path: Path | None,
     *,
     training_as_of: datetime | None = None,
+    machine_operational_path: Path | None = None,
+    machine_now: datetime | None = None,
 ) -> tuple[str, int]:
-    if path is None:
-        return "sha256:" + ("0" * 64), 0
-    resolved = path.resolve()
-    payloads, canonical_manifest_hash = (
-        _load_sector_membership_sidecar(resolved)
-    )
+    """把 validated sidecar 或明確指定的 machine candidate spool 到暫存 DB。
+
+    ``machine_operational_path`` 僅供 daily shadow dispatch 的 in-memory
+    connection 使用；正式 ``PortfolioMLDatasetAssembler.build`` 不會傳入它，
+    所以 candidate 不會被投影成 formal training publication。
+    """
+
+    if path is not None and machine_operational_path is not None:
+        raise ValueError(
+            "sector membership sidecar and machine operational path are mutually exclusive"
+        )
+    if machine_operational_path is not None:
+        if training_as_of is None:
+            raise ValueError(
+                "machine operational sector candidate requires decision_at"
+            )
+        from data_module.pit_sector_machine_publisher import (
+            consume_machine_pit_operational_candidate,
+        )
+
+        consumed = consume_machine_pit_operational_candidate(
+            machine_operational_path,
+            decision_at=training_as_of,
+            now=machine_now,
+        )
+        candidate_rows = consumed.get("rows")
+        if (
+            not isinstance(candidate_rows, list)
+            or any(not isinstance(row, Mapping) for row in candidate_rows)
+        ):
+            raise ValueError("machine operational sector candidate rows are invalid")
+        if len(candidate_rows) != consumed.get("row_count"):
+            raise ValueError("machine operational sector candidate row_count mismatch")
+        operational_hash = consumed.get("operational_file_hash")
+        if not isinstance(operational_hash, str) or not operational_hash.startswith("sha256:"):
+            raise ValueError("machine operational sector candidate hash is missing")
+        payloads: Sequence[Mapping[str, Any]] = candidate_rows
+        canonical_manifest_hash = operational_hash
+    elif path is None:
+        return _ZERO_SHA256, 0
+    else:
+        resolved = path.resolve()
+        payloads, canonical_manifest_hash = _load_sector_membership_sidecar(
+            resolved
+        )
     rows: list[
         tuple[
             str,
@@ -2810,6 +3125,11 @@ def _build_label_spool(
                             exclusion_batch,
                         )
                         exclusion_batch.clear()
+                        if progress_callback is not None:
+                            connection.commit()
+                            progress_callback(
+                                "label_spool_exclusions_batch_written"
+                            )
                     continue
                 # 這是 supervised outcome path；每個 horizon 必須在此重新
                 # 綁定自己的 causal label suffix。不得沿用前一個 benchmark
@@ -2893,6 +3213,9 @@ def _build_label_spool(
             if len(label_batch) >= batch_size:
                 _insert_labels(connection, label_batch)
                 label_batch.clear()
+                if progress_callback is not None:
+                    connection.commit()
+                    progress_callback("label_spool_labels_batch_written")
         processed_symbols += 1
         if progress_callback is not None:
             now_ns = monotonic_ns()
@@ -2909,8 +3232,14 @@ def _build_label_spool(
                 last_progress_ns = now_ns
     if label_batch:
         _insert_labels(connection, label_batch)
+        if progress_callback is not None:
+            connection.commit()
+            progress_callback("label_spool_labels_final_batch_written")
     if exclusion_batch:
         _insert_label_exclusions(connection, exclusion_batch)
+        if progress_callback is not None:
+            connection.commit()
+            progress_callback("label_spool_exclusions_final_batch_written")
     connection.commit()
     if progress_callback is not None:
         progress_callback("label_spool_complete")
@@ -3354,6 +3683,50 @@ def _sectors_for_decision(
     return result
 
 
+def _membership_market_from_source(source_id: str) -> str | None:
+    """由官方 membership producer identity 解析已證明的交易市場。"""
+
+    normalized = source_id.strip().casefold()
+    if normalized.startswith("official:twse:"):
+        return "TWSE"
+    if normalized.startswith("official:tpex:"):
+        return "TPEx"
+    return None
+
+
+def _membership_provenance_for_decision(
+    connection: sqlite3.Connection,
+    *,
+    decision_date: str,
+    decision_at: str,
+) -> dict[str, tuple[str | None, str]]:
+    """回傳決策時點採用的 membership producer 市場與 source identity。"""
+
+    rows = connection.execute(
+        """
+        SELECT symbol, source_id, available_at, effective_from
+        FROM sector_memberships
+        WHERE status='accepted'
+          AND available_at <= ?
+          AND effective_from <= ?
+          AND (effective_to IS NULL OR effective_to >= ?)
+        ORDER BY symbol, available_at DESC, effective_from DESC, sector_id
+        """,
+        (decision_at, decision_date, decision_date),
+    )
+    result: dict[str, tuple[str | None, str]] = {}
+    for row in rows:
+        symbol = str(row["symbol"])
+        if symbol in result:
+            continue
+        source_id = str(row["source_id"])
+        result[symbol] = (
+            _membership_market_from_source(source_id),
+            source_id,
+        )
+    return result
+
+
 def _teacher_candidates(
     *,
     labels_by_symbol: Mapping[str, tuple[_Label, ...]],
@@ -3467,6 +3840,7 @@ def _build_feature_snapshot(
     stock_current: Mapping[str, _CurrentValue],
     market_current: Mapping[str, _CurrentValue],
     industry_current: Mapping[str, _CurrentValue],
+    industry_missing_reason: str | None = None,
 ) -> tuple[tuple[PITFeatureValue, ...], tuple[str, ...]]:
     del feature_by_id
     current_by_scope = {
@@ -3543,6 +3917,21 @@ def _build_feature_snapshot(
             )
         else:
             missing_families.add(definition.family_id)
+            if stale:
+                missing_revision_reason = "stale"
+                missing_content_reason = "stale"
+            elif (
+                definition.scope == "industry"
+                and industry_missing_reason is not None
+                and current is None
+            ):
+                missing_revision_reason = industry_missing_reason
+                missing_content_reason = industry_missing_reason
+            else:
+                # Preserve the historical row/revision and content-hash
+                # contract for ordinary missing observations.
+                missing_revision_reason = "not_observed_as_of_decision"
+                missing_content_reason = "not_observed"
             features.append(
                 PITFeatureValue(
                     feature_id=definition.feature_id,
@@ -3555,16 +3944,14 @@ def _build_feature_snapshot(
                     ).isoformat(),
                     available_at=decision_at.isoformat(),
                     revision_id=(
-                        "missing:stale"
-                        if stale
-                        else "missing:not_observed_as_of_decision"
+                        f"missing:{missing_revision_reason}"
                     ),
                     quality="missing",
                     content_hash=_sha256_json(
                         {
                             "feature_id": definition.feature_id,
                             "decision_at": decision_at.isoformat(),
-                            "reason": "stale" if stale else "not_observed",
+                            "reason": missing_content_reason,
                         }
                     ),
                     observed=False,
@@ -3824,6 +4211,74 @@ def _validate_raw_dataset_manifest(manifest: Mapping[str, Any]) -> None:
     ):
         raise ValueError("raw dataset allows float persistence")
     _mapping_sequence(manifest.get("features"), field_name="features")
+
+
+def _validate_shared_block_dataset_manifest(
+    manifest: Mapping[str, Any],
+) -> tuple[str, str, str] | None:
+    """驗證 shared dataset view 的語意 contract，避免只改 manifest hash 偽裝。"""
+
+    shared_value = manifest.get("shared_block_store")
+    shard_records = _mapping_sequence(
+        manifest.get("shards"), field_name="shards"
+    )
+    has_shared_reference = any(
+        record.get("block_reference") is not None for record in shard_records
+    )
+    if shared_value is None:
+        if has_shared_reference:
+            raise ValueError("shared PIT dataset is missing shared_block_store")
+        return None
+    shared = _as_mapping(shared_value, field_name="shared_block_store")
+    if shared.get("schema_version") != "ml-immutable-block-store.v1":
+        raise ValueError("shared PIT block store schema mismatch")
+    if not _required_json_bool(
+        shared.get("references_are_relative"),
+        field_name="shared_block_store.references_are_relative",
+    ):
+        raise ValueError("shared PIT references must be relative")
+    if _required_json_bool(
+        shared.get("run_local_shard_copy"),
+        field_name="shared_block_store.run_local_shard_copy",
+    ) is not False:
+        raise ValueError("shared PIT dataset must not copy shards run locally")
+    if not _required_json_bool(
+        shared.get("consumer_requires_shared_store_root"),
+        field_name="shared_block_store.consumer_requires_shared_store_root",
+    ):
+        raise ValueError("shared PIT consumer root requirement is missing")
+    for field_name in (
+        "source_dataset_manifest_hash",
+        "source_publication_manifest_hash",
+        "feature_contract_hash",
+    ):
+        value = shared.get(field_name)
+        if not isinstance(value, str):
+            raise TypeError(f"shared_block_store.{field_name} must be text")
+        _require_sha256(value, field_name=f"shared_block_store.{field_name}")
+    feature_contract_hash = str(shared["feature_contract_hash"])
+    expected_feature_contract_hash = pit_dataset_feature_contract_hash(manifest)
+    if feature_contract_hash != expected_feature_contract_hash:
+        raise ValueError("shared PIT feature contract hash mismatch")
+    maturity_policy = shared.get("maturity_policy")
+    lane = shared.get("lane")
+    if not isinstance(maturity_policy, str) or not maturity_policy.strip():
+        raise ValueError("shared_block_store.maturity_policy is missing")
+    if not isinstance(lane, str) or not lane.strip():
+        raise ValueError("shared_block_store.lane is missing")
+    if not has_shared_reference:
+        raise ValueError("shared PIT dataset has no block references")
+    for index, record in enumerate(shard_records):
+        if record.get("block_reference") is None:
+            raise ValueError(
+                "shared PIT dataset shard is missing block reference: "
+                f"index={index}"
+            )
+        if "path" in record:
+            raise ValueError(
+                "shared PIT dataset shard must not contain run-local path"
+            )
+    return feature_contract_hash, maturity_policy, lane
 
 
 def _pit_sector_id(

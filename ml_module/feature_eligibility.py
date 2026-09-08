@@ -534,7 +534,14 @@ _TABLE_POLICIES: dict[str, _TablePolicy] = {
         effective_candidates=(),
         revision_candidates=("revision_id", "source_version"),
         identifier_columns=frozenset(
-            {"stock_code", "statement_type", "period", "item_code", "item_name"}
+            {
+                "stock_code",
+                "statement_type",
+                "period",
+                "item_code",
+                "item_name",
+                "report_basis",
+            }
         ),
         feature_specs={"value": ("currency_1e4", 10_000)},
         blocked_columns=frozenset(),

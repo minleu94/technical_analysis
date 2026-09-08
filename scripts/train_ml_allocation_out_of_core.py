@@ -21,11 +21,32 @@ from ml_module.allocation_oos_replay_input_builder import (  # noqa: E402
     AllocationOOSReplayInputBuildRequest,
     build_allocation_oos_replay_inputs,
 )
+from data_module.ml_storage_capacity import (  # noqa: E402
+    BYTES_PER_GIB,
+    CANONICAL_HEAVY_CHAIN_SAFETY_RESERVE_BYTES,
+    MLStorageChainReservationHandoff,
+    StorageCapacityError,
+    acquire_heavy_chain_reservation,
+    heavy_chain_lock_path,
+    release_heavy_chain_reservation,
+    resolve_heavy_chain_lock_path,
+    validate_heavy_chain_reservation_handoff,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--store-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--shared-numeric-store",
+        type=Path,
+        help="shared immutable Direct numeric artifact registry",
+    )
+    parser.add_argument(
+        "--shared-artifact-store",
+        type=Path,
+        help="OOC 模型／OOF／Meta artifact 的 immutable shared registry",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--algorithm",
@@ -53,6 +74,7 @@ def _parser() -> argparse.ArgumentParser:
         "--temporary-peak-bytes-budget",
         dest="temporary_storage_budget_bytes",
         type=int,
+        default=BYTES_PER_GIB,
         help="OOC workspace 暫存峰值 bytes 上限",
     )
     parser.add_argument(
@@ -60,12 +82,19 @@ def _parser() -> argparse.ArgumentParser:
         "--persistent-new-bytes-budget",
         dest="persistent_storage_budget_bytes",
         type=int,
+        default=BYTES_PER_GIB,
         help="OOC run 本次持久新增 bytes 上限",
     )
     parser.add_argument(
         "--safety-reserve-bytes",
         type=int,
+        default=CANONICAL_HEAVY_CHAIN_SAFETY_RESERVE_BYTES,
         help="OOC 執行後必須保留的 filesystem bytes",
+    )
+    parser.add_argument(
+        "--heavy-lock-path",
+        type=Path,
+        help="可選；正式 release_v4 output 必須與 canonical lock 相同",
     )
     parser.add_argument(
         "--profile",
@@ -104,11 +133,34 @@ def main(argv: Sequence[str] | None = None) -> int:
         "formal_oos_allowed": False,
         "production_alpha_bp": 0,
     }
+    reservation = None
+    handoff: MLStorageChainReservationHandoff | None = None
     try:
+        lock_path = resolve_heavy_chain_lock_path(
+            args.output_dir,
+            explicit_path=args.heavy_lock_path,
+        )
+        if lock_path is None:
+            lock_path = heavy_chain_lock_path(args.output_dir)
+        handoff = validate_heavy_chain_reservation_handoff(
+            lock_path
+        )
+        if lock_path is not None and handoff is None:
+            reservation = acquire_heavy_chain_reservation(lock_path)
+            if reservation is None:
+                raise StorageCapacityError(
+                    "ML heavy-chain reservation is already held",
+                    preflight={
+                        "lock_path": str(lock_path),
+                        "blocker": "heavy_chain_reservation_unavailable",
+                    },
+                )
         publication = AllocationOutOfCoreTrainingService().train(
             AllocationOutOfCoreTrainingRequest(
                 store_manifest_path=args.store_manifest,
                 output_root=args.output_dir,
+                shared_numeric_store_root=args.shared_numeric_store,
+                shared_artifact_store_root=args.shared_artifact_store,
                 algorithms=algorithms,
                 horizons=horizons,
                 batch_size=args.batch_size,
@@ -133,6 +185,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (
         MemoryError,
         OSError,
+        StorageCapacityError,
         TypeError,
         ValueError,
         KeyError,
@@ -154,6 +207,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    finally:
+        if handoff is not None:
+            handoff.close()
+        release_heavy_chain_reservation(reservation)
     replay_inputs = build_allocation_oos_replay_inputs(
         AllocationOOSReplayInputBuildRequest(
             training_manifest_path=publication.manifest_path,

@@ -18,6 +18,7 @@ import re
 import sys
 import time
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -34,12 +35,25 @@ from scripts.continue_ml_direct_ooc_after_store import (  # noqa: E402
     _file_sha256,
     discover_valid_sector_membership,
 )
+from data_module.pit_sector_membership_machine import (  # noqa: E402
+    MachinePITSourceError,
+    validate_machine_pit_receipt,
+)
+from data_module.pit_sector_machine_publisher import (  # noqa: E402
+    consume_machine_pit_operational_candidate,
+)
 from runtime import controlled_environment as _controlled_environment  # noqa: E402
 
 
 PORTFOLIO_LEDGER_ENV = "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH"
 RULE_HISTORY_ENV = "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH"
 SECTOR_MEMBERSHIP_ENV = "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH"
+PIT_MACHINE_RECEIPT_ENV = (
+    "BALDR_ML_PIT_SECTOR_MEMBERSHIP_MACHINE_RECEIPT_PATH"
+)
+PIT_MACHINE_PUBLICATION_ENV = (
+    "BALDR_ML_PIT_SECTOR_MEMBERSHIP_MACHINE_PUBLICATION_PATH"
+)
 RULE_HMAC_KEY_ENV = "RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY"
 RULE_STORE_ID_ENV = "RULE_CHAMPION_CONTROLLED_STORE_ID"
 READINESS_SCHEMA_VERSION = "ml-formal-input-readiness.v1"
@@ -85,6 +99,7 @@ _INITIAL_CONTROLLED_RUNTIME_ENVIRONMENT = {
 }
 _ADOPTED_CONTROLLED_RUNTIME_ENVIRONMENT: dict[str, str] = {}
 winreg = _controlled_environment.winreg
+_TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
 def _canonical_json(value: object) -> str:
@@ -109,10 +124,19 @@ def _required_text(value: object, *, field_name: str) -> str:
 
 
 def _cutoff_date(training_as_of: str) -> date:
-    parsed = datetime.fromisoformat(training_as_of.replace("Z", "+00:00"))
+    # Formal ledger dates are Taiwan trading dates; preserve full timestamp
+    # checks for Rule/PIT loaders while deriving this date-only cutoff locally.
+    return _training_as_datetime(training_as_of).astimezone(_TAIPEI_TZ).date()
+
+
+def _training_as_datetime(training_as_of: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(training_as_of.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("training_as_of must be valid ISO 8601") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("training_as_of must include timezone")
-    return parsed.date()
+    return parsed.astimezone(timezone.utc)
 
 
 def _environment_path(environment_name: str) -> Path | None:
@@ -483,10 +507,13 @@ def _ledger_readiness(
         ledger = load_formal_portfolio_state_ledger(path)
         cutoff = _cutoff_date(training_as_of)
         if any(
-            date.fromisoformat(decision_date) > cutoff
+            date.fromisoformat(decision_date) >= cutoff
             for decision_date in ledger.decision_dates
         ):
-            raise ValueError("ledger contains decision dates after training_as_of")
+            raise ValueError(
+                "ledger date-only transition requires a later Taiwan calendar-day "
+                "training_as_of; intraday same-day availability is unproven"
+            )
         return {
             "input": "causal_non_cash_portfolio_ledger",
             "state": "ready",
@@ -497,6 +524,7 @@ def _ledger_readiness(
             "transition_chain_hash": ledger.transition_chain_hash,
             "decision_date_count": len(ledger.decision_dates),
             "non_cash_state_day_count": ledger.non_cash_state_day_count,
+            "cutoff_semantics": "taipei_calendar_date_after_date_only_transition",
             "formal_consumer_compatible": True,
         }
     except Exception as error:
@@ -569,6 +597,22 @@ def _sector_readiness(
 ) -> dict[str, Any]:
     configured = _environment_path(SECTOR_MEMBERSHIP_ENV)
     if configured is not None and not configured.is_file():
+        machine_publication = _environment_path(PIT_MACHINE_PUBLICATION_ENV)
+        if machine_publication is not None:
+            machine_result = _machine_pit_publication_readiness(
+                machine_publication,
+                decision_at=_training_as_datetime(training_as_of),
+            )
+            if machine_result is not None:
+                return machine_result
+        machine_receipt = _environment_path(PIT_MACHINE_RECEIPT_ENV)
+        if machine_receipt is not None:
+            machine_result = _machine_pit_receipt_readiness(
+                machine_receipt,
+                decision_at=_training_as_datetime(training_as_of),
+            )
+            if machine_result is not None:
+                return machine_result
         return _missing_result(
             input_name="pit_sector_membership",
             environment_name=SECTOR_MEMBERSHIP_ENV,
@@ -585,6 +629,23 @@ def _sector_readiness(
                 path=configured,
                 hint=prospective_hint,
             )
+    if configured is None:
+        machine_publication = _environment_path(PIT_MACHINE_PUBLICATION_ENV)
+        if machine_publication is not None:
+            machine_result = _machine_pit_publication_readiness(
+                machine_publication,
+                decision_at=_training_as_datetime(training_as_of),
+            )
+            if machine_result is not None:
+                return machine_result
+        machine_receipt = _environment_path(PIT_MACHINE_RECEIPT_ENV)
+        if machine_receipt is not None:
+            machine_result = _machine_pit_receipt_readiness(
+                machine_receipt,
+                decision_at=_training_as_datetime(training_as_of),
+            )
+            if machine_result is not None:
+                return machine_result
     try:
         candidate = discover_valid_sector_membership(
             output_root=output_root,
@@ -645,6 +706,136 @@ def _sector_readiness(
     }
 
 
+def _machine_pit_publication_readiness(
+    publication_path: Path,
+    *,
+    decision_at: datetime,
+) -> dict[str, Any] | None:
+    """把受控 machine operational publication 投影為 candidate 狀態。"""
+
+    if not publication_path.is_file():
+        return _missing_result(
+            input_name="pit_sector_membership",
+            environment_name=PIT_MACHINE_PUBLICATION_ENV,
+            reason="machine_publication_configured_path_is_not_a_file",
+            path=publication_path,
+        )
+    try:
+        consumed = consume_machine_pit_operational_candidate(
+            publication_path,
+            decision_at=decision_at,
+        )
+    except (MachinePITSourceError, OSError, TypeError, ValueError) as error:
+        return _invalid_result(
+            input_name="pit_sector_membership",
+            environment_name=PIT_MACHINE_PUBLICATION_ENV,
+            path=publication_path,
+            error=error,
+        )
+    raw_receipt = consumed.get("receipt")
+    receipt = raw_receipt if isinstance(raw_receipt, Mapping) else {}
+    source_ids = consumed.get("source_ids")
+    if not isinstance(source_ids, list):
+        return _invalid_result(
+            input_name="pit_sector_membership",
+            environment_name=PIT_MACHINE_PUBLICATION_ENV,
+            path=publication_path,
+            error=ValueError("machine operational publication source_ids are invalid"),
+        )
+    return {
+        "input": "pit_sector_membership",
+        "state": "machine_verified",
+        "environment_variable": PIT_MACHINE_PUBLICATION_ENV,
+        "path": str(publication_path),
+        "file_hash": str(consumed.get("operational_file_hash") or ""),
+        "receipt_path": str(receipt.get("receipt_path") or ""),
+        "publication_file_hash": str(
+            receipt.get("publication_file_hash") or ""
+        ),
+        "capture_id": str(consumed.get("capture_id") or ""),
+        "captured_at": str(consumed.get("available_at") or ""),
+        "decision_at": str(consumed.get("consumer_decision_at") or ""),
+        "effective_from": str(consumed.get("effective_from") or ""),
+        "row_count": consumed.get("row_count"),
+        "source_ids": list(source_ids),
+        "publisher_id": str(consumed.get("publisher_id") or ""),
+        "publisher_code_sha256": str(consumed.get("publisher_code_sha256") or ""),
+        "machine_verified": True,
+        "formal_ready": False,
+        "formal_consumer_compatible": False,
+        "candidate_only": True,
+        "source_custody_verified": consumed.get("source_custody_verified") is True,
+        "rows_rebuilt_from_raw": consumed.get("rows_rebuilt_from_raw") is True,
+        "reason": "machine_verified_candidate_formal_owner_publication_pending",
+    }
+
+
+def _machine_pit_receipt_readiness(
+    receipt_path: Path,
+    *,
+    decision_at: datetime,
+) -> dict[str, Any] | None:
+    """把明確指定的 PIT receipt 投影為 machine candidate 狀態。
+
+    receipt 是可重驗的 machine evidence，但沒有 owner-controlled formal
+    publication。因此它不計入 ``ready_input_count``，也不會解除 Formal OOS。
+    """
+
+    if not receipt_path.is_file():
+        return _missing_result(
+            input_name="pit_sector_membership",
+            environment_name=PIT_MACHINE_RECEIPT_ENV,
+            reason="machine_receipt_configured_path_is_not_a_file",
+            path=receipt_path,
+        )
+    try:
+        receipt = validate_machine_pit_receipt(
+            receipt_path,
+            now=decision_at,
+        )
+    except (MachinePITSourceError, OSError, TypeError, ValueError) as error:
+        return _invalid_result(
+            input_name="pit_sector_membership",
+            environment_name=PIT_MACHINE_RECEIPT_ENV,
+            path=receipt_path,
+            error=error,
+        )
+    source_ids = receipt.get("source_ids")
+    if not isinstance(source_ids, list):
+        return _invalid_result(
+            input_name="pit_sector_membership",
+            environment_name=PIT_MACHINE_RECEIPT_ENV,
+            path=receipt_path,
+            error=ValueError("machine PIT receipt source_ids are invalid"),
+        )
+    return {
+        "input": "pit_sector_membership",
+        "state": "machine_verified",
+        "environment_variable": PIT_MACHINE_RECEIPT_ENV,
+        "path": str(receipt_path),
+        "file_hash": str(receipt.get("receipt_file_hash") or ""),
+        "publication_file_hash": str(
+            receipt.get("publication_file_hash") or ""
+        ),
+        "publication_content_hash": str(
+            receipt.get("publication_content_hash") or ""
+        ),
+        "capture_id": str(receipt.get("capture_id") or ""),
+        "captured_at": str(receipt.get("captured_at") or ""),
+        "decision_at": decision_at.isoformat(),
+        "effective_from": str(receipt.get("effective_from") or ""),
+        "row_count": receipt.get("row_count"),
+        "source_ids": list(source_ids),
+        "machine_verified": True,
+        "formal_ready": False,
+        "formal_consumer_compatible": False,
+        "candidate_only": True,
+        "source_custody_verified": receipt.get("source_custody_verified") is True,
+        "rows_rebuilt_from_raw": receipt.get("rows_rebuilt_from_raw") is True,
+        "reason": "machine_verified_candidate_formal_owner_publication_pending",
+    }
+
+
 def build_readiness_report(
     *,
     output_root: Path,
@@ -667,7 +858,19 @@ def build_readiness_report(
         ),
     ]
     ready_input_count = sum(item.get("state") == "ready" for item in results)
+    machine_verified_input_count = sum(
+        item.get("state") == "machine_verified" for item in results
+    )
     input_count = len(results)
+    state_counts = {
+        state: sum(item.get("state") == state for item in results)
+        for state in ("missing", "unknown", "invalid", "ready")
+    }
+    formal_consumer_compatible_count = sum(
+        item.get("state") == "ready"
+        and item.get("formal_consumer_compatible") is True
+        for item in results
+    )
     all_ready = ready_input_count == input_count
     prospective_observation = _inspect_prospective_output_roots(resolved_root)
     body: dict[str, Any] = {
@@ -677,6 +880,12 @@ def build_readiness_report(
         "training_as_of": training_as_of,
         "status": "ready" if all_ready else "waiting_for_formal_inputs",
         "ready_input_count": ready_input_count,
+        "machine_verified_input_count": machine_verified_input_count,
+        "machine_candidate_input_count": machine_verified_input_count,
+        "formal_consumer_compatible_count": formal_consumer_compatible_count,
+        "missing_input_count": state_counts["missing"],
+        "unknown_input_count": state_counts["unknown"],
+        "invalid_input_count": state_counts["invalid"],
         "input_count": input_count,
         "ready_input_ratio": f"{ready_input_count}/{input_count}",
         "formal_oos_allowed": False,

@@ -23,6 +23,15 @@ from typing import Any, Mapping, Sequence
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from data_module.ml_storage_capacity import (  # noqa: E402
+    authorize_heavy_chain_reservation_handoff_child,
+    HEAVY_CHAIN_RESERVATION_HELD_ENV,
+    MLStorageChainReservationHandoff,
+    heavy_chain_lock_path,
+    resolve_heavy_chain_lock_path,
+    validate_heavy_chain_reservation_handoff,
+    forward_heavy_chain_reservation_handoff_environment,
+)
 SCHEMA_VERSION = "portfolio-ml-direct-v3-refresh-chain.v1"
 _HEARTBEAT_SCHEMA_VERSION = "portfolio-ml-direct-v3-refresh-chain-heartbeat.v1"
 # Allow normal Windows scan/indexer locks to clear without abandoning a long
@@ -113,7 +122,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     direct_process: subprocess.Popen[Any] | None = None
     ooc_process: subprocess.Popen[Any] | None = None
     release_process: subprocess.Popen[Any] | None = None
+    handoff: MLStorageChainReservationHandoff | None = None
     try:
+        handoff_lock_path = resolve_heavy_chain_lock_path(output_root)
+        if handoff_lock_path is None:
+            handoff_lock_path = heavy_chain_lock_path(output_root)
+        handoff = validate_heavy_chain_reservation_handoff(handoff_lock_path)
         _atomic_write_json(
             status_path,
             {
@@ -329,6 +343,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         _atomic_write_json(status_path, payload)
         print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         return 2
+    finally:
+        if handoff is not None:
+            handoff.close()
 
 
 def _direct_build_command(args: argparse.Namespace) -> list[str]:
@@ -420,6 +437,8 @@ def _ooc_helper_command(
         str(store_output_dir),
         "--training-output-dir",
         str(training_output_dir),
+        "--output-root",
+        str(args.output_root.resolve()),
         "--batch-size",
         str(args.batch_size),
         "--workers",
@@ -595,13 +614,34 @@ def _start_logged(command: Sequence[str], log_path: Path) -> subprocess.Popen[An
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("a", encoding="utf-8")
     try:
-        return subprocess.Popen(
+        environment = forward_heavy_chain_reservation_handoff_environment(
+            environment=os.environ
+        )
+        process = subprocess.Popen(
             list(command),
             cwd=ROOT,
             stdout=log,
             stderr=subprocess.STDOUT,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            env=environment,
         )
+        if os.environ.get(HEAVY_CHAIN_RESERVATION_HELD_ENV) is not None:
+            try:
+                authorize_heavy_chain_reservation_handoff_child(
+                    process.pid,
+                    environment=environment,
+                )
+            except Exception:
+                try:
+                    process.terminate()
+                    process.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                raise
+        return process
     finally:
         log.close()
 

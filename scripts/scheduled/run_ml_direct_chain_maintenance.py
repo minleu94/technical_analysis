@@ -23,19 +23,30 @@ if str(ROOT) not in sys.path:
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
 from data_module.ml_storage_capacity import (
-    BYTES_PER_GIB,
     MLStorageCapacityBudget,
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+    SCHEDULED_SAFETY_RESERVE_BYTES,
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+    StorageCapacityPreflight,
     directory_size_bytes,
     evaluate_capacity,
+    heavy_chain_lock_path,
+    heavy_chain_capacity_budget,
+    normalise_capacity_usage,
+    resolve_heavy_chain_safety_reserve,
 )
 from scripts import maintain_ml_direct_v3_refresh_chain as maintenance
 
 
 _DEFAULT_DATA_ROOT = Path(r"D:\Min\Python\Project\FA_Data")
 _RAW_ROOT_NAME = "ml_pit_year_shards"
-_DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
-_DEFAULT_DIRECT_PERSISTENT_STORAGE_BUDGET_BYTES = 35 * BYTES_PER_GIB
-_DEFAULT_DIRECT_TEMPORARY_STORAGE_BUDGET_BYTES = 40 * BYTES_PER_GIB
+_DEFAULT_MINIMUM_FREE_SPACE_BYTES = SCHEDULED_SAFETY_RESERVE_BYTES
+_DEFAULT_DIRECT_PERSISTENT_STORAGE_BUDGET_BYTES = (
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET
+)
+_DEFAULT_DIRECT_TEMPORARY_STORAGE_BUDGET_BYTES = (
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -122,18 +133,17 @@ def _capacity_budget_from_args(args: argparse.Namespace) -> MLStorageCapacityBud
             "minimum_free_space_bytes",
             _DEFAULT_MINIMUM_FREE_SPACE_BYTES,
         )
-    if isinstance(reserve, bool) or not isinstance(reserve, int):
-        raise TypeError("safety_reserve_bytes must be integer")
-    return MLStorageCapacityBudget(
+    reserve = resolve_heavy_chain_safety_reserve(reserve)
+    return heavy_chain_capacity_budget(
         persistent_new_bytes_budget=getattr(
             args,
             "persistent_storage_budget_bytes",
-            None,
+            _DEFAULT_DIRECT_PERSISTENT_STORAGE_BUDGET_BYTES,
         ),
         temporary_peak_bytes_budget=getattr(
             args,
             "temporary_storage_budget_bytes",
-            None,
+            _DEFAULT_DIRECT_TEMPORARY_STORAGE_BUDGET_BYTES,
         ),
         safety_reserve_bytes=reserve,
     )
@@ -318,6 +328,13 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[list[str], dict[str, Any]
         str(args.retry_delay_seconds),
         "--watch-formal-inputs",
     ]
+    safety_reserve_value = getattr(args, "safety_reserve_bytes", None)
+    if safety_reserve_value is None:
+        safety_reserve_value = getattr(
+            args,
+            "minimum_free_space_bytes",
+            _DEFAULT_MINIMUM_FREE_SPACE_BYTES,
+        )
     for flag, value in (
         (
             "--persistent-storage-budget-bytes",
@@ -329,7 +346,7 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[list[str], dict[str, Any]
         ),
         (
             "--safety-reserve-bytes",
-            getattr(args, "safety_reserve_bytes", None),
+            safety_reserve_value,
         ),
     ):
         if value is not None:
@@ -347,6 +364,9 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[list[str], dict[str, Any]
         "training_as_of": training_as_of,
         "store_output_dir": str(store_output_dir),
         "training_output_dir": str(training_output_dir),
+        "heavy_chain_lock_path": str(
+            heavy_chain_lock_path(release_root)
+        ),
         "database": str(database),
         "database_mode": "ro",
         "query_only": True,
@@ -390,6 +410,32 @@ def _storage_preflight(
         "minimum_free_space_bytes": minimum,
         "within_minimum_free_space": free_bytes >= minimum,
     }
+
+
+def _capacity_evaluation(
+    storage_preflight: dict[str, Any],
+    *,
+    capacity_budget: MLStorageCapacityBudget,
+    persistent_roots: list[Path],
+    stage: str,
+) -> StorageCapacityPreflight:
+    capacity_usage = normalise_capacity_usage(storage_preflight)
+    return evaluate_capacity(
+        budget=capacity_budget,
+        usage=capacity_usage,
+        stage=stage,
+        persistent_existing_bytes=sum(
+            directory_size_bytes(path) for path in persistent_roots
+        ),
+        # 啟動前無法知道實際輸出量；以兩項已設定上限作最壞情況估算，
+        # 不把未知值靜默折成 0。
+        persistent_new_bytes_estimate=(
+            capacity_budget.persistent_new_bytes_budget
+        ),
+        temporary_peak_bytes_observed=(
+            capacity_budget.temporary_peak_bytes_budget
+        ),
+    )
 
 
 def _run_maintainer_with_heartbeat(
@@ -467,28 +513,11 @@ def main(argv: list[str] | None = None) -> int:
         store_output_value = metadata.get("store_output_dir")
         if isinstance(store_output_value, str) and store_output_value.strip():
             persistent_roots.append(Path(store_output_value))
-        capacity_usage = dict(storage_preflight)
-        # Keep compatibility with tests/embedding callers that supplied the
-        # previous three-field preflight mapping.
-        capacity_usage.setdefault("used_bytes", 0)
-        capacity_usage.setdefault(
-            "total_bytes",
-            int(capacity_usage["free_bytes"])
-            + int(capacity_usage["used_bytes"]),
-        )
-        capacity_result = evaluate_capacity(
-            budget=capacity_budget,
-            usage=capacity_usage,
+        capacity_result = _capacity_evaluation(
+            storage_preflight,
+            capacity_budget=capacity_budget,
+            persistent_roots=persistent_roots,
             stage="scheduled_direct_chain_bootstrap",
-            persistent_existing_bytes=sum(
-                directory_size_bytes(path) for path in persistent_roots
-            ),
-            # Before a child is launched the exact output size is unknown;
-            # reserve the configured chain budget itself as the worst case.
-            persistent_new_bytes_estimate=(
-                capacity_budget.persistent_new_bytes_budget or 0
-            ),
-            temporary_peak_bytes_observed=0,
         )
         metadata["capacity_preflight"] = capacity_result.as_dict()
         if bool(getattr(args, "preflight_only", False)):
@@ -522,16 +551,35 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
             return 0
-        owner_state, owner_pid = _maintenance_lock_state(training_output_dir)
-        execution_disposition = (
-            "existing_owner_lock"
-            if owner_state == "verified"
-            else (
-                "owner_lock_unverifiable"
-                if owner_state == "owner_lock_unverifiable"
-                else "new_owner_requested"
+        heavy_lock_path = Path(
+            str(
+                metadata.get(
+                    "heavy_chain_lock_path",
+                    heavy_chain_lock_path(training_output_dir.parent),
+                )
             )
-        )
+        ).resolve()
+        owner_state, owner_pid = _maintenance_lock_state(training_output_dir)
+        if owner_state in {"verified", "owner_lock_unverifiable"}:
+            _write_status(
+                status_path,
+                {
+                    **base_status,
+                    **metadata,
+                    "status": "skipped_locked",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "execution_disposition": "existing_owner_lock",
+                    "maintenance_lock_state": owner_state,
+                    "maintenance_owner_process_id": owner_pid,
+                    "heavy_chain_reservation": {
+                        "state": "owned_by_existing_maintainer",
+                        "lock_path": str(heavy_lock_path),
+                    },
+                    "reason": "existing_direct_chain_owner_is_active",
+                },
+            )
+            return 0
+        execution_disposition = "new_owner_requested"
         running_status = {
             **base_status,
             **metadata,
@@ -540,6 +588,12 @@ def main(argv: list[str] | None = None) -> int:
             "execution_disposition": execution_disposition,
             "maintenance_lock_state": owner_state,
             "maintenance_owner_process_id": owner_pid,
+            "heavy_chain_reservation": {
+                "state": "delegated_to_maintainer",
+                "lock_path": str(heavy_lock_path),
+                "owner": "maintain_ml_direct_v3_refresh_chain.py",
+                "lifetime": "child_process",
+            },
         }
         _write_status(status_path, running_status)
         return_code = _run_maintainer_with_heartbeat(
@@ -549,6 +603,26 @@ def main(argv: list[str] | None = None) -> int:
             training_output_dir=training_output_dir,
             poll_seconds=args.poll_seconds,
         )
+        if (
+            return_code
+            == maintenance._HEAVY_CHAIN_RESERVATION_UNAVAILABLE_RETURN_CODE
+        ):
+            _write_status(
+                status_path,
+                {
+                    **running_status,
+                    "status": "skipped_locked",
+                    "execution_disposition": "heavy_chain_reservation_unavailable",
+                    "heavy_chain_reservation": {
+                        "state": "unavailable",
+                        "lock_path": str(heavy_lock_path),
+                        "owner": "maintain_ml_direct_v3_refresh_chain.py",
+                    },
+                    "reason": "another_ml_heavy_chain_is_running",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            return 0
         final_lock_state, final_owner_pid = _maintenance_lock_state(
             training_output_dir
         )

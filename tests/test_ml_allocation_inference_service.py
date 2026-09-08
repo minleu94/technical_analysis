@@ -10,12 +10,16 @@ import pytest
 
 from app_module.ml_allocation_inference_service import (
     MLAllocationInferenceService,
+    _ExpertOutput,
+    _expert_vector,
 )
 from ml_module.allocation_contracts import (
+    AllocationTargets,
     AllocationWeightContract,
     CausalPortfolioState,
     PITFeatureValue,
     PortfolioMLDatasetRow,
+    post_freeze_shadow_decision_scope,
 )
 from tests.test_ml_allocation_training_service import (  # noqa: F401
     _sample,
@@ -86,6 +90,39 @@ def _service(training_result) -> MLAllocationInferenceService:
     )
 
 
+def _research_rows() -> tuple[PortfolioMLDatasetRow, ...]:
+    """建立保留實際 capture timestamp 的 target-free research rows。"""
+
+    decision_at = "2027-01-04T18:00:00+08:00"
+    with post_freeze_shadow_decision_scope():
+        return tuple(
+            replace(
+                row,
+                row_id=f"row:post-freeze-shadow:2027-01-04:{row.symbol}",
+                decision_at=decision_at,
+            )
+            for row in _inference_rows()
+        )
+
+
+def _nonempty_target() -> AllocationTargets:
+    weights = AllocationWeightContract(
+        positions_bp=(("2317", 1_000),),
+        cash_bp=9_000,
+    )
+    return AllocationTargets(
+        decision_date="2027-01-04",
+        horizon_end_date="2027-01-24",
+        available_at="2027-01-25T18:00:00+08:00",
+        target_weights=weights,
+        delta_weights_bp=(("2317", 1_000),),
+        risk_contributions_bp=(("2317", 1_000),),
+        risky_budget_bp=1_000,
+        cash_bp=9_000,
+        rebalance_worthwhile=True,
+    )
+
+
 def _infer(service: MLAllocationInferenceService, rows):
     return service.infer(
         rows=rows,
@@ -105,6 +142,36 @@ def test_artifact_hash_is_verified_before_joblib_deserialization(
             expected_artifact_hash=training_result.artifact_hash,
             expected_dataset_id=training_result.dataset_id,
         )
+
+
+def test_legacy_artifact_keeps_calibrated_meta_probability_input(
+    training_result,
+) -> None:
+    service = _service(training_result)
+    output = _ExpertOutput(
+        expected_excess_return_bp=1,
+        expected_sector_excess_return_bp=2,
+        downside_probability_bp=111,
+        uncalibrated_downside_probability_bp=999,
+        predicted_mae_bp=3,
+        predicted_mfe_bp=4,
+        predicted_realized_volatility_bp=5,
+        predicted_max_drawdown_bp=6,
+        predicted_tail_loss_bp=7,
+        fill_feasibility_probability_bp=8,
+        rank_bp=9,
+        missing_head_ids=(),
+        neutral_fallback=False,
+    )
+
+    # 舊版 direct artifact 沒有新 metadata，parser 會保留原本的
+    # calibrated meta 輸入；raw_oof 只允許明確綁定的 minimal OOC release。
+    assert service._artifact.meta_probability_input == "calibrated"
+    assert _expert_vector(output)[7] == 111
+    assert _expert_vector(
+        output,
+        meta_probability_input="raw_oof",
+    )[7] == 999
 
 
 def test_artifact_cannot_smuggle_production_authority(training_result) -> None:
@@ -149,6 +216,101 @@ def test_inference_rechecks_future_feature_even_after_contract_tamper(
 
     with pytest.raises(ValueError, match="future feature available_at"):
         _infer(_service(training_result), rows)
+
+
+def test_research_shadow_accepts_actual_capture_but_daily_keeps_0830_gate(
+    training_result,
+) -> None:
+    service = _service(training_result)
+    rows = _research_rows()
+
+    with pytest.raises(ValueError, match="08:30"):
+        _infer(service, rows)
+
+    result = service.infer(
+        rows=rows,
+        model_id="allocator-v4-test",
+        universe_id="pit-universe-test",
+        policy_id="balanced-v1",
+        policy_hash=_POLICY_HASH,
+        allow_research_shadow=True,
+    )
+    audit = result.audit_payload()
+    assert audit["decision_at"] == "2027-01-04T18:00:00+08:00"
+    assert audit["inference_readback_mode"] == "post_freeze_research_shadow"
+    assert all(
+        row["row_id"].startswith("row:post-freeze-shadow:")
+        for row in audit["row_audits"]
+    )
+    assert result.proposal.formal_oos_allowed is False
+    assert result.proposal.production_action_allowed is False
+    assert result.proposal.production_blend_alpha_bp == 0
+    assert result.proposal.broker_order_allowed is False
+
+
+def test_research_shadow_rejects_targets_future_features_and_mixed_clocks(
+    training_result,
+) -> None:
+    service = _service(training_result)
+    rows = _research_rows()
+
+    # A target-bearing row is never an inference input, even if its row id is
+    # marked as a post-freeze research row.
+    target = _nonempty_target()
+    target_row = replace(
+        _inference_rows()[0],
+        row_id="row:post-freeze-shadow:2027-01-04:2317",
+        targets=target,
+    )
+    same_clock_shadow_row = replace(
+        _inference_rows()[1],
+        row_id="row:post-freeze-shadow:2027-01-04:2330",
+    )
+    with pytest.raises(ValueError, match="must not contain supervised"):
+        service.infer(
+            rows=(target_row, same_clock_shadow_row),
+            model_id="allocator-v4-test",
+            universe_id="pit-universe-test",
+            policy_id="balanced-v1",
+            policy_hash=_POLICY_HASH,
+            allow_research_shadow=True,
+        )
+
+    # Bypass only the row constructor's early contract check to emulate a
+    # tampered persisted row; the consumer must still recheck available_at.
+    future_feature = rows[0].features[0]
+    object.__setattr__(
+        future_feature,
+        "available_at",
+        "2027-01-04T18:01:00+08:00",
+    )
+    with pytest.raises(ValueError, match="future feature available_at"):
+        service.infer(
+            rows=rows,
+            model_id="allocator-v4-test",
+            universe_id="pit-universe-test",
+            policy_id="balanced-v1",
+            policy_hash=_POLICY_HASH,
+            allow_research_shadow=True,
+        )
+
+    with post_freeze_shadow_decision_scope():
+        mixed_rows = (
+            rows[0],
+            replace(
+                rows[1],
+                decision_at="2027-01-04T18:01:00+08:00",
+            ),
+        )
+    with pytest.raises(ValueError, match="share one decision_at"):
+        service.infer(
+            rows=mixed_rows,
+            model_id="allocator-v4-test",
+            universe_id="pit-universe-test",
+            policy_id="balanced-v1",
+            policy_hash=_POLICY_HASH,
+            allow_research_shadow=True,
+        )
 
 
 def test_missing_pack_uses_explicit_cash_only_fallback(training_result) -> None:

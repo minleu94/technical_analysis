@@ -29,10 +29,26 @@ import numpy as np
 from data_module import portfolio_ml_dataset_assembler as legacy
 from data_module import portfolio_ml_out_of_core_store as store_module
 from data_module.ml_storage_capacity import (
+    heavy_chain_capacity_budget,
     MLStorageCapacityBudget,
     StorageCapacityError,
     directory_size_bytes as capacity_directory_size_bytes,
     preflight_capacity,
+)
+from data_module.ml_pit_shared_block_resolver import resolve_pit_shard_record
+from data_module.ml_direct_shared_block_resolver import (
+    DIRECT_NUMERIC_ARTIFACT_IDS,
+    DIRECT_NUMERIC_ARTIFACT_KEY_VERSION,
+    DIRECT_NUMERIC_ARTIFACT_REFERENCE_SCHEMA_VERSION,
+    DIRECT_NUMERIC_MATURITY_POLICY_VERSION,
+    DIRECT_NUMERIC_YEAR_DESCRIPTOR_SCHEMA_VERSION,
+    direct_numeric_year_descriptor_key,
+    direct_numeric_artifact_key,
+    find_direct_year_descriptor,
+    publish_direct_numeric_artifact,
+    publish_direct_year_descriptor,
+    resolve_direct_year_descriptor,
+    resolve_direct_year_artifact_paths,
 )
 from ml_module.allocation_training_service import AllocationTrainingSample
 
@@ -43,6 +59,12 @@ DIRECT_HEARTBEAT_SCHEMA_VERSION = "portfolio-ml-direct-heartbeat.v1"
 DIRECT_DISCOVERY_CACHE_SCHEMA_VERSION = (
     "portfolio-ml-direct-discovery-cache.v1"
 )
+DIRECT_CARRY_SCHEMA_VERSION = "portfolio-ml-direct-carry.v2"
+DIRECT_REPLAY_VOLUME_CARRY_SCOPE = "replay_volume"
+DIRECT_REPLAY_VOLUME_POLICY_VERSION = (
+    "direct-replay-volume20-cross-year-carry.v1"
+)
+DIRECT_LABEL_CONTRACT_VERSION = "direct-numeric-label-contract.v1"
 _TAIPEI = ZoneInfo("Asia/Taipei")
 _DECISION_TIME = time(hour=8, minute=30)
 _SHA256_PREFIX = "sha256:"
@@ -64,6 +86,8 @@ _ATOMIC_REPLACE_RETRY_DELAY_SECONDS = 0.5
 _DISCOVERY_PROGRESS_INTERVAL = 100_000
 _DISCOVERY_PROGRESS_CHECK_INTERVAL = 4_096
 _DISCOVERY_PROGRESS_MAX_SILENCE_NS = 30 * 1_000_000_000
+_VOLUME_WINDOW_SIZE = 20
+_CARRY_METADATA_KEY = "__carry_schema_version__"
 
 
 @dataclass(frozen=True)
@@ -90,6 +114,8 @@ class PortfolioMLDirectNumericRequest:
     persistent_storage_budget_bytes: int | None = None
     persistent_new_bytes_budget: int | None = None
     safety_reserve_bytes: int | None = None
+    shared_block_store_root: Path | None = None
+    shared_numeric_store_root: Path | None = None
 
     def __post_init__(self) -> None:
         legacy.PortfolioMLDatasetAssemblyRequest(
@@ -110,6 +136,7 @@ class PortfolioMLDirectNumericRequest:
             purge_trading_days=self.purge_trading_days,
             embargo_trading_days=self.embargo_trading_days,
             batch_size=self.batch_size,
+            shared_block_store_root=self.shared_block_store_root,
         )
         for field_name in ("workers", "memory_budget_mb"):
             value = getattr(self, field_name)
@@ -271,10 +298,25 @@ class PortfolioMLDirectNumericStoreBuilder:
         self,
         request: PortfolioMLDirectNumericRequest,
     ) -> PortfolioMLDirectNumericPublication:
+        # 先解析中央 heavy policy，再建立 run identity；避免 capacity
+        # 預設變更後沿用同一個 run id 而靜默混用不同安全邊界。
+        capacity_budget = _capacity_budget_for_request(request)
+        temporary_budget_bytes = capacity_budget.temporary_peak_bytes_budget
+        if temporary_budget_bytes is None:
+            raise RuntimeError(
+                "resolved Direct capacity budget lacks temporary limit"
+            )
         memory_guard = _MemoryBudgetGuard.create(request.memory_budget_mb)
         raw_path = request.raw_manifest_path.resolve()
         raw_manifest = legacy._read_json(raw_path)
         legacy._validate_raw_dataset_manifest(raw_manifest)
+        shared_contract = legacy._validate_shared_block_dataset_manifest(
+            raw_manifest
+        )
+        if shared_contract is not None and request.shared_block_store_root is None:
+            raise ValueError(
+                "shared_block_store_root is required for shared PIT dataset"
+            )
         cutoff = legacy._available_datetime(
             request.training_as_of,
             field_name="training_as_of",
@@ -306,7 +348,26 @@ class PortfolioMLDirectNumericStoreBuilder:
             "test_date_count": request.test_date_count,
             "purge_trading_days": request.purge_trading_days,
             "embargo_trading_days": request.embargo_trading_days,
+            "capacity_budget": capacity_budget.as_dict(),
+            # carry schema/policy 屬於 run identity；舊年度若沒有跨年
+            # volume seed，不得用相同 request 靜默重用舊產物。
+            "volume_history_carry_schema_version": (
+                DIRECT_CARRY_SCHEMA_VERSION
+            ),
+            "volume_history_carry_policy_version": (
+                DIRECT_REPLAY_VOLUME_POLICY_VERSION
+            ),
         }
+        if shared_contract is not None:
+            direct_identity["shared_block_store_mode"] = "content_addressed"
+        if request.shared_numeric_store_root is not None:
+            direct_identity["shared_numeric_store_mode"] = "content_addressed"
+            direct_identity["shared_numeric_artifact_key_version"] = (
+                DIRECT_NUMERIC_ARTIFACT_KEY_VERSION
+            )
+            direct_identity["shared_numeric_reference_schema_version"] = (
+                DIRECT_NUMERIC_ARTIFACT_REFERENCE_SCHEMA_VERSION
+            )
         if request.formal_portfolio_ledger_path is not None:
             direct_identity["formal_portfolio_ledger_file_hash"] = (
                 _file_sha256(request.formal_portfolio_ledger_path.resolve())
@@ -369,6 +430,8 @@ class PortfolioMLDirectNumericStoreBuilder:
             test_date_count=request.test_date_count,
             purge_trading_days=request.purge_trading_days,
             embargo_trading_days=request.embargo_trading_days,
+            shared_block_store_root=request.shared_block_store_root,
+            shared_contract=shared_contract,
         )
         if discovery is None:
             discovery = _discover(
@@ -380,6 +443,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                 test_date_count=request.test_date_count,
                 purge_trading_days=request.purge_trading_days,
                 embargo_trading_days=request.embargo_trading_days,
+                shared_block_store_root=request.shared_block_store_root,
+                shared_contract=shared_contract,
                 progress_callback=report_discovery,
             )
             _write_discovery_cache(
@@ -482,10 +547,11 @@ class PortfolioMLDirectNumericStoreBuilder:
         }
         if manifest_path.is_file():
             existing_manifest = _read_json(manifest_path)
-            store_module._validate_completed_store(
+            _validate_completed_direct_store(
                 manifest=existing_manifest,
                 run_directory=run_directory,
                 expected_identity=store_identity,
+                shared_numeric_store_root=request.shared_numeric_store_root,
             )
             store_module._write_latest_pointer(
                 latest_manifest_path=latest_path,
@@ -514,9 +580,8 @@ class PortfolioMLDirectNumericStoreBuilder:
         temporary_preflight = _preflight_temporary_budget(
             shards=tuple(discovery.shard_by_year.values()),
             feature_count=len(discovery.feature_ids),
-            budget_bytes=request.temporary_storage_budget_bytes,
+            budget_bytes=temporary_budget_bytes,
         )
-        capacity_budget = _capacity_budget_for_request(request)
         capacity_preflight = preflight_capacity(
             probe_path=output_root,
             budget=capacity_budget,
@@ -546,11 +611,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                 field_name="completed_years",
             )
         }
-        carry: Any = {
-            "stock": {},
-            "market": {},
-            "industry": {},
-        }
+        carry: Any = _empty_carry()
         peak_temporary_bytes = int(
             checkpoint.get("peak_temporary_bytes", 0)
         )
@@ -582,9 +643,15 @@ class PortfolioMLDirectNumericStoreBuilder:
                 temporary_roots=tuple(temporary_roots),
                 temporary_peak_bytes_observed=peak_temporary_bytes,
             )
+            observed_temporary_bytes = result.temporary_peak_bytes_observed
+            if observed_temporary_bytes is None:
+                raise StorageCapacityError(
+                    "capacity preflight returned an unknown temporary peak",
+                    preflight=result.as_dict(),
+                )
             peak_temporary_bytes = max(
                 peak_temporary_bytes,
-                result.temporary_peak_bytes_observed,
+                observed_temporary_bytes,
             )
             last_capacity_preflight = result.as_dict()
             return last_capacity_preflight
@@ -592,6 +659,7 @@ class PortfolioMLDirectNumericStoreBuilder:
         total_corporate_exclusions = 0
         total_teacher_incomplete = 0
         total_trade_restriction_unknown = 0
+        total_teacher_diagnostics: dict[str, int] = {}
         year_manifests: list[dict[str, Any]] = []
         years = tuple(sorted(discovery.shard_by_year))
         _write_heartbeat(
@@ -639,13 +707,22 @@ class PortfolioMLDirectNumericStoreBuilder:
                 and _checkpointed_year_is_valid(
                     year_directory=year_directory,
                     checkpoint_entry=existing_year,
+                    shared_numeric_store_root=request.shared_numeric_store_root,
                 )
             ):
                 year_manifest = _read_json(
                     year_directory / "manifest.json"
                 )
                 year_manifests.append(year_manifest)
-                carry = _read_carry(year_directory / "carry.state.gz")
+                _accumulate_teacher_diagnostics(
+                    total_teacher_diagnostics,
+                    year_manifest,
+                )
+                carry = _read_year_carry(
+                    year_directory=year_directory,
+                    year_manifest=year_manifest,
+                    shared_numeric_store_root=request.shared_numeric_store_root,
+                )
                 total_corporate_exclusions += int(
                     year_manifest.get(
                         "corporate_action_excluded_label_count", 0
@@ -684,6 +761,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                     discovery=discovery,
                     dataset_identity_hash=dataset_identity_hash,
                     feature_registry_hash=feature_registry_hash,
+                    shared_numeric_store_root=request.shared_numeric_store_root,
                 )
                 completed[year] = adopted_entry
                 _write_incomplete_checkpoint(
@@ -705,7 +783,15 @@ class PortfolioMLDirectNumericStoreBuilder:
                     year_ordinal=ordinal,
                 )
                 year_manifests.append(year_manifest)
-                carry = _read_carry(year_directory / "carry.state.gz")
+                _accumulate_teacher_diagnostics(
+                    total_teacher_diagnostics,
+                    year_manifest,
+                )
+                carry = _read_year_carry(
+                    year_directory=year_directory,
+                    year_manifest=year_manifest,
+                    shared_numeric_store_root=request.shared_numeric_store_root,
+                )
                 total_corporate_exclusions += int(
                     year_manifest.get(
                         "corporate_action_excluded_label_count", 0
@@ -725,6 +811,128 @@ class PortfolioMLDirectNumericStoreBuilder:
                     stage=f"year_{year}_checkpoint_adopted"
                 )
                 continue
+            if request.shared_numeric_store_root is not None:
+                # Descriptor lookup is deliberately before ``_build_year``.
+                # A reusable annual block must not create an assembly SQLite,
+                # numeric staging files, or invoke the numeric writer first.
+                annual_dates = tuple(
+                    value
+                    for value in discovery.eligible_dates
+                    if date.fromisoformat(value).year == year
+                )
+                source_shards = [dict(discovery.shard_by_year[year])]
+                if year + 1 in discovery.shard_by_year:
+                    source_shards.append(
+                        dict(discovery.shard_by_year[year + 1])
+                    )
+                reused = _try_reuse_shared_year(
+                    year_directory=year_directory,
+                    year=year,
+                    year_ordinal=ordinal,
+                    annual_dates=annual_dates,
+                    source_shards=source_shards,
+                    raw_manifest=raw_manifest,
+                    source_manifest_hashes=source_manifest_hashes,
+                    sector_manifest_hash=sector_manifest_hash,
+                    feature_registry_hash=feature_registry_hash,
+                    cutoff=cutoff,
+                    benchmark_entity_id=request.benchmark_entity_id,
+                    corporate_custody=corporate_custody,
+                    portfolio_replay=portfolio_replay,
+                    carry_input_hash=_carry_identity_hash(carry),
+                    dataset_identity_hash=dataset_identity_hash,
+                    shared_store_root=request.shared_numeric_store_root,
+                )
+                if reused is not None:
+                    year_manifest, carry, temp_bytes = reused
+                    peak_temporary_bytes = max(
+                        peak_temporary_bytes,
+                        temp_bytes,
+                    )
+                    try:
+                        capacity_checkpoint(
+                            f"year_{year}_shared_reuse_checkpoint",
+                        )
+                    except StorageCapacityError as exc:
+                        _write_incomplete_checkpoint(
+                            checkpoint_path=checkpoint_path,
+                            run_id=run_id,
+                            raw_manifest_hash=str(
+                                raw_manifest["manifest_hash"]
+                            ),
+                            completed=completed,
+                            peak_temporary_bytes=peak_temporary_bytes,
+                            capacity_preflight=exc.preflight,
+                            failure={
+                                "error_type": type(exc).__name__,
+                                "error": str(exc),
+                            },
+                        )
+                        _write_heartbeat(
+                            path=heartbeat_path,
+                            run_id=run_id,
+                            raw_manifest_hash=str(
+                                raw_manifest["manifest_hash"]
+                            ),
+                            status="blocked_capacity",
+                            stage=(
+                                f"year_{year}_shared_reuse_capacity_blocked"
+                            ),
+                            completed_years=tuple(sorted(completed)),
+                            current_year=year,
+                            year_ordinal=ordinal,
+                        )
+                        raise
+                    year_manifests.append(year_manifest)
+                    _accumulate_teacher_diagnostics(
+                        total_teacher_diagnostics,
+                        year_manifest,
+                    )
+                    total_corporate_exclusions += int(
+                        year_manifest[
+                            "corporate_action_excluded_label_count"
+                        ]
+                    )
+                    total_teacher_incomplete += int(
+                        year_manifest[
+                            "teacher_incomplete_decision_count"
+                        ]
+                    )
+                    total_trade_restriction_unknown += int(
+                        year_manifest[
+                            "trade_restriction_unknown_row_count"
+                        ]
+                    )
+                    completed[year] = _completed_year_entry(
+                        year=year,
+                        year_directory=year_directory,
+                        year_manifest=year_manifest,
+                        shared_numeric_store_root=(
+                            request.shared_numeric_store_root
+                        ),
+                    )
+                    _write_incomplete_checkpoint(
+                        checkpoint_path=checkpoint_path,
+                        run_id=run_id,
+                        raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                        completed=completed,
+                        peak_temporary_bytes=peak_temporary_bytes,
+                        capacity_preflight=last_capacity_preflight,
+                    )
+                    _write_heartbeat(
+                        path=heartbeat_path,
+                        run_id=run_id,
+                        raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                        status="running",
+                        stage="year_shared_reused_before_build",
+                        completed_years=tuple(sorted(completed)),
+                        current_year=year,
+                        year_ordinal=ordinal,
+                    )
+                    memory_guard.observe(
+                        stage=f"year_{year}_shared_reused_before_build"
+                    )
+                    continue
             _write_heartbeat(
                 path=heartbeat_path,
                 run_id=run_id,
@@ -759,6 +967,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                     year_ordinal=ordinal,
                     cutoff=cutoff,
                     source_manifest_hashes=source_manifest_hashes,
+                    sector_manifest_hash=sector_manifest_hash,
                     dataset_identity_hash=dataset_identity_hash,
                     feature_registry_hash=feature_registry_hash,
                     portfolio_replay=portfolio_replay,
@@ -767,6 +976,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                     memory_guard=memory_guard,
                     heartbeat=_report_year_stage,
                     capacity_checkpoint=capacity_checkpoint,
+                    capacity_budget=capacity_budget,
                 )
             except StorageCapacityError as exc:
                 _write_incomplete_checkpoint(
@@ -825,6 +1035,10 @@ class PortfolioMLDirectNumericStoreBuilder:
                 )
                 raise
             year_manifests.append(year_manifest)
+            _accumulate_teacher_diagnostics(
+                total_teacher_diagnostics,
+                year_manifest,
+            )
             total_corporate_exclusions += int(
                 year_manifest[
                     "corporate_action_excluded_label_count"
@@ -840,6 +1054,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                 year=year,
                 year_directory=year_directory,
                 year_manifest=year_manifest,
+                shared_numeric_store_root=request.shared_numeric_store_root,
             )
             _write_incomplete_checkpoint(
                 checkpoint_path=checkpoint_path,
@@ -870,6 +1085,20 @@ class PortfolioMLDirectNumericStoreBuilder:
             completed_years=tuple(sorted(completed)),
         )
         capacity_checkpoint("fold_indexes_start")
+        shared_year_rows_paths: dict[int, Path] | None = None
+        if request.shared_numeric_store_root is not None:
+            shared_year_rows_paths = {}
+            for year_manifest in year_manifests:
+                year_value = int(year_manifest["year"])
+                shared_year_rows_paths[year_value] = (
+                    resolve_direct_year_artifact_paths(
+                        year_manifest,
+                        year_directory=(
+                            run_directory / f"year={year_value:04d}"
+                        ),
+                        shared_store_root=request.shared_numeric_store_root,
+                    )["rows.sqlite"]
+                )
         fold_manifests = (
             store_module.PortfolioMLOutOfCoreStoreBuilder()
             ._build_fold_indexes(
@@ -880,6 +1109,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                 ),
                 year_manifests=year_manifests,
                 batch_size=request.batch_size,
+                year_rows_paths=shared_year_rows_paths,
             )
         )
         capacity_checkpoint("fold_indexes_complete")
@@ -999,6 +1229,9 @@ class PortfolioMLDirectNumericStoreBuilder:
             "folds": fold_manifests,
             "fold_count": len(fold_manifests),
             "assembly_blockers": sorted(blockers),
+            "teacher_target_diagnostics": dict(
+                sorted(total_teacher_diagnostics.items())
+            ),
             "corporate_action_custody": (
                 corporate_custody.custody_payload()
             ),
@@ -1020,6 +1253,28 @@ class PortfolioMLDirectNumericStoreBuilder:
                 "annual_work_sqlite": True,
                 "annual_atomic_checkpoint": True,
                 "compact_feature_carry": True,
+                "replay_volume_cross_year_carry": True,
+                "replay_volume_carry_schema_version": (
+                    DIRECT_CARRY_SCHEMA_VERSION
+                ),
+                "replay_volume_carry_policy_version": (
+                    DIRECT_REPLAY_VOLUME_POLICY_VERSION
+                ),
+                "shared_numeric_artifact_key_version": (
+                    DIRECT_NUMERIC_ARTIFACT_KEY_VERSION
+                    if request.shared_numeric_store_root is not None
+                    else None
+                ),
+                "shared_numeric_reference_schema_version": (
+                    DIRECT_NUMERIC_ARTIFACT_REFERENCE_SCHEMA_VERSION
+                    if request.shared_numeric_store_root is not None
+                    else None
+                ),
+                "shared_numeric_year_descriptor_schema_version": (
+                    DIRECT_NUMERIC_YEAR_DESCRIPTOR_SCHEMA_VERSION
+                    if request.shared_numeric_store_root is not None
+                    else None
+                ),
                 "resume_supported": True,
                 "sample_python_objects_retained": 0,
                 "oof_python_objects_retained": 0,
@@ -1033,7 +1288,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                     <= memory_guard.budget_bytes
                 ),
                 "temporary_storage_budget_bytes": (
-                    request.temporary_storage_budget_bytes
+                    temporary_budget_bytes
                 ),
                 "persistent_storage_budget_bytes": (
                     capacity_budget.persistent_new_bytes_budget
@@ -1051,6 +1306,9 @@ class PortfolioMLDirectNumericStoreBuilder:
             "safety": {
                 "pit_contract_revalidated_per_row": True,
                 "t_minus_1_contract_revalidated_per_row": True,
+                "replay_volume_future_seed_rejected": True,
+                "replay_volume_duplicate_events_deduplicated": True,
+                "replay_volume_zero_is_observed": True,
                 "integer_scaled_features": True,
                 "integer_bp_targets_and_labels": True,
                 "source_shards_hash_verified": True,
@@ -1140,6 +1398,7 @@ class PortfolioMLDirectNumericStoreBuilder:
         year_ordinal: int,
         cutoff: datetime,
         source_manifest_hashes: tuple[tuple[str, str], ...],
+        sector_manifest_hash: str,
         dataset_identity_hash: str,
         feature_registry_hash: str,
         portfolio_replay: Any,
@@ -1150,7 +1409,14 @@ class PortfolioMLDirectNumericStoreBuilder:
         capacity_checkpoint: Callable[
             [str, Sequence[Path]], dict[str, Any]
         ],
+        capacity_budget: MLStorageCapacityBudget,
     ) -> tuple[dict[str, Any], Any, int]:
+        temporary_budget_bytes = capacity_budget.temporary_peak_bytes_budget
+        if temporary_budget_bytes is None:
+            raise RuntimeError(
+                "resolved Direct capacity budget lacks temporary limit"
+            )
+        carry_input_hash = _carry_identity_hash(carry)
         work = run_directory / f".work-year-{year:04d}"
         if work.exists():
             _safe_remove_tree(work, run_directory)
@@ -1198,13 +1464,14 @@ class PortfolioMLDirectNumericStoreBuilder:
                 definitions=spool_definitions,
                 source_digest=hashlib.sha256(),
                 batch_size=request.batch_size,
+                shared_block_store_root=request.shared_block_store_root,
                 progress_callback=report_stage,
             )
             report_stage("year_raw_spool_complete")
             memory_guard.observe(stage=f"year_{year}_raw_spool_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
-                budget_bytes=request.temporary_storage_budget_bytes,
+                budget_bytes=temporary_budget_bytes,
                 stage=f"year_{year}_raw_spool_complete",
             )
             legacy._spool_sector_memberships(
@@ -1227,7 +1494,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             memory_guard.observe(stage=f"year_{year}_labels_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
-                budget_bytes=request.temporary_storage_budget_bytes,
+                budget_bytes=temporary_budget_bytes,
                 stage=f"year_{year}_labels_complete",
             )
             del calendar
@@ -1254,6 +1521,19 @@ class PortfolioMLDirectNumericStoreBuilder:
             )
             if not annual_dates:
                 raise ValueError(f"year {year} has no eligible decision dates")
+            if (
+                year_ordinal > 0
+                and carry.get(_CARRY_METADATA_KEY)
+                != DIRECT_CARRY_SCHEMA_VERSION
+            ):
+                raise ValueError(
+                    "direct replay volume carry is missing before noninitial year"
+                )
+            first_decision_at = datetime.combine(
+                date.fromisoformat(annual_dates[0]),
+                _DECISION_TIME,
+                tzinfo=_TAIPEI,
+            )
             registry = _DirectWriterRegistry(
                 staging=staging,
                 expected_year=year,
@@ -1268,7 +1548,10 @@ class PortfolioMLDirectNumericStoreBuilder:
                     corporate_custody.official_trade_restriction_timeline_present
                 ),
                 batch_size=request.batch_size,
+                initial_volume_history=_volume_history_from_carry(carry),
+                seed_cutoff=first_decision_at,
             )
+            teacher_diagnostics: legacy.TeacherDiagnostics = {}
             teacher_incomplete, sample_count = (
                 legacy.PortfolioMLDatasetAssembler()._assemble_samples(
                     connection=connection,
@@ -1286,6 +1569,7 @@ class PortfolioMLDirectNumericStoreBuilder:
                     years=(year,),
                     batch_size=request.batch_size,
                     initial_current_feature_cache=carry,
+                    teacher_diagnostics=teacher_diagnostics,
                     progress_callback=report_stage,
                 )
             )
@@ -1293,7 +1577,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             memory_guard.observe(stage=f"year_{year}_assembly_complete")
             _enforce_workspace_budget(
                 roots=(work, staging),
-                budget_bytes=request.temporary_storage_budget_bytes,
+                budget_bytes=temporary_budget_bytes,
                 stage=f"year_{year}_assembly_complete",
             )
             if sample_count == 0:
@@ -1322,6 +1606,9 @@ class PortfolioMLDirectNumericStoreBuilder:
                 )
             writer = registry.writer
             writer.close()
+            carry[DIRECT_REPLAY_VOLUME_CARRY_SCOPE] = (
+                writer.volume_history_carry()
+            )
             carry_path = staging / "carry.state.gz"
             carry_count = _write_carry(carry_path, carry)
             artifacts = store_module._artifact_payloads(
@@ -1372,6 +1659,33 @@ class PortfolioMLDirectNumericStoreBuilder:
                     "t_minus_one_price_event_and_availability_persisted": True,
                     "pit_sector_id_persisted": True,
                     "median_volume_20d_uses_distinct_causal_price_events": True,
+                    "volume_history_carry_schema_version": (
+                        DIRECT_CARRY_SCHEMA_VERSION
+                    ),
+                    "volume_history_carry_policy_version": (
+                        DIRECT_REPLAY_VOLUME_POLICY_VERSION
+                    ),
+                    "volume_history_seed_event_count": (
+                        writer.volume_history_seed_event_count
+                    ),
+                    "volume_history_final_event_count": (
+                        writer.volume_history_event_count
+                    ),
+                    "volume_history_max_event_count_per_symbol": (
+                        writer.volume_history_max_event_count_per_symbol
+                    ),
+                    "volume_history_duplicate_event_count": (
+                        writer.volume_history_duplicate_event_count
+                    ),
+                    "volume_history_future_event_count": (
+                        writer.volume_history_future_event_count
+                    ),
+                    "volume_history_invalid_event_count": (
+                        writer.volume_history_invalid_event_count
+                    ),
+                    "volume_history_invalid_volume_count": (
+                        writer.volume_history_invalid_volume_count
+                    ),
                     "official_trade_restriction_timeline_present": (
                         corporate_custody.official_trade_restriction_timeline_present
                         and registry.writer.unknown_trade_restriction_count == 0
@@ -1384,14 +1698,20 @@ class PortfolioMLDirectNumericStoreBuilder:
                 "direct_source_shards": [
                     {
                         "year": int(item["year"]),
-                        "path": str(item["path"]),
+                        "path": _shard_lineage_path(item),
                         "compressed_sha256": item["compressed_sha256"],
                         "content_sha256": item["content_sha256"],
                     }
                     for item in shards
                 ],
                 "carry_entry_count": carry_count,
+                "carry_schema_version": DIRECT_CARRY_SCHEMA_VERSION,
                 "teacher_incomplete_decision_count": teacher_incomplete,
+                # 這些是每個決策日的 bounded provenance 計數；只說明
+                # teacher 為何形成現有 target，不會把缺件補成可訓練標籤。
+                "teacher_target_diagnostics": dict(
+                    sorted(teacher_diagnostics.items())
+                ),
                 "trade_restriction_unknown_row_count": (
                     registry.writer.unknown_trade_restriction_count
                 ),
@@ -1401,6 +1721,32 @@ class PortfolioMLDirectNumericStoreBuilder:
                 "artifacts": artifacts,
                 "complete": True,
             }
+            if request.shared_numeric_store_root is not None:
+                year_manifest["shared_artifact_publication"] = (
+                    _publish_direct_year_artifacts(
+                        staging=staging,
+                        year_manifest=year_manifest,
+                        year=year,
+                        year_ordinal=year_ordinal,
+                        annual_dates=annual_dates,
+                        source_shards=shards,
+                        raw_manifest=raw_manifest,
+                        source_manifest_hashes=source_manifest_hashes,
+                        sector_manifest_hash=sector_manifest_hash,
+                        feature_registry_hash=feature_registry_hash,
+                        cutoff=cutoff,
+                        benchmark_entity_id=request.benchmark_entity_id,
+                        corporate_custody=corporate_custody,
+                        portfolio_replay=portfolio_replay,
+                        carry_input_hash=carry_input_hash,
+                        shared_store_root=(
+                            request.shared_numeric_store_root
+                        ),
+                        temporary_budget_bytes=(
+                            temporary_budget_bytes
+                        ),
+                    )
+                )
             year_manifest["manifest_hash"] = _sha256_json(year_manifest)
             _write_json(staging / "manifest.json", year_manifest)
             report_stage("year_artifacts_complete")
@@ -1411,7 +1757,7 @@ class PortfolioMLDirectNumericStoreBuilder:
             )
             _enforce_temporary_budget(
                 observed_bytes=temp_bytes,
-                budget_bytes=request.temporary_storage_budget_bytes,
+                budget_bytes=temporary_budget_bytes,
             )
             final_directory = run_directory / f"year={year:04d}"
             _replace_directory_with_retry(staging, final_directory)
@@ -1425,6 +1771,14 @@ class PortfolioMLDirectNumericStoreBuilder:
             if work.exists():
                 _safe_remove_tree(work, run_directory)
             raise
+
+
+@dataclass(frozen=True)
+class _VolumeHistoryCarryValue:
+    """跨年度 replay volume carry 的單一 bounded event。"""
+
+    price_event_at: str
+    volume_shares: int
 
 
 class _DirectWriterRegistry:
@@ -1442,6 +1796,10 @@ class _DirectWriterRegistry:
         ],
         trade_restriction_timeline_present: bool,
         batch_size: int,
+        initial_volume_history: Mapping[
+            str, Sequence[tuple[str, int]]
+        ] | None = None,
+        seed_cutoff: datetime | None = None,
     ) -> None:
         self.expected_year = expected_year
         self.writer = _DirectYearWriter(
@@ -1458,6 +1816,8 @@ class _DirectWriterRegistry:
                 trade_restriction_timeline_present
             ),
             batch_size=batch_size,
+            initial_volume_history=initial_volume_history,
+            seed_cutoff=seed_cutoff,
         )
 
     def get(self, *, year: int, header: Mapping[str, Any]) -> Any:
@@ -1482,6 +1842,10 @@ class _DirectYearWriter:
         ],
         trade_restriction_timeline_present: bool,
         batch_size: int,
+        initial_volume_history: Mapping[
+            str, Sequence[tuple[str, int]]
+        ] | None = None,
+        seed_cutoff: datetime | None = None,
     ) -> None:
         self.year = year
         self.year_ordinal = year_ordinal
@@ -1563,6 +1927,15 @@ class _DirectYearWriter:
         self._row_batch: list[tuple[object, ...]] = []
         self._replay_source_batch: list[tuple[object, ...]] = []
         self._volume_history: dict[str, deque[tuple[str, int]]] = {}
+        self._volume_event_keys: dict[str, set[str]] = {}
+        self._seed_cutoff = seed_cutoff
+        self.volume_history_seed_event_count = 0
+        self.volume_history_duplicate_event_count = 0
+        self.volume_history_future_event_count = 0
+        self.volume_history_invalid_event_count = 0
+        self.volume_history_invalid_volume_count = 0
+        if initial_volume_history:
+            self._load_initial_volume_history(initial_volume_history)
         self._decision_at_cache: dict[str, datetime] = {}
         self.row_count = 0
         self.unknown_trade_restriction_count = 0
@@ -1571,6 +1944,72 @@ class _DirectYearWriter:
             dtype=np.int64,
         )
         self._closed = False
+
+    def _load_initial_volume_history(
+        self,
+        initial_volume_history: Mapping[str, Sequence[tuple[str, int]]],
+    ) -> None:
+        """載入上一年度最多 20 個事件，並拒絕未來 seed。"""
+
+        for raw_symbol, raw_events in initial_volume_history.items():
+            symbol = str(raw_symbol)
+            if not symbol:
+                raise ValueError("volume carry symbol must be non-empty")
+            if len(raw_events) > _VOLUME_WINDOW_SIZE:
+                raise ValueError("volume carry exceeds bounded 20-event window")
+            history: deque[tuple[str, int]] = deque(
+                maxlen=_VOLUME_WINDOW_SIZE
+            )
+            event_keys: set[str] = set()
+            for raw_event_at, raw_volume in raw_events:
+                event_at = _canonical_volume_event_at(raw_event_at)
+                if event_at in event_keys:
+                    raise ValueError(
+                        "volume carry contains duplicate price event"
+                    )
+                volume = _require_nonnegative_volume(raw_volume)
+                if (
+                    self._seed_cutoff is not None
+                    and _volume_event_datetime(event_at) >= self._seed_cutoff
+                ):
+                    raise ValueError(
+                        "volume carry contains event at or after year seed cutoff"
+                    )
+                history.append((event_at, volume))
+                event_keys.add(event_at)
+            self._volume_history[symbol] = history
+            self._volume_event_keys[symbol] = event_keys
+            self.volume_history_seed_event_count += len(history)
+
+    def volume_history_carry(
+        self,
+    ) -> dict[str, dict[str, _VolumeHistoryCarryValue]]:
+        """匯出 bounded carry；順序與內容可重現且不含當年未來事件。"""
+
+        return {
+            symbol: {
+                event_at: _VolumeHistoryCarryValue(
+                    price_event_at=event_at,
+                    volume_shares=volume,
+                )
+                for event_at, volume in history
+            }
+            for symbol, history in sorted(self._volume_history.items())
+            if history
+        }
+
+    @property
+    def volume_history_event_count(self) -> int:
+        return sum(len(history) for history in self._volume_history.values())
+
+    @property
+    def volume_history_max_event_count_per_symbol(self) -> int:
+        """回傳單一 symbol 的最大 bounded window 長度。"""
+
+        return max(
+            (len(history) for history in self._volume_history.values()),
+            default=0,
+        )
 
     def write_sample(self, sample: AllocationTrainingSample) -> None:
         self.write_sample_with_context(
@@ -1742,18 +2181,47 @@ class _DirectYearWriter:
             else None
         )
         volume_shares = _eligible_current_int(volume_value)
-        history = self._volume_history.setdefault(symbol, deque(maxlen=20))
-        if (
-            price_event_at is not None
-            and volume_shares is not None
-            and (
-                not history
-                or history[-1][0] != price_event_at
+        decision_datetime = self._decision_at_cache.get(decision_at)
+        if decision_datetime is None:
+            decision_datetime = legacy._available_datetime(
+                decision_at,
+                field_name="direct replay decision_at",
             )
-        ):
-            history.append((price_event_at, volume_shares))
+            self._decision_at_cache[decision_at] = decision_datetime
+        history = self._volume_history.setdefault(symbol, deque(maxlen=20))
+        event_keys = self._volume_event_keys.setdefault(symbol, set())
+        if price_event_at is not None and volume_shares is not None:
+            if volume_shares < 0:
+                self.volume_history_invalid_volume_count += 1
+            else:
+                try:
+                    event_key = _canonical_volume_event_at(price_event_at)
+                    event_datetime = _volume_event_datetime(event_key)
+                    available_datetime = (
+                        _volume_event_datetime(
+                            _canonical_volume_event_at(price_available_at)
+                        )
+                        if price_available_at is not None
+                        else event_datetime
+                    )
+                except ValueError:
+                    self.volume_history_invalid_event_count += 1
+                else:
+                    if (
+                        event_datetime >= decision_datetime
+                        or available_datetime >= decision_datetime
+                    ):
+                        self.volume_history_future_event_count += 1
+                    elif event_key in event_keys:
+                        self.volume_history_duplicate_event_count += 1
+                    else:
+                        if len(history) >= _VOLUME_WINDOW_SIZE:
+                            evicted_event_at, _ = history.popleft()
+                            event_keys.discard(evicted_event_at)
+                        history.append((event_key, volume_shares))
+                        event_keys.add(event_key)
         median_volume = None
-        if len(history) >= 20:
+        if len(history) >= _VOLUME_WINDOW_SIZE:
             ordered = sorted(item[1] for item in history)
             median_volume = (
                 ordered[9] + ordered[10]
@@ -1763,13 +2231,6 @@ class _DirectYearWriter:
         open_scale = _eligible_current_scale(open_value)
         close_scale = _eligible_current_scale(close_value)
         rule_score_bp = _relative_score_bp(close_value, ma20_value)
-        decision_datetime = self._decision_at_cache.get(decision_at)
-        if decision_datetime is None:
-            decision_datetime = legacy._available_datetime(
-                decision_at,
-                field_name="direct replay decision_at",
-            )
-            self._decision_at_cache[decision_at] = decision_datetime
         trade_restriction_status = _official_trade_restriction_status(
             self.trade_restriction_events_by_symbol.get(symbol, ()),
             decision_at=decision_datetime,
@@ -1933,6 +2394,8 @@ def _load_discovery_cache(
     test_date_count: int,
     purge_trading_days: int,
     embargo_trading_days: int,
+    shared_block_store_root: Path | None = None,
+    shared_contract: tuple[str, str, str] | None = None,
 ) -> _Discovery | None:
     if not path.is_file():
         return None
@@ -1967,6 +2430,8 @@ def _load_discovery_cache(
             raw_manifest_path=raw_manifest_path,
             raw_manifest=raw_manifest,
             cached_shards=discovery_payload.get("shard_by_year"),
+            shared_block_store_root=shared_block_store_root,
+            shared_contract=shared_contract,
         )
         definitions = tuple(
             _cached_feature_definition(item)
@@ -2051,11 +2516,56 @@ def _load_discovery_cache(
         return None
 
 
+def _resolve_direct_shard_path(
+    *,
+    raw_manifest_path: Path,
+    shard: Mapping[str, Any],
+    shared_block_store_root: Path | None,
+    shared_contract: tuple[str, str, str] | None,
+) -> Path:
+    """解析 Direct discovery 的 local/shared shard，保持 bytes 不落回 run。"""
+
+    publication_root = raw_manifest_path.parent.parent.resolve()
+    if shared_block_store_root is None:
+        shard_path = (publication_root / str(shard["path"])).resolve()
+        if not shard_path.is_relative_to(publication_root):
+            raise ValueError("raw shard path escapes publication root")
+        if _file_sha256(shard_path) != str(shard["compressed_sha256"]):
+            raise ValueError("raw shard compressed hash mismatch")
+        return shard_path
+    resolved = resolve_pit_shard_record(
+        record=shard,
+        publication_root=publication_root,
+        shared_store_root=Path(shared_block_store_root).resolve(),
+        expected_feature_contract_hash=(
+            shared_contract[0] if shared_contract is not None else None
+        ),
+        expected_maturity_policy=(
+            shared_contract[1] if shared_contract is not None else None
+        ),
+        expected_lane=(
+            shared_contract[2] if shared_contract is not None else None
+        ),
+    )
+    return resolved.path
+
+
+def _shard_lineage_path(shard: Mapping[str, Any]) -> str:
+    """回傳 local path 或 shared view 保存的 source_path 作為 custody label。"""
+
+    value = shard.get("path", shard.get("source_path"))
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("raw shard requires path or source_path lineage")
+    return value
+
+
 def _validate_discovery_cache_shards(
     *,
     raw_manifest_path: Path,
     raw_manifest: Mapping[str, Any],
     cached_shards: object,
+    shared_block_store_root: Path | None = None,
+    shared_contract: tuple[str, str, str] | None = None,
 ) -> None:
     cached = _mapping(
         cached_shards,
@@ -2071,13 +2581,13 @@ def _validate_discovery_cache_shards(
     if cached_years != manifest_years:
         raise ValueError("discovery cache shard years mismatch")
     for shard in manifest_shards:
-        shard_path = (
-            publication_root / str(shard["path"])
-        ).resolve()
-        if not shard_path.is_relative_to(publication_root):
-            raise ValueError("raw shard path escapes publication root")
-        if _file_sha256(shard_path) != str(shard["compressed_sha256"]):
-            raise ValueError("raw shard compressed hash mismatch")
+        shard_path = _resolve_direct_shard_path(
+            raw_manifest_path=raw_manifest_path,
+            shard=shard,
+            shared_block_store_root=shared_block_store_root,
+            shared_contract=shared_contract,
+        )
+        del shard_path
 
 
 def _cached_feature_definition(
@@ -2121,11 +2631,12 @@ def _discover(
     test_date_count: int,
     purge_trading_days: int,
     embargo_trading_days: int,
+    shared_block_store_root: Path | None = None,
+    shared_contract: tuple[str, str, str] | None = None,
     progress_callback: Callable[[str], None] | None = None,
 ) -> _Discovery:
     base_definitions = legacy._base_feature_definitions(raw_manifest)
     runtime = dict(base_definitions)
-    publication_root = raw_manifest_path.parent.parent.resolve()
     stock_dates: set[str] = set()
     benchmark_dates: set[str] = set()
     source_digest = hashlib.sha256()
@@ -2141,13 +2652,12 @@ def _discover(
         if year in shard_by_year:
             raise ValueError("direct numeric requires one raw shard per year")
         shard_by_year[year] = shard
-        shard_path = (
-            publication_root / str(shard["path"])
-        ).resolve()
-        if not shard_path.is_relative_to(publication_root):
-            raise ValueError("raw shard path escapes publication root")
-        if _file_sha256(shard_path) != str(shard["compressed_sha256"]):
-            raise ValueError("raw shard compressed hash mismatch")
+        shard_path = _resolve_direct_shard_path(
+            raw_manifest_path=raw_manifest_path,
+            shard=shard,
+            shared_block_store_root=shared_block_store_root,
+            shared_contract=shared_contract,
+        )
         shard_digest = hashlib.sha256()
         row_count = 0
         value_count = 0
@@ -2316,7 +2826,23 @@ def _write_carry(path: Path, carry: Any) -> int:
         fileobj=path.open("wb"),
         mtime=0,
     ) as stream:
+        stream.write(
+            (
+                json.dumps(
+                    {
+                        "record_type": "carry_header",
+                        "schema_version": DIRECT_CARRY_SCHEMA_VERSION,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\r\n"
+            ).encode("utf-8")
+        )
         for scope in sorted(carry):
+            if scope == _CARRY_METADATA_KEY:
+                continue
             for entity_key in sorted(carry[scope]):
                 for feature_id in sorted(carry[scope][entity_key]):
                     current = carry[scope][entity_key][feature_id]
@@ -2334,25 +2860,782 @@ def _write_carry(path: Path, carry: Any) -> int:
                                 sort_keys=True,
                                 separators=(",", ":"),
                             )
-                            + "\n"
+                            + "\r\n"
                         ).encode("utf-8")
                     )
                     count += 1
     return count
 
 
+def _carry_identity_hash(carry: Mapping[str, Any]) -> str:
+    """以可序列化的 canonical records 計算 carry-input semantic hash。"""
+
+    entries: list[dict[str, Any]] = []
+    for scope in sorted(str(item) for item in carry):
+        if scope == _CARRY_METADATA_KEY:
+            continue
+        scope_values = carry[scope]
+        if not isinstance(scope_values, Mapping):
+            raise ValueError("direct carry scope must be an object")
+        for entity_key in sorted(str(item) for item in scope_values):
+            entity_values = scope_values[entity_key]
+            if not isinstance(entity_values, Mapping):
+                raise ValueError("direct carry entity must be an object")
+            for feature_id in sorted(str(item) for item in entity_values):
+                current = entity_values[feature_id]
+                if isinstance(current, Mapping):
+                    current_payload = dict(current)
+                else:
+                    current_payload = asdict(current)
+                entries.append(
+                    {
+                        "scope": scope,
+                        "entity_key": entity_key,
+                        "feature_id": feature_id,
+                        "value": current_payload,
+                    }
+                )
+    return _sha256_json(
+        {
+            "schema_version": carry.get(_CARRY_METADATA_KEY),
+            "entries": entries,
+        }
+    )
+
+
 def _read_carry(path: Path) -> Any:
-    result: Any = {"stock": {}, "market": {}, "industry": {}}
+    result: Any = _empty_carry(carry_schema_version=None)
+    header_seen = False
     with gzip.open(path, "rt", encoding="utf-8") as stream:
         for line in stream:
             payload = json.loads(line)
+            if payload.get("record_type") == "carry_header":
+                if payload.get("schema_version") != DIRECT_CARRY_SCHEMA_VERSION:
+                    raise ValueError("direct carry schema version mismatch")
+                if header_seen:
+                    raise ValueError("direct carry header is duplicated")
+                header_seen = True
+                result[_CARRY_METADATA_KEY] = DIRECT_CARRY_SCHEMA_VERSION
+                continue
             scope = str(payload.pop("scope"))
             entity = str(payload.pop("entity_key"))
             feature_id = str(payload.pop("feature_id"))
-            result.setdefault(scope, {}).setdefault(entity, {})[
-                feature_id
-            ] = legacy._CurrentValue(**payload)
+            scope_values = result.setdefault(scope, {}).setdefault(entity, {})
+            if feature_id in scope_values:
+                raise ValueError("direct carry contains duplicate entry")
+            if scope == DIRECT_REPLAY_VOLUME_CARRY_SCOPE:
+                if set(payload) != {"price_event_at", "volume_shares"}:
+                    raise ValueError(
+                        "direct volume carry payload fields are invalid"
+                    )
+                scope_values[feature_id] = _VolumeHistoryCarryValue(
+                    price_event_at=str(payload["price_event_at"]),
+                    volume_shares=_require_nonnegative_volume(
+                        payload["volume_shares"]
+                    ),
+                )
+            else:
+                scope_values[feature_id] = legacy._CurrentValue(**payload)
     return result
+
+
+def _read_year_carry(
+    *,
+    year_directory: Path,
+    year_manifest: Mapping[str, Any],
+    shared_numeric_store_root: Path | None,
+) -> Any:
+    """從年度 local/shared artifact 讀取 carry，供 resume 與下一年 seed 使用。"""
+
+    artifact_paths = resolve_direct_year_artifact_paths(
+        year_manifest,
+        year_directory=year_directory,
+        shared_store_root=shared_numeric_store_root,
+    )
+    return _read_carry(artifact_paths["carry.state.gz"])
+
+
+def _direct_label_contract_hash() -> str:
+    return _sha256_json(
+        {
+            "version": DIRECT_LABEL_CONTRACT_VERSION,
+            "horizons": list(legacy.SUPPORTED_HORIZONS),
+            "target_fields": list(store_module.TARGET_FIELDS),
+            "label_fields": list(store_module.LABEL_FIELDS),
+        }
+    )
+
+
+def _accumulate_teacher_diagnostics(
+    total: dict[str, int],
+    year_manifest: Mapping[str, Any],
+) -> None:
+    """合併年度 teacher provenance；舊年度缺欄位時保持向下相容。"""
+
+    raw = year_manifest.get("teacher_target_diagnostics")
+    if raw is None:
+        return
+    if not isinstance(raw, Mapping):
+        raise ValueError("teacher_target_diagnostics must be an object")
+    for raw_key, raw_value in raw.items():
+        key = str(raw_key)
+        if (
+            isinstance(raw_value, bool)
+            or not isinstance(raw_value, int)
+            or raw_value < 0
+        ):
+            raise ValueError(
+                "teacher_target_diagnostics values must be non-negative integers"
+            )
+        total[key] = total.get(key, 0) + raw_value
+
+
+def _direct_year_source_hashes(
+    *,
+    year_ordinal: int,
+    annual_dates: Sequence[str],
+    source_shards: Sequence[Mapping[str, Any]],
+    source_manifest_hashes: Sequence[tuple[str, str]],
+    sector_manifest_hash: str,
+    feature_registry_hash: str,
+    corporate_custody: Any,
+    portfolio_replay: Any,
+    carry_input_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+) -> tuple[tuple[str, str], ...]:
+    """建立年度 key 的局部依賴；不綁 aggregate raw manifest hash。"""
+
+    values: dict[str, str] = {
+        "direct:annual-decision-dates": _sha256_json(list(annual_dates)),
+        "direct:benchmark-entity": _sha256_json(benchmark_entity_id),
+        "direct:carry-input": carry_input_hash,
+        "direct:corporate-custody": _sha256_json(
+            corporate_custody.custody_payload()
+        ),
+        "direct:feature-registry": feature_registry_hash,
+        "direct:portfolio-replay-policy": _sha256_json(
+            portfolio_replay.custody_payload()
+        ),
+        # 產業 membership 是 teacher／target eligibility 的輸入；必須成為
+        # 年度 immutable key 的明確依賴，不能只由 aggregate manifest 間接帶入。
+        "direct:sector-membership": sector_manifest_hash,
+        "direct:source-contract-ids": _sha256_json(
+            sorted(str(source_id) for source_id, _value in source_manifest_hashes)
+        ),
+        "direct:training-as-of": _sha256_json(cutoff.isoformat()),
+        "direct:year-ordinal": _sha256_json(year_ordinal),
+    }
+    for shard in source_shards:
+        shard_year = int(shard["year"])
+        for hash_name in ("compressed_sha256", "content_sha256"):
+            hash_value = shard.get(hash_name)
+            if not isinstance(hash_value, str):
+                raise ValueError(
+                    f"direct source shard {hash_name} is missing for {shard_year}"
+                )
+            values[f"pit-shard:{shard_year}:{hash_name}"] = hash_value
+    return tuple(sorted(values.items()))
+
+
+def _direct_source_shard_custody(
+    source_shards: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """將年度使用的 PIT shard 正規化成 descriptor 可比較的 custody。"""
+
+    return [
+        {
+            "year": int(item["year"]),
+            "path": _shard_lineage_path(item),
+            "compressed_sha256": str(item["compressed_sha256"]),
+            "content_sha256": str(item["content_sha256"]),
+        }
+        for item in source_shards
+    ]
+
+
+def _direct_source_shard_identity(
+    source_shards: Sequence[Mapping[str, Any]],
+) -> tuple[tuple[int, str, str], ...]:
+    """回傳不含 local path 的 shard identity；registry 搬移不應使 key 失效。"""
+
+    custody = _direct_source_shard_custody(source_shards)
+    return tuple(
+        (
+            int(item["year"]),
+            str(item["compressed_sha256"]),
+            str(item["content_sha256"]),
+        )
+        for item in custody
+    )
+
+
+def _direct_artifact_encoding(
+    *,
+    artifact_id: str,
+    row_count: int,
+    feature_count: int,
+) -> str:
+    encodings = {
+        "features.values.i64": f"numpy:<i8>:shape={row_count}x{feature_count}",
+        "features.masks.u8": f"numpy:<u1>:shape={row_count}x{feature_count}",
+        "targets.i32": f"numpy:<i4>:shape={row_count}x{len(store_module.TARGET_FIELDS)}",
+        "labels.i32": (
+            f"numpy:<i4>:shape={row_count}x{len(legacy.SUPPORTED_HORIZONS)}"
+            f"x{len(store_module.LABEL_FIELDS)}"
+        ),
+        "labels.masks.u8": (
+            f"numpy:<u1>:shape={row_count}x{len(legacy.SUPPORTED_HORIZONS)}"
+            f"x{len(store_module.LABEL_FIELDS)}"
+        ),
+        "rows.sqlite": "sqlite:direct-rows.v1",
+        "replay_source.sqlite": "sqlite:direct-replay-source.v1",
+        "carry.state.gz": "gzip:direct-carry.v2",
+    }
+    try:
+        return encodings[artifact_id]
+    except KeyError as exc:
+        raise ValueError(f"unsupported direct artifact encoding: {artifact_id}") from exc
+
+
+def _direct_year_key_context(
+    *,
+    year: int,
+    year_ordinal: int,
+    annual_dates: Sequence[str],
+    source_shards: Sequence[Mapping[str, Any]],
+    raw_manifest: Mapping[str, Any],
+    source_manifest_hashes: Sequence[tuple[str, str]],
+    sector_manifest_hash: str,
+    feature_registry_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+    corporate_custody: Any,
+    portfolio_replay: Any,
+    carry_input_hash: str,
+) -> tuple[tuple[tuple[str, str], ...], str, str, str]:
+    if not annual_dates:
+        raise ValueError(f"direct year {year} has no annual decision dates")
+    source_hashes = _direct_year_source_hashes(
+        year_ordinal=year_ordinal,
+        annual_dates=annual_dates,
+        source_shards=source_shards,
+        source_manifest_hashes=source_manifest_hashes,
+        sector_manifest_hash=sector_manifest_hash,
+        feature_registry_hash=feature_registry_hash,
+        corporate_custody=corporate_custody,
+        portfolio_replay=portfolio_replay,
+        carry_input_hash=carry_input_hash,
+        cutoff=cutoff,
+        benchmark_entity_id=benchmark_entity_id,
+    )
+    source_version = (
+        f"dataset={str(raw_manifest.get('dataset_id', 'unknown'))};"
+        f"year={year}"
+    )
+    return (
+        source_hashes,
+        source_version,
+        str(annual_dates[0]),
+        str(annual_dates[-1]),
+    )
+
+
+def _publish_direct_year_artifacts(
+    *,
+    staging: Path,
+    year_manifest: dict[str, Any],
+    year: int,
+    year_ordinal: int,
+    annual_dates: Sequence[str],
+    source_shards: Sequence[Mapping[str, Any]],
+    raw_manifest: Mapping[str, Any],
+    source_manifest_hashes: Sequence[tuple[str, str]],
+    sector_manifest_hash: str,
+    feature_registry_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+    corporate_custody: Any,
+    portfolio_replay: Any,
+    carry_input_hash: str,
+    shared_store_root: Path,
+    temporary_budget_bytes: int | None,
+) -> dict[str, Any]:
+    """發布年度 numeric files 並將 run manifest 改成 shared references。"""
+
+    store_root = Path(shared_store_root).resolve()
+    run_root = staging.parent.resolve()
+    if (
+        store_root == run_root
+        or store_root in run_root.parents
+        or run_root in store_root.parents
+    ):
+        raise ValueError(
+            "shared numeric store must be outside the direct run directory"
+        )
+    raw_artifacts = year_manifest.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        raise ValueError("direct year artifacts must be a list before publication")
+    row_count = int(year_manifest["row_count"])
+    feature_count = int(year_manifest["feature_count"])
+    (
+        year_source_hashes,
+        source_version,
+        annual_start,
+        annual_end,
+    ) = _direct_year_key_context(
+        year=year,
+        year_ordinal=year_ordinal,
+        annual_dates=annual_dates,
+        source_shards=source_shards,
+        raw_manifest=raw_manifest,
+        source_manifest_hashes=source_manifest_hashes,
+        sector_manifest_hash=sector_manifest_hash,
+        feature_registry_hash=feature_registry_hash,
+        cutoff=cutoff,
+        benchmark_entity_id=benchmark_entity_id,
+        corporate_custody=corporate_custody,
+        portfolio_replay=portfolio_replay,
+        carry_input_hash=carry_input_hash,
+    )
+    published_entries: list[dict[str, Any]] = []
+    telemetry: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw_artifact in raw_artifacts:
+        if not isinstance(raw_artifact, Mapping):
+            raise TypeError("direct year artifact entry must be an object")
+        raw_path = raw_artifact.get("path")
+        if not isinstance(raw_path, str) or Path(raw_path).parts != (Path(raw_path).name,):
+            raise ValueError("direct year artifact path must be a root file name")
+        artifact_id = Path(raw_path).name
+        if artifact_id not in DIRECT_NUMERIC_ARTIFACT_IDS:
+            raise ValueError(f"unsupported direct year artifact: {artifact_id}")
+        if artifact_id in seen:
+            raise ValueError(f"duplicate direct year artifact: {artifact_id}")
+        seen.add(artifact_id)
+        source_path = staging / artifact_id
+        key = direct_numeric_artifact_key(
+            artifact_id=artifact_id,
+            year=year,
+            source_version=source_version,
+            source_manifest_hashes=year_source_hashes,
+            feature_contract_hash=feature_registry_hash,
+            label_contract_hash=_direct_label_contract_hash(),
+            maturity_policy=DIRECT_NUMERIC_MATURITY_POLICY_VERSION,
+            time_start=annual_start,
+            time_end=annual_end,
+            encoding=_direct_artifact_encoding(
+                artifact_id=artifact_id,
+                row_count=row_count,
+                feature_count=feature_count,
+            ),
+        )
+        result, entry = publish_direct_numeric_artifact(
+            store_root=store_root,
+            source_path=source_path,
+            key=key,
+            temporary_roots=(staging,),
+            temporary_budget_bytes=temporary_budget_bytes,
+        )
+        published_entries.append(entry)
+        telemetry.append(
+            {
+                "artifact_id": artifact_id,
+                "status": str(result["status"]),
+                "new_bytes_written": int(result["new_bytes_written"]),
+                "object_hash": str(result["object_hash"]),
+                "key_hash": str(result["key_hash"]),
+            }
+        )
+    if seen != set(DIRECT_NUMERIC_ARTIFACT_IDS):
+        raise ValueError(
+            "direct year artifact set is incomplete before shared publication"
+        )
+    year_manifest["artifacts"] = published_entries
+    year_manifest["artifact_storage"] = "immutable_shared"
+    year_manifest["direct_source_semantic_hashes"] = [
+        list(item) for item in year_source_hashes
+    ]
+    descriptor_payload = {
+        "year": int(year_manifest["year"]),
+        "year_ordinal": int(year_manifest["year_ordinal"]),
+        "row_count": row_count,
+        "feature_count": feature_count,
+        "feature_values_shape": list(year_manifest["feature_values_shape"]),
+        "feature_observed_counts": list(
+            year_manifest["feature_observed_counts"]
+        ),
+        "target_shape": list(year_manifest["target_shape"]),
+        "label_shape": list(year_manifest["label_shape"]),
+        "feature_registry_hash": feature_registry_hash,
+        "source_semantic_hashes": [
+            list(item) for item in year_source_hashes
+        ],
+        "replay_source": dict(year_manifest["replay_source"]),
+        "direct_source_shards": _direct_source_shard_custody(
+            source_shards
+        ),
+        "carry_entry_count": int(year_manifest["carry_entry_count"]),
+        "carry_schema_version": year_manifest["carry_schema_version"],
+        "teacher_target_diagnostics": (
+            dict(year_manifest["teacher_target_diagnostics"])
+            if isinstance(
+                year_manifest.get("teacher_target_diagnostics"),
+                Mapping,
+            )
+            else {}
+        ),
+        "teacher_incomplete_decision_count": int(
+            year_manifest["teacher_incomplete_decision_count"]
+        ),
+        "trade_restriction_unknown_row_count": int(
+            year_manifest["trade_restriction_unknown_row_count"]
+        ),
+        "corporate_action_excluded_label_count": int(
+            year_manifest["corporate_action_excluded_label_count"]
+        ),
+        "artifacts": published_entries,
+    }
+    descriptor_key = direct_numeric_year_descriptor_key(
+        year=year,
+        source_version=source_version,
+        source_manifest_hashes=year_source_hashes,
+        feature_contract_hash=feature_registry_hash,
+        label_contract_hash=_direct_label_contract_hash(),
+        maturity_policy=DIRECT_NUMERIC_MATURITY_POLICY_VERSION,
+        time_start=annual_start,
+        time_end=annual_end,
+    )
+    descriptor_result, descriptor_entry = publish_direct_year_descriptor(
+        store_root=store_root,
+        key=descriptor_key,
+        payload=descriptor_payload,
+    )
+    year_manifest["shared_year_descriptor"] = descriptor_entry
+    # 這是本次 run 的可稽核 telemetry；key 本身只由 immutable semantic
+    # dependencies 決定，不能拿 status 欄位作為重用條件。
+    year_manifest["shared_artifact_publication"] = {
+        "schema_version": "portfolio-ml-direct-shared-publication.v1",
+        "artifact_count": len(telemetry) + 1,
+        "new_bytes_written": sum(
+            int(item["new_bytes_written"]) for item in telemetry
+        ) + int(descriptor_result["new_bytes_written"]),
+        "statuses": sorted(
+            telemetry
+            + [
+                {
+                    "artifact_id": "year.descriptor.json",
+                    "status": str(descriptor_result["status"]),
+                    "new_bytes_written": int(
+                        descriptor_result["new_bytes_written"]
+                    ),
+                    "object_hash": str(descriptor_result["object_hash"]),
+                    "key_hash": str(descriptor_result["key_hash"]),
+                }
+            ],
+            key=lambda item: str(item["artifact_id"]),
+        ),
+    }
+    resolve_direct_year_artifact_paths(
+        year_manifest,
+        year_directory=staging,
+        shared_store_root=store_root,
+    )
+    for artifact_id in DIRECT_NUMERIC_ARTIFACT_IDS:
+        (staging / artifact_id).unlink(missing_ok=True)
+    return dict(year_manifest["shared_artifact_publication"])
+
+
+def _try_reuse_shared_year(
+    *,
+    year_directory: Path,
+    year: int,
+    year_ordinal: int,
+    annual_dates: Sequence[str],
+    source_shards: Sequence[Mapping[str, Any]],
+    raw_manifest: Mapping[str, Any],
+    source_manifest_hashes: Sequence[tuple[str, str]],
+    sector_manifest_hash: str,
+    feature_registry_hash: str,
+    cutoff: datetime,
+    benchmark_entity_id: str,
+    corporate_custody: Any,
+    portfolio_replay: Any,
+    carry_input_hash: str,
+    dataset_identity_hash: str,
+    shared_store_root: Path,
+) -> tuple[dict[str, Any], Any, int] | None:
+    """在建立年度 workspace 前尋找 exact semantic descriptor。"""
+
+    (
+        year_source_hashes,
+        source_version,
+        annual_start,
+        annual_end,
+    ) = _direct_year_key_context(
+        year=year,
+        year_ordinal=year_ordinal,
+        annual_dates=annual_dates,
+        source_shards=source_shards,
+        raw_manifest=raw_manifest,
+        source_manifest_hashes=source_manifest_hashes,
+        sector_manifest_hash=sector_manifest_hash,
+        feature_registry_hash=feature_registry_hash,
+        cutoff=cutoff,
+        benchmark_entity_id=benchmark_entity_id,
+        corporate_custody=corporate_custody,
+        portfolio_replay=portfolio_replay,
+        carry_input_hash=carry_input_hash,
+    )
+    descriptor_key = direct_numeric_year_descriptor_key(
+        year=year,
+        source_version=source_version,
+        source_manifest_hashes=year_source_hashes,
+        feature_contract_hash=feature_registry_hash,
+        label_contract_hash=_direct_label_contract_hash(),
+        maturity_policy=DIRECT_NUMERIC_MATURITY_POLICY_VERSION,
+        time_start=annual_start,
+        time_end=annual_end,
+    )
+    found = find_direct_year_descriptor(
+        store_root=Path(shared_store_root).resolve(),
+        key=descriptor_key,
+    )
+    if found is None:
+        return None
+    descriptor, descriptor_entry = found
+    if (
+        descriptor.get("year") != year
+        or descriptor.get("year_ordinal") != year_ordinal
+        or descriptor.get("feature_registry_hash") != feature_registry_hash
+        or descriptor.get("source_semantic_hashes")
+        != [list(item) for item in year_source_hashes]
+        or _direct_source_shard_identity(
+            descriptor.get("direct_source_shards", [])
+            if isinstance(descriptor.get("direct_source_shards"), list)
+            else []
+        )
+        != _direct_source_shard_identity(source_shards)
+    ):
+        raise ValueError("direct shared year descriptor semantic metadata mismatch")
+    raw_artifacts = descriptor.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        raise ValueError("direct shared year descriptor artifacts are missing")
+    artifact_ids: set[str] = set()
+    for raw_artifact in raw_artifacts:
+        if not isinstance(raw_artifact, Mapping):
+            raise TypeError("direct shared year descriptor artifact is invalid")
+        artifact_id = raw_artifact.get("artifact_id")
+        if (
+            not isinstance(artifact_id, str)
+            or artifact_id not in DIRECT_NUMERIC_ARTIFACT_IDS
+            or artifact_id in artifact_ids
+        ):
+            raise ValueError(
+                "direct shared year descriptor artifact set is invalid"
+            )
+        artifact_ids.add(artifact_id)
+    if artifact_ids != set(DIRECT_NUMERIC_ARTIFACT_IDS):
+        raise ValueError(
+            "direct shared year descriptor artifact set is incomplete"
+        )
+    row_count = int(descriptor["row_count"])
+    feature_count = int(descriptor["feature_count"])
+    for raw_artifact in raw_artifacts:
+        if not isinstance(raw_artifact, Mapping):
+            raise TypeError("direct shared year descriptor artifact is invalid")
+        artifact_id = raw_artifact.get("artifact_id")
+        if not isinstance(artifact_id, str):
+            raise ValueError("direct shared year descriptor artifact id is missing")
+        expected_key = direct_numeric_artifact_key(
+            artifact_id=artifact_id,
+            year=year,
+            source_version=source_version,
+            source_manifest_hashes=year_source_hashes,
+            feature_contract_hash=feature_registry_hash,
+            label_contract_hash=_direct_label_contract_hash(),
+            maturity_policy=DIRECT_NUMERIC_MATURITY_POLICY_VERSION,
+            time_start=annual_start,
+            time_end=annual_end,
+            encoding=_direct_artifact_encoding(
+                artifact_id=artifact_id,
+                row_count=row_count,
+                feature_count=feature_count,
+            ),
+        )
+        reference = raw_artifact.get("block_reference")
+        if not isinstance(reference, Mapping) or reference.get("key") != expected_key.payload():
+            raise ValueError(
+                "direct shared year descriptor artifact semantic key mismatch"
+            )
+    shared_manifest = {
+        "schema_version": store_module.YEAR_SCHEMA_VERSION,
+        "year": year,
+        "year_ordinal": year_ordinal,
+        "row_count": row_count,
+        "feature_count": feature_count,
+        "dataset_identity_hash": dataset_identity_hash,
+        "feature_registry_hash": feature_registry_hash,
+        "source_manifest_hashes": [list(item) for item in source_manifest_hashes],
+        "direct_source_semantic_hashes": [
+            list(item) for item in year_source_hashes
+        ],
+        "feature_values_shape": list(descriptor["feature_values_shape"]),
+        "feature_observed_counts": list(descriptor["feature_observed_counts"]),
+        "target_shape": list(descriptor["target_shape"]),
+        "label_shape": list(descriptor["label_shape"]),
+        "replay_source": dict(descriptor["replay_source"]),
+        "direct_source_shards": _direct_source_shard_custody(source_shards),
+        "carry_entry_count": int(descriptor["carry_entry_count"]),
+        "carry_schema_version": descriptor["carry_schema_version"],
+        "teacher_target_diagnostics": (
+            dict(descriptor["teacher_target_diagnostics"])
+            if isinstance(
+                descriptor.get("teacher_target_diagnostics"),
+                Mapping,
+            )
+            else {}
+        ),
+        "teacher_incomplete_decision_count": int(
+            descriptor["teacher_incomplete_decision_count"]
+        ),
+        "trade_restriction_unknown_row_count": int(
+            descriptor["trade_restriction_unknown_row_count"]
+        ),
+        "corporate_action_excluded_label_count": int(
+            descriptor["corporate_action_excluded_label_count"]
+        ),
+        "artifacts": [dict(item) for item in raw_artifacts],
+        "artifact_storage": "immutable_shared",
+        "shared_year_descriptor": descriptor_entry,
+        "shared_artifact_publication": {
+            "schema_version": "portfolio-ml-direct-shared-publication.v1",
+            "artifact_count": len(raw_artifacts) + 1,
+            "new_bytes_written": 0,
+            "reuse_before_build": True,
+            "statuses": [
+                {
+                    "artifact_id": artifact_id,
+                    "status": "immutable_block_reused_before_build",
+                    "new_bytes_written": 0,
+                    "object_hash": str(
+                        raw_artifact["file_sha256"]
+                    ),
+                    "key_hash": str(
+                        raw_artifact["block_reference"]["key_hash"]
+                    ),
+                }
+                for artifact_id, raw_artifact in sorted(
+                    (
+                        (str(item["artifact_id"]), item)
+                        for item in raw_artifacts
+                    ),
+                    key=lambda item: item[0],
+                )
+            ]
+            + [
+                {
+                    "artifact_id": "year.descriptor.json",
+                    "status": "immutable_block_reused_before_build",
+                    "new_bytes_written": 0,
+                    "object_hash": str(descriptor_entry["file_sha256"]),
+                    "key_hash": str(
+                        descriptor_entry["block_reference"]["key_hash"]
+                    ),
+                }
+            ],
+        },
+        "complete": True,
+    }
+    resolve_direct_year_descriptor(
+        descriptor_entry,
+        shared_store_root=Path(shared_store_root).resolve(),
+    )
+    resolve_direct_year_artifact_paths(
+        shared_manifest,
+        year_directory=year_directory,
+        shared_store_root=Path(shared_store_root).resolve(),
+    )
+    year_directory.mkdir(parents=True, exist_ok=False)
+    shared_manifest["manifest_hash"] = _sha256_json(shared_manifest)
+    _write_json(year_directory / "manifest.json", shared_manifest)
+    carry = _read_year_carry(
+        year_directory=year_directory,
+        year_manifest=shared_manifest,
+        shared_numeric_store_root=Path(shared_store_root).resolve(),
+    )
+    return shared_manifest, carry, 0
+
+
+def _empty_carry(*, carry_schema_version: str | None = DIRECT_CARRY_SCHEMA_VERSION) -> dict[str, Any]:
+    return {
+        "stock": {},
+        "market": {},
+        "industry": {},
+        DIRECT_REPLAY_VOLUME_CARRY_SCOPE: {},
+        _CARRY_METADATA_KEY: carry_schema_version,
+    }
+
+
+def _volume_history_from_carry(
+    carry: Mapping[str, Any],
+) -> dict[str, tuple[tuple[str, int], ...]]:
+    raw_scope = carry.get(DIRECT_REPLAY_VOLUME_CARRY_SCOPE, {})
+    if not isinstance(raw_scope, Mapping):
+        raise ValueError("direct replay volume carry scope must be an object")
+    result: dict[str, tuple[tuple[str, int], ...]] = {}
+    for raw_symbol, raw_events in raw_scope.items():
+        if not isinstance(raw_events, Mapping):
+            raise ValueError("direct replay volume carry events must be an object")
+        if len(raw_events) > _VOLUME_WINDOW_SIZE:
+            raise ValueError("direct volume carry exceeds bounded 20-event window")
+        events: list[tuple[str, int]] = []
+        for raw_event_at, raw_value in raw_events.items():
+            volume: object
+            if isinstance(raw_value, _VolumeHistoryCarryValue):
+                event_at = raw_value.price_event_at
+                volume = raw_value.volume_shares
+            elif isinstance(raw_value, Mapping):
+                event_at = str(raw_value.get("price_event_at", raw_event_at))
+                volume = raw_value.get("volume_shares")
+            else:
+                raise ValueError("direct replay volume carry event is invalid")
+            if event_at != str(raw_event_at):
+                raise ValueError("direct replay volume carry event key mismatch")
+            canonical_event_at = _canonical_volume_event_at(event_at)
+            if canonical_event_at != event_at:
+                raise ValueError(
+                    "direct replay volume carry event timestamp is not canonical"
+                )
+            events.append((event_at, _require_nonnegative_volume(volume)))
+        result[str(raw_symbol)] = tuple(events)
+    return result
+
+
+def _canonical_volume_event_at(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("volume price_event_at must be a timestamp")
+    return legacy._available_datetime(
+        value.strip(),
+        field_name="direct replay volume price_event_at",
+    ).isoformat()
+
+
+def _volume_event_datetime(value: object) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("volume price_event_at must be a timestamp")
+    return legacy._available_datetime(
+        value.strip(),
+        field_name="direct replay volume price_event_at",
+    )
+
+
+def _require_nonnegative_volume(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("volume_shares must be a non-negative integer")
+    if value < 0:
+        raise ValueError("volume_shares must be a non-negative integer")
+    return value
 
 
 def _eligible_current_int(value: object) -> int | None:
@@ -2437,21 +3720,40 @@ def _checkpointed_year_is_valid(
     *,
     year_directory: Path,
     checkpoint_entry: Mapping[str, Any],
+    shared_numeric_store_root: Path | None = None,
 ) -> bool:
     manifest_path = year_directory / "manifest.json"
-    carry_path = year_directory / "carry.state.gz"
-    if not manifest_path.is_file() or not carry_path.is_file():
+    if not manifest_path.is_file():
         return False
-    if not store_module._verify_year_directory(
+    try:
+        year_manifest = _read_json(manifest_path)
+        if not _validate_direct_year_manifest(
+            year_manifest=year_manifest,
+            year_directory=year_directory,
+            shared_numeric_store_root=shared_numeric_store_root,
+        ):
+            return False
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+    try:
+        carry = _read_year_carry(
+            year_directory=year_directory,
+            year_manifest=year_manifest,
+            shared_numeric_store_root=shared_numeric_store_root,
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if carry.get(_CARRY_METADATA_KEY) != DIRECT_CARRY_SCHEMA_VERSION:
+        return False
+    carry_file_hash = _year_carry_file_hash(
         year_directory=year_directory,
-        expected_manifest_hash=str(checkpoint_entry.get("manifest_hash", "")),
-    ):
-        return False
+        year_manifest=year_manifest,
+    )
     return (
         checkpoint_entry.get("manifest_file_hash")
         == _file_sha256(manifest_path)
         and checkpoint_entry.get("carry_file_hash")
-        == _file_sha256(carry_path)
+        == carry_file_hash
     )
 
 
@@ -2460,17 +3762,135 @@ def _completed_year_entry(
     year: int,
     year_directory: Path,
     year_manifest: Mapping[str, Any],
+    shared_numeric_store_root: Path | None = None,
 ) -> dict[str, Any]:
+    del shared_numeric_store_root
     return {
         "year": year,
         "manifest_hash": year_manifest["manifest_hash"],
         "manifest_file_hash": _file_sha256(
             year_directory / "manifest.json"
         ),
-        "carry_file_hash": _file_sha256(
-            year_directory / "carry.state.gz"
+        "carry_file_hash": _year_carry_file_hash(
+            year_directory=year_directory,
+            year_manifest=year_manifest,
         ),
     }
+
+
+def _year_carry_file_hash(
+    *,
+    year_directory: Path,
+    year_manifest: Mapping[str, Any],
+) -> str:
+    raw_artifacts = year_manifest.get("artifacts")
+    if isinstance(raw_artifacts, (list, tuple)):
+        for raw_artifact in raw_artifacts:
+            if not isinstance(raw_artifact, Mapping):
+                continue
+            artifact_id = raw_artifact.get("artifact_id")
+            if artifact_id is None and isinstance(raw_artifact.get("path"), str):
+                artifact_id = Path(str(raw_artifact["path"])).name
+            if artifact_id == "carry.state.gz":
+                file_hash = raw_artifact.get("file_sha256")
+                if isinstance(file_hash, str):
+                    return file_hash
+    carry_path = year_directory / "carry.state.gz"
+    if not carry_path.is_file():
+        raise FileNotFoundError(carry_path)
+    return _file_sha256(carry_path)
+
+
+def _validate_direct_year_manifest(
+    *,
+    year_manifest: Mapping[str, Any],
+    year_directory: Path,
+    shared_numeric_store_root: Path | None,
+) -> bool:
+    if year_manifest.get("schema_version") != store_module.YEAR_SCHEMA_VERSION:
+        return False
+    if year_manifest.get("complete") is not True:
+        return False
+    expected_hash = year_manifest.get("manifest_hash")
+    if not isinstance(expected_hash, str):
+        return False
+    body = dict(year_manifest)
+    body.pop("manifest_hash", None)
+    if _sha256_json(body) != expected_hash:
+        return False
+    if year_manifest.get("artifact_storage") == "immutable_shared":
+        if shared_numeric_store_root is None:
+            return False
+        descriptor_entry = year_manifest.get("shared_year_descriptor")
+        if not isinstance(descriptor_entry, Mapping):
+            return False
+        try:
+            descriptor = resolve_direct_year_descriptor(
+                descriptor_entry,
+                shared_store_root=shared_numeric_store_root,
+            )
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return False
+        if (
+            descriptor.get("year") != year_manifest.get("year")
+            or descriptor.get("year_ordinal")
+            != year_manifest.get("year_ordinal")
+            or descriptor.get("feature_registry_hash")
+            != year_manifest.get("feature_registry_hash")
+            or descriptor.get("source_semantic_hashes")
+            != year_manifest.get("direct_source_semantic_hashes")
+        ):
+            return False
+    resolve_direct_year_artifact_paths(
+        year_manifest,
+        year_directory=year_directory,
+        shared_store_root=shared_numeric_store_root,
+    )
+    return True
+
+
+def _validate_completed_direct_store(
+    *,
+    manifest: Mapping[str, Any],
+    run_directory: Path,
+    expected_identity: Mapping[str, Any],
+    shared_numeric_store_root: Path | None,
+) -> None:
+    if manifest.get("schema_version") != store_module.STORE_SCHEMA_VERSION:
+        raise ValueError("existing direct store schema mismatch")
+    if manifest.get("status") != "complete":
+        raise ValueError("existing direct store is not complete")
+    if _canonical_json(manifest.get("store_identity")) != _canonical_json(
+        expected_identity
+    ):
+        raise ValueError("existing direct store identity mismatch")
+    expected_hash = manifest.get("manifest_hash")
+    if not isinstance(expected_hash, str):
+        raise ValueError("existing direct store manifest hash is missing")
+    body = dict(manifest)
+    body.pop("manifest_hash", None)
+    if _sha256_json(body) != expected_hash:
+        raise ValueError("existing direct store manifest hash mismatch")
+    for year_manifest in legacy._mapping_sequence(
+        manifest.get("years"),
+        field_name="years",
+    ):
+        year = int(year_manifest["year"])
+        if not _validate_direct_year_manifest(
+            year_manifest=year_manifest,
+            year_directory=run_directory / f"year={year:04d}",
+            shared_numeric_store_root=shared_numeric_store_root,
+        ):
+            raise ValueError("existing direct year custody mismatch")
+    for fold_manifest in legacy._mapping_sequence(
+        manifest.get("folds"),
+        field_name="folds",
+    ):
+        if not store_module._verify_fold_manifest(
+            fold_manifest,
+            folds_directory=run_directory / "folds",
+        ):
+            raise ValueError("existing direct fold custody mismatch")
 
 
 def _adopt_finalized_year(
@@ -2481,6 +3901,7 @@ def _adopt_finalized_year(
     discovery: _Discovery,
     dataset_identity_hash: str,
     feature_registry_hash: str,
+    shared_numeric_store_root: Path | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """採納已原子 rename、但 checkpoint 尚未落盤的完整年度。
 
@@ -2490,8 +3911,7 @@ def _adopt_finalized_year(
     """
 
     manifest_path = year_directory / "manifest.json"
-    carry_path = year_directory / "carry.state.gz"
-    if not manifest_path.is_file() or not carry_path.is_file():
+    if not manifest_path.is_file():
         raise RuntimeError(
             f"uncheckpointed finalized year {year} is incomplete"
         )
@@ -2502,7 +3922,7 @@ def _adopt_finalized_year(
     expected_shard_custody = [
         {
             "year": int(item["year"]),
-            "path": str(item["path"]),
+            "path": _shard_lineage_path(item),
             "compressed_sha256": item["compressed_sha256"],
             "content_sha256": item["content_sha256"],
         }
@@ -2516,20 +3936,46 @@ def _adopt_finalized_year(
         and manifest.get("feature_count") == len(discovery.feature_ids)
         and manifest.get("dataset_identity_hash") == dataset_identity_hash
         and manifest.get("feature_registry_hash") == feature_registry_hash
+        and manifest.get("carry_schema_version")
+        == DIRECT_CARRY_SCHEMA_VERSION
+        and isinstance(manifest.get("replay_source"), Mapping)
+        and manifest["replay_source"].get(
+            "volume_history_carry_policy_version"
+        )
+        == DIRECT_REPLAY_VOLUME_POLICY_VERSION
         and manifest.get("direct_source_shards") == expected_shard_custody
     )
     expected_manifest_hash = str(manifest.get("manifest_hash", ""))
-    if not identity_matches or not store_module._verify_year_directory(
-        year_directory=year_directory,
-        expected_manifest_hash=expected_manifest_hash,
+    if (
+        not identity_matches
+        or not _validate_direct_year_manifest(
+            year_manifest=manifest,
+            year_directory=year_directory,
+            shared_numeric_store_root=shared_numeric_store_root,
+        )
+        or expected_manifest_hash != manifest.get("manifest_hash")
     ):
         raise RuntimeError(
             f"uncheckpointed finalized year {year} failed custody validation"
         )
+    try:
+        carry = _read_year_carry(
+            year_directory=year_directory,
+            year_manifest=manifest,
+            shared_numeric_store_root=shared_numeric_store_root,
+        )
+        if carry.get(_CARRY_METADATA_KEY) != DIRECT_CARRY_SCHEMA_VERSION:
+            raise ValueError("direct finalized year carry schema is not current")
+        _volume_history_from_carry(carry)
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"uncheckpointed finalized year {year} carry failed custody validation"
+        ) from exc
     entry = _completed_year_entry(
         year=year,
         year_directory=year_directory,
         year_manifest=manifest,
+        shared_numeric_store_root=shared_numeric_store_root,
     )
     return manifest, entry
 
@@ -2652,16 +4098,10 @@ def _capacity_budget_for_request(
     persistent_budget = request.persistent_storage_budget_bytes
     if persistent_budget is None:
         persistent_budget = request.persistent_new_bytes_budget
-    # The old direct builder had no filesystem reserve argument. Retain its
-    # callable shape while making the new standalone path safe by default;
-    # wrappers may explicitly lower/raise the reserve for an isolated drive.
-    safety_reserve = request.safety_reserve_bytes
-    if safety_reserve is None:
-        safety_reserve = 20 * 1024**3
-    return MLStorageCapacityBudget(
+    return heavy_chain_capacity_budget(
         persistent_new_bytes_budget=persistent_budget,
         temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
-        safety_reserve_bytes=safety_reserve,
+        safety_reserve_bytes=request.safety_reserve_bytes,
     )
 
 
@@ -2903,7 +4343,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as stream:
+    with path.open("w", encoding="utf-8", newline="\r\n") as stream:
         json.dump(
             payload,
             stream,
@@ -2911,7 +4351,7 @@ def _write_json(path: Path, payload: object) -> None:
             indent=2,
             sort_keys=True,
         )
-        stream.write("\n")
+        stream.write("\r\n")
         stream.flush()
         os.fsync(stream.fileno())
 

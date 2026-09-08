@@ -237,7 +237,7 @@ def test_readiness_adopts_late_windows_owner_deposit(
 
     report = readiness.build_readiness_report(
         output_root=output_root,
-        training_as_of="2026-08-13T08:30:00+08:00",
+        training_as_of="2026-08-14T08:30:00+08:00",
     )
 
     assert report["status"] == "ready"
@@ -301,7 +301,7 @@ def test_readiness_reports_hash_bound_ready_inputs_without_emitting_secret(
 
     report = readiness.build_readiness_report(
         output_root=output_root,
-        training_as_of="2026-08-13T08:30:00+08:00",
+        training_as_of="2026-08-14T08:30:00+08:00",
     )
 
     assert report["status"] == "ready"
@@ -451,7 +451,7 @@ def test_configured_sector_path_is_authoritative(
 
     report = readiness.build_readiness_report(
         output_root=output_root,
-        training_as_of="2026-08-28T08:30:00+08:00",
+        training_as_of="2026-08-29T08:30:00+08:00",
     )
 
     sector_result = report["inputs"][2]

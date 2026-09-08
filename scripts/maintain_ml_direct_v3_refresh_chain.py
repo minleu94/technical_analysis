@@ -43,6 +43,23 @@ import scripts.continue_ml_direct_ooc_after_store as ooc_continuation
 from data_module.rule_champion_snapshot_service import (
     load_verified_rule_champion_snapshot_history,
 )
+from data_module.ml_storage_capacity import (
+    build_heavy_chain_reservation_handoff_environment,
+    MLStorageCapacityBudget,
+    MLStorageChainReservation,
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+    SCHEDULED_SAFETY_RESERVE_BYTES,
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+    StorageCapacityError,
+    StorageCapacityPreflight,
+    acquire_heavy_chain_reservation,
+    heavy_chain_capacity_budget,
+    HEAVY_CHAIN_RESERVATION_HELD_ENV,
+    heavy_chain_lock_path,
+    preflight_capacity,
+    release_heavy_chain_reservation,
+    resolve_heavy_chain_lock_path,
+)
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
 from data_module.formal_portfolio_ledger import (
     load_formal_portfolio_state_ledger,
@@ -123,14 +140,20 @@ def _parser() -> argparse.ArgumentParser:
         "--temporary-peak-bytes-budget",
         dest="temporary_storage_budget_bytes",
         type=int,
+        default=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
     )
     parser.add_argument(
         "--persistent-storage-budget-bytes",
         "--persistent-new-bytes-budget",
         dest="persistent_storage_budget_bytes",
         type=int,
+        default=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
     )
-    parser.add_argument("--safety-reserve-bytes", type=int)
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        type=int,
+        default=SCHEDULED_SAFETY_RESERVE_BYTES,
+    )
     parser.add_argument("--poll-seconds", type=int, default=30)
     parser.add_argument("--retry-delay-seconds", type=int, default=30)
     parser.add_argument(
@@ -1064,6 +1087,7 @@ def _start_continuation(command: Sequence[str], log_path: Path) -> subprocess.Po
     log_path.parent.mkdir(parents=True, exist_ok=True)
     handle = log_path.open("a", encoding="utf-8", newline="\n")
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    environment = os.environ.copy()
     try:
         process = subprocess.Popen(
             list(command),
@@ -1071,7 +1095,23 @@ def _start_continuation(command: Sequence[str], log_path: Path) -> subprocess.Po
             stdout=handle,
             stderr=subprocess.STDOUT,
             creationflags=creationflags,
+            env=environment,
         )
+        reservation = _ACTIVE_HEAVY_CHAIN_RESERVATION
+        if reservation is not None:
+            try:
+                reservation.authorize_child(process.pid)
+            except Exception:
+                # child 尚未完成 reservation custody 時，不能讓它繼續執行。
+                try:
+                    process.terminate()
+                    process.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    try:
+                        process.kill()
+                    except OSError:
+                        pass
+                raise
         handle.close()
         return process
     except Exception:
@@ -1129,6 +1169,75 @@ def _release_instance_lock(lock: tuple[Path, Any] | None) -> None:
             pass
 
 
+_HEAVY_CHAIN_RESERVATION_UNAVAILABLE_RETURN_CODE = 3
+_ACTIVE_HEAVY_CHAIN_RESERVATION: MLStorageChainReservation | None = None
+
+
+def _capacity_argument(args: argparse.Namespace, name: str) -> int | None:
+    """驗證 maintainer 收到的容量整數，保留缺少值的語意。"""
+
+    value: object = getattr(args, name, None)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{name} must be integer or None")
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return value
+
+
+def _capacity_budget_for_maintainer(
+    args: argparse.Namespace,
+) -> MLStorageCapacityBudget | None:
+    """組合 child 的容量政策；缺值也採正式 scheduled bounded policy。"""
+
+    persistent = _capacity_argument(args, "persistent_storage_budget_bytes")
+    temporary = _capacity_argument(args, "temporary_storage_budget_bytes")
+    safety = _capacity_argument(args, "safety_reserve_bytes")
+    if persistent is None:
+        persistent = SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET
+    if temporary is None:
+        temporary = SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET
+    return heavy_chain_capacity_budget(
+        persistent_new_bytes_budget=persistent,
+        temporary_peak_bytes_budget=temporary,
+        safety_reserve_bytes=safety,
+    )
+
+
+def _required_path_argument(args: argparse.Namespace, name: str) -> Path:
+    value: object = getattr(args, name, None)
+    if isinstance(value, Path):
+        return value.resolve()
+    if isinstance(value, str) and value.strip():
+        return Path(value).resolve()
+    raise TypeError(f"{name} must be a path")
+
+
+def _capacity_recheck_after_reservation(
+    args: argparse.Namespace,
+    training_output_dir: Path,
+) -> StorageCapacityPreflight | None:
+    """在 child 持有 shared OS reservation 時重新讀取容量使用量。"""
+
+    budget = _capacity_budget_for_maintainer(args)
+    if budget is None:
+        return None
+    output_root = _required_path_argument(args, "output_root")
+    persistent_roots = [training_output_dir.resolve()]
+    store_output = _required_path_argument(args, "store_output_dir")
+    if store_output not in persistent_roots:
+        persistent_roots.append(store_output)
+    return preflight_capacity(
+        probe_path=output_root,
+        budget=budget,
+        stage="maintainer_heavy_chain_locked_recheck",
+        persistent_new_bytes_estimate=budget.persistent_new_bytes_budget,
+        temporary_peak_bytes_observed=budget.temporary_peak_bytes_budget,
+        persistent_roots=tuple(persistent_roots),
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.poll_seconds <= 0 or args.retry_delay_seconds < 0:
@@ -1139,139 +1248,206 @@ def main(argv: Sequence[str] | None = None) -> int:
     log_path = training_output_dir / "logs" / "ml_direct_chain_maintenance.log"
     restart_count = 0
     last_prospective_guard: tuple[str, ...] | None = None
-    lock = _acquire_instance_lock(training_output_dir)
-    if lock is None:
-        return 0
+    output_root = _required_path_argument(args, "output_root")
+    heavy_lock_path = resolve_heavy_chain_lock_path(output_root)
+    if heavy_lock_path is None:
+        # Isolated fixtures do not carry a release_v4 ancestor, but the
+        # maintainer is still an execution boundary and must hold a stable
+        # local reservation instead of silently running without one.
+        heavy_lock_path = heavy_chain_lock_path(output_root)
+    heavy_reservation = acquire_heavy_chain_reservation(heavy_lock_path)
+    if heavy_reservation is None:
+        _log(
+            log_path,
+            "heavy_chain_reservation_unavailable",
+            lock_path=str(heavy_lock_path),
+            continuation_started=False,
+        )
+        return _HEAVY_CHAIN_RESERVATION_UNAVAILABLE_RETURN_CODE
+    global _ACTIVE_HEAVY_CHAIN_RESERVATION
+    _ACTIVE_HEAVY_CHAIN_RESERVATION = heavy_reservation
+    inherited_handoff_value = os.environ.get(HEAVY_CHAIN_RESERVATION_HELD_ENV)
+    os.environ.update(
+        build_heavy_chain_reservation_handoff_environment(
+            heavy_reservation,
+            parent_pid=os.getpid(),
+        )
+    )
     try:
-        while True:
-            refreshed_environment = _refresh_controlled_runtime_environment()
-            if refreshed_environment:
+        try:
+            capacity_preflight = _capacity_recheck_after_reservation(
+                args,
+                training_output_dir,
+            )
+        except (StorageCapacityError, TypeError, ValueError) as exc:
+            fields: dict[str, object] = {"error_type": type(exc).__name__}
+            if isinstance(exc, StorageCapacityError):
+                fields["preflight"] = exc.preflight
+            _log(
+                log_path,
+                "storage_capacity_preflight_failed",
+                lock_path=str(heavy_lock_path),
+                **fields,
+            )
+            return 2
+        if capacity_preflight is not None:
+            _log(
+                log_path,
+                "storage_capacity_preflight",
+                stage=capacity_preflight.stage,
+                preflight=capacity_preflight.as_dict(),
+            )
+            if not capacity_preflight.within_budget:
                 _log(
                     log_path,
-                    "controlled_environment_refreshed",
-                    variables=list(refreshed_environment),
+                    "storage_capacity_blocked",
+                    blockers=list(capacity_preflight.blockers),
+                    preflight=capacity_preflight.as_dict(),
                 )
-            prospective_guard = _legacy_watcher_prospective_guard(args)
-            if prospective_guard:
-                if prospective_guard != last_prospective_guard:
+                return 2
+
+        lock = _acquire_instance_lock(training_output_dir)
+        if lock is None:
+            return 0
+        try:
+            while True:
+                refreshed_environment = _refresh_controlled_runtime_environment()
+                if refreshed_environment:
                     _log(
                         log_path,
-                        "prospective_only_inputs_detected_legacy_watcher_blocked",
-                        reasons=list(prospective_guard),
-                        capture_lane="prospective_formal_simulation",
-                        heavy_rebuild_launch_allowed=False,
-                        formal_oos_allowed=False,
-                        secret_values_emitted=False,
+                        "controlled_environment_refreshed",
+                        variables=list(refreshed_environment),
                     )
-                    last_prospective_guard = prospective_guard
-                if not args.watch_formal_inputs:
-                    return 2
-                time.sleep(args.poll_seconds)
-                continue
-            last_prospective_guard = None
-            targets = _target_processes(args.store_output_dir)
-            if targets:
-                _log(
-                    log_path,
-                    "target_chain_observed",
-                    restart_count=restart_count,
-                    process_ids=[pid for pid, _ in targets],
-                )
-                time.sleep(args.poll_seconds)
-                continue
-            if _chain_complete(training_output_dir):
-                candidate = _auto_refresh_candidate(args)
-                if candidate is None:
-                    if not args.watch_formal_inputs:
+                prospective_guard = _legacy_watcher_prospective_guard(args)
+                if prospective_guard:
+                    if prospective_guard != last_prospective_guard:
                         _log(
                             log_path,
-                            "chain_complete",
-                            restart_count=restart_count,
+                            "prospective_only_inputs_detected_legacy_watcher_blocked",
+                            reasons=list(prospective_guard),
+                            capture_lane="prospective_formal_simulation",
+                            heavy_rebuild_launch_allowed=False,
+                            formal_oos_allowed=False,
+                            secret_values_emitted=False,
                         )
-                        return 0
+                        last_prospective_guard = prospective_guard
+                    if not args.watch_formal_inputs:
+                        return 2
                     time.sleep(args.poll_seconds)
                     continue
+                last_prospective_guard = None
+                targets = _target_processes(args.store_output_dir)
+                if targets:
+                    _log(
+                        log_path,
+                        "target_chain_observed",
+                        restart_count=restart_count,
+                        process_ids=[pid for pid, _ in targets],
+                    )
+                    time.sleep(args.poll_seconds)
+                    continue
+                if _chain_complete(training_output_dir):
+                    candidate = _auto_refresh_candidate(args)
+                    if candidate is None:
+                        if not args.watch_formal_inputs:
+                            _log(
+                                log_path,
+                                "chain_complete",
+                                restart_count=restart_count,
+                            )
+                            return 0
+                        time.sleep(args.poll_seconds)
+                        continue
+                    _log(
+                        log_path,
+                        "validated_formal_input_detected",
+                        restart_count=restart_count,
+                        reasons=list(candidate.reasons),
+                        raw_manifest_path=str(candidate.raw_manifest),
+                        training_as_of=candidate.training_as_of,
+                        sector_membership_path=(
+                            None
+                            if candidate.sector_membership is None
+                            else str(candidate.sector_membership)
+                        ),
+                        corporate_action_manifest=(
+                            None
+                            if candidate.corporate_action_manifest is None
+                            else str(candidate.corporate_action_manifest)
+                        ),
+                        formal_portfolio_ledger=(
+                            None
+                            if candidate.formal_portfolio_ledger is None
+                            else str(candidate.formal_portfolio_ledger)
+                        ),
+                        formal_rule_champion_history=(
+                            None
+                            if candidate.formal_rule_champion_history is None
+                            else str(candidate.formal_rule_champion_history)
+                        ),
+                    )
+                    command = _continuation_command(
+                        args,
+                        sector_membership=candidate.sector_membership,
+                        raw_manifest=candidate.raw_manifest,
+                        training_as_of=candidate.training_as_of,
+                        corporate_action_manifest=(
+                            candidate.corporate_action_manifest
+                        ),
+                        formal_portfolio_ledger=(
+                            candidate.formal_portfolio_ledger
+                        ),
+                        formal_rule_champion_history=(
+                            candidate.formal_rule_champion_history
+                        ),
+                    )
+                else:
+                    command = _continuation_command(args)
+                if args.max_restarts and restart_count >= args.max_restarts:
+                    _log(
+                        log_path,
+                        "restart_cap_reached",
+                        restart_count=restart_count,
+                    )
+                    return 2
+                restart_count += 1
                 _log(
                     log_path,
-                    "validated_formal_input_detected",
+                    "starting_checkpoint_recovery",
                     restart_count=restart_count,
-                    reasons=list(candidate.reasons),
-                    raw_manifest_path=str(candidate.raw_manifest),
-                    training_as_of=candidate.training_as_of,
-                    sector_membership_path=(
-                        None
-                        if candidate.sector_membership is None
-                        else str(candidate.sector_membership)
-                    ),
-                    corporate_action_manifest=(
-                        None
-                        if candidate.corporate_action_manifest is None
-                        else str(candidate.corporate_action_manifest)
-                    ),
-                    formal_portfolio_ledger=(
-                        None
-                        if candidate.formal_portfolio_ledger is None
-                        else str(candidate.formal_portfolio_ledger)
-                    ),
-                    formal_rule_champion_history=(
-                        None
-                        if candidate.formal_rule_champion_history is None
-                        else str(candidate.formal_rule_champion_history)
-                    ),
+                    command=command,
                 )
-                command = _continuation_command(
-                    args,
-                    sector_membership=candidate.sector_membership,
-                    raw_manifest=candidate.raw_manifest,
-                    training_as_of=candidate.training_as_of,
-                    corporate_action_manifest=(
-                        candidate.corporate_action_manifest
-                    ),
-                    formal_portfolio_ledger=(
-                        candidate.formal_portfolio_ledger
-                    ),
-                    formal_rule_champion_history=(
-                        candidate.formal_rule_champion_history
-                    ),
-                )
-            else:
-                command = _continuation_command(args)
-            if args.max_restarts and restart_count >= args.max_restarts:
-                _log(log_path, "restart_cap_reached", restart_count=restart_count)
-                return 2
-            restart_count += 1
-            _log(
-                log_path,
-                "starting_checkpoint_recovery",
-                restart_count=restart_count,
-                command=command,
-            )
-            process = _start_continuation(command, log_path)
-            return_code = process.wait()
-            _log(
-                log_path,
-                "continuation_exited",
-                restart_count=restart_count,
-                return_code=return_code,
-            )
-            if _chain_complete(training_output_dir):
-                if not args.watch_formal_inputs:
-                    return 0
-                # A successful refresh must not turn a formal-input watcher
-                # into a one-shot process.  Keep its custody lock and return
-                # to the polling loop so late owner deposits are still
-                # observed without a manual restart.
+                process = _start_continuation(command, log_path)
+                return_code = process.wait()
                 _log(
                     log_path,
-                    "chain_complete_watching_formal_inputs",
+                    "continuation_exited",
                     restart_count=restart_count,
+                    return_code=return_code,
                 )
-                time.sleep(args.poll_seconds)
-                continue
-            if args.retry_delay_seconds:
-                time.sleep(args.retry_delay_seconds)
+                if _chain_complete(training_output_dir):
+                    if not args.watch_formal_inputs:
+                        return 0
+                    # 成功 refresh 後仍保留 watcher 與 custody lock，繼續
+                    # 等待下一個已驗證的 formal input。
+                    _log(
+                        log_path,
+                        "chain_complete_watching_formal_inputs",
+                        restart_count=restart_count,
+                    )
+                    time.sleep(args.poll_seconds)
+                    continue
+                if args.retry_delay_seconds:
+                    time.sleep(args.retry_delay_seconds)
+        finally:
+            _release_instance_lock(lock)
     finally:
-        _release_instance_lock(lock)
+        _ACTIVE_HEAVY_CHAIN_RESERVATION = None
+        if inherited_handoff_value is None:
+            os.environ.pop(HEAVY_CHAIN_RESERVATION_HELD_ENV, None)
+        else:
+            os.environ[HEAVY_CHAIN_RESERVATION_HELD_ENV] = inherited_handoff_value
+        release_heavy_chain_reservation(heavy_reservation)
 
 
 if __name__ == "__main__":

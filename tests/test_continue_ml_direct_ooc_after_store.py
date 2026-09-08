@@ -425,6 +425,19 @@ def test_legacy_direct_store_is_refreshed_to_current_builder_schema(
         "run",
         fake_run,
     )
+
+    class _FakeProcess:
+        pid = 999_991
+        returncode = 0
+
+        def wait(self) -> int:
+            return self.returncode
+
+    def fake_popen(command, **_kwargs):
+        calls.append(command)
+        return _FakeProcess()
+
+    monkeypatch.setattr(continuation.subprocess, "Popen", fake_popen)
     refreshed = {
         "manifest_hash": "sha256:" + "d" * 64,
     }
@@ -577,6 +590,19 @@ def test_current_v4_sidecar_detection_starts_new_immutable_refresh(
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(continuation.subprocess, "run", fake_run)
+
+    class _FakeProcess:
+        pid = 999_992
+        returncode = 0
+
+        def wait(self) -> int:
+            return self.returncode
+
+    def fake_popen(command, **_kwargs):
+        calls.append(command)
+        return _FakeProcess()
+
+    monkeypatch.setattr(continuation.subprocess, "Popen", fake_popen)
     refreshed = {"manifest_hash": "sha256:" + "d" * 64}
     monkeypatch.setattr(
         continuation,

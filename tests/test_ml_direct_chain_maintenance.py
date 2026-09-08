@@ -5,12 +5,25 @@ import gzip
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 
 import pytest
 
 import scripts.maintain_ml_direct_v3_refresh_chain as maintenance
 import scripts.continue_ml_direct_v3_refresh_chain as chain_continuation
+from data_module.ml_storage_capacity import (
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+    SCHEDULED_SAFETY_RESERVE_BYTES,
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+    MLStorageCapacityBudget,
+    acquire_heavy_chain_reservation,
+    evaluate_capacity,
+    heavy_chain_lock_path,
+    release_heavy_chain_reservation,
+)
 
 
 def _args(tmp_path: Path) -> argparse.Namespace:
@@ -33,7 +46,9 @@ def _args(tmp_path: Path) -> argparse.Namespace:
         batch_size=8192,
         workers=2,
         memory_budget_mb=4096,
-        temporary_storage_budget_bytes=None,
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
         poll_seconds=15,
         retry_delay_seconds=30,
         watch_formal_inputs=False,
@@ -171,6 +186,11 @@ def test_one_shot_legacy_watcher_blocks_prospective_input_before_launch(
     monkeypatch.setattr(maintenance, "_refresh_controlled_runtime_environment", lambda: ())
     monkeypatch.setattr(
         maintenance,
+        "_capacity_recheck_after_reservation",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        maintenance,
         "_target_processes",
         lambda _output: (_ for _ in ()).throw(AssertionError("legacy process inspection must not run")),
     )
@@ -186,6 +206,101 @@ def test_one_shot_legacy_watcher_blocks_prospective_input_before_launch(
     assert payload["message"] == "prospective_only_inputs_detected_legacy_watcher_blocked"
     assert payload["formal_oos_allowed"] is False
     assert payload["secret_values_emitted"] is False
+
+
+def test_maintainer_rechecks_capacity_after_claiming_shared_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _args(tmp_path)
+    args.output_root.mkdir()
+    args.persistent_storage_budget_bytes = SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET
+    args.temporary_storage_budget_bytes = SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET
+    args.safety_reserve_bytes = SCHEDULED_SAFETY_RESERVE_BYTES
+    monkeypatch.setattr(
+        maintenance,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    fake_capacity = evaluate_capacity(
+        budget=MLStorageCapacityBudget(
+            persistent_new_bytes_budget=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+            temporary_peak_bytes_budget=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+            safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        ),
+        usage={
+            "probe_path": str(args.output_root),
+            "total_bytes": SCHEDULED_SAFETY_RESERVE_BYTES,
+            "used_bytes": SCHEDULED_SAFETY_RESERVE_BYTES,
+            "free_bytes": 0,
+        },
+        stage="fixture_locked_recheck",
+        persistent_new_bytes_estimate=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_peak_bytes_observed=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+    )
+    monkeypatch.setattr(
+        maintenance,
+        "preflight_capacity",
+        lambda **_kwargs: fake_capacity,
+    )
+
+    assert maintenance.main([]) == 2
+    log_path = args.training_output_dir / "logs" / "ml_direct_chain_maintenance.log"
+    messages = [
+        json.loads(line)["message"]
+        for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "storage_capacity_blocked" in messages
+    recovered = acquire_heavy_chain_reservation(
+        heavy_chain_lock_path(args.output_root)
+    )
+    assert recovered is not None
+    release_heavy_chain_reservation(recovered)
+
+
+def test_maintainer_reports_shared_reservation_competition(
+    tmp_path: Path,
+) -> None:
+    args = _args(tmp_path)
+    args.output_root.mkdir()
+    lock_path = heavy_chain_lock_path(args.output_root)
+    holder = acquire_heavy_chain_reservation(lock_path)
+    assert holder is not None
+    try:
+        command = [
+            sys.executable,
+            str(Path(maintenance.__file__).resolve()),
+            "--raw-manifest",
+            str(args.raw_manifest),
+            "--store-output-dir",
+            str(args.store_output_dir),
+            "--training-output-dir",
+            str(args.training_output_dir),
+            "--output-root",
+            str(args.output_root),
+            "--database",
+            str(args.database),
+            "--training-as-of",
+            args.training_as_of,
+            "--benchmark-entity",
+            args.benchmark_entity,
+            "--poll-seconds",
+            "1",
+            "--retry-delay-seconds",
+            "1",
+        ]
+        completed = subprocess.run(
+            command,
+            cwd=Path(maintenance.__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode == (
+            maintenance._HEAVY_CHAIN_RESERVATION_UNAVAILABLE_RETURN_CODE
+        )
+    finally:
+        release_heavy_chain_reservation(holder)
 
 
 def test_recovery_command_is_hash_bound_and_fail_closed(tmp_path: Path) -> None:
@@ -305,6 +420,11 @@ def test_watch_mode_stays_alive_after_successful_continuation(
         lambda: SimpleNamespace(parse_args=lambda _argv: args),
     )
     monkeypatch.setattr(maintenance, "_refresh_controlled_runtime_environment", lambda: ())
+    monkeypatch.setattr(
+        maintenance,
+        "_capacity_recheck_after_reservation",
+        lambda *_args: None,
+    )
     monkeypatch.setattr(maintenance, "_target_processes", lambda _output: [])
     monkeypatch.setattr(maintenance, "_chain_complete", lambda _training: True)
     monkeypatch.setattr(
@@ -342,6 +462,175 @@ def test_watch_mode_stays_alive_after_successful_continuation(
     assert "continuation_exited" in messages
     assert "chain_complete_watching_formal_inputs" in messages
     assert not (args.training_output_dir / ".ml_direct_chain_maintenance.lock").exists()
+
+
+def test_maintainer_child_keeps_heavy_reservation_after_wrapper_exit(
+    tmp_path: Path,
+) -> None:
+    """真正 maintainer child 持有 lock 時 wrapper 離開不會製造空窗。"""
+
+    repository_root = Path(__file__).resolve().parents[1]
+    output_root = tmp_path / "output"
+    output_root.mkdir()
+    training_output_dir = output_root / "training"
+    store_output_dir = output_root / "store"
+    ready_path = tmp_path / "child-ready"
+    done_path = tmp_path / "child-done"
+    child_pid_path = tmp_path / "child-pid"
+    stop_path = tmp_path / "stop-child"
+
+    child_bootstrap = tmp_path / "maintainer-child.py"
+    child_bootstrap.write_text(
+        """
+import os
+from pathlib import Path
+import sys
+import threading
+
+from scripts import maintain_ml_direct_v3_refresh_chain as maintenance
+
+ready = Path(os.environ["BALDR_TEST_READY"])
+done = Path(os.environ["BALDR_TEST_DONE"])
+stop = Path(os.environ["BALDR_TEST_STOP"])
+original_acquire = maintenance._acquire_instance_lock
+
+
+def acquire(training_output_dir):
+    result = original_acquire(training_output_dir)
+    if result is not None:
+        ready.write_text("ready", encoding="utf-8")
+    return result
+
+
+def wait_for_parent(_seconds):
+    event = threading.Event()
+    while not stop.exists():
+        event.wait(0.05)
+    raise SystemExit(0)
+
+
+maintenance._acquire_instance_lock = acquire
+maintenance._refresh_controlled_runtime_environment = lambda: ()
+maintenance._legacy_watcher_prospective_guard = lambda _args: ()
+maintenance._target_processes = lambda _output: []
+maintenance._chain_complete = lambda _training: True
+maintenance._auto_refresh_candidate = lambda _args: None
+maintenance._capacity_recheck_after_reservation = lambda *_args: None
+maintenance.time.sleep = wait_for_parent
+try:
+    raise SystemExit(maintenance.main(sys.argv[1:]))
+finally:
+    done.write_text("done", encoding="utf-8")
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    parent_bootstrap = tmp_path / "wrapper-parent.py"
+    parent_bootstrap.write_text(
+        """
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+child_args = json.loads(os.environ["BALDR_TEST_CHILD_ARGS"])
+child = subprocess.Popen(
+    [sys.executable, os.environ["BALDR_TEST_CHILD_SCRIPT"], *child_args],
+    cwd=os.environ["BALDR_TEST_ROOT"],
+)
+Path(os.environ["BALDR_TEST_CHILD_PID"]).write_text(
+    str(child.pid), encoding="utf-8"
+)
+deadline = time.monotonic() + 20
+while time.monotonic() < deadline:
+    if Path(os.environ["BALDR_TEST_READY"]).exists():
+        os._exit(0)
+    if child.poll() is not None:
+        os._exit(4)
+    time.sleep(0.05)
+os._exit(5)
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    child_args = [
+        "--raw-manifest",
+        str(tmp_path / "raw.json"),
+        "--store-output-dir",
+        str(store_output_dir),
+        "--training-output-dir",
+        str(training_output_dir),
+        "--output-root",
+        str(output_root),
+        "--database",
+        str(tmp_path / "twstock.db"),
+        "--training-as-of",
+        "2026-08-11T08:30:00+08:00",
+        "--benchmark-entity",
+        "TAIEX",
+        "--persistent-storage-budget-bytes",
+            str(SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET),
+        "--temporary-storage-budget-bytes",
+            str(SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET),
+        "--safety-reserve-bytes",
+            str(SCHEDULED_SAFETY_RESERVE_BYTES),
+        "--poll-seconds",
+        "1",
+        "--retry-delay-seconds",
+        "1",
+        "--watch-formal-inputs",
+    ]
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "BALDR_TEST_CHILD_ARGS": json.dumps(child_args),
+            "BALDR_TEST_CHILD_SCRIPT": str(child_bootstrap),
+            "BALDR_TEST_CHILD_PID": str(child_pid_path),
+            "BALDR_TEST_DONE": str(done_path),
+            "BALDR_TEST_READY": str(ready_path),
+            "BALDR_TEST_ROOT": str(repository_root),
+            "BALDR_TEST_STOP": str(stop_path),
+            "PYTHONPATH": os.pathsep.join(
+                value
+                for value in (
+                    str(repository_root),
+                    environment.get("PYTHONPATH", ""),
+                )
+                if value
+            ),
+        }
+    )
+    parent = subprocess.Popen(
+        [sys.executable, str(parent_bootstrap)],
+        cwd=repository_root,
+        env=environment,
+    )
+    try:
+        assert parent.wait(timeout=25) == 0
+        assert child_pid_path.is_file()
+        assert ready_path.read_text(encoding="utf-8") == "ready"
+
+        lock_path = heavy_chain_lock_path(output_root)
+        blocked = acquire_heavy_chain_reservation(lock_path)
+        assert blocked is None
+
+        stop_path.write_text("stop", encoding="utf-8")
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not done_path.exists():
+            time.sleep(0.05)
+        assert done_path.is_file()
+
+        recovered = acquire_heavy_chain_reservation(lock_path)
+        assert recovered is not None
+        release_heavy_chain_reservation(recovered)
+    finally:
+        stop_path.write_text("stop", encoding="utf-8")
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline and not done_path.exists():
+            time.sleep(0.05)
 
 
 def test_auto_refresh_candidate_requires_current_v4_without_sector_hash(

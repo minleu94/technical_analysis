@@ -192,6 +192,7 @@ def _run(
     calendar: _Calendar | None = None,
     promotion_reference_pointer_path: Path | None = None,
     promotion_authority_pointer_path: Path | None = None,
+    pit_machine_operational_path: Path | None = None,
 ) -> dict[str, object]:
     return orchestration.run(
         database_path=tmp_path / "twstock.db",
@@ -201,6 +202,7 @@ def _run(
         calendar=calendar or _calendar(),
         promotion_reference_pointer_path=promotion_reference_pointer_path,
         promotion_authority_pointer_path=promotion_authority_pointer_path,
+        pit_machine_operational_path=pit_machine_operational_path,
     )
 
 
@@ -423,16 +425,22 @@ def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
         fake_promotion,
     )
 
+    pit_machine_path = tmp_path / "pit-machine-operational.json"
+    pit_machine_path.write_text("{}", encoding="utf-8")
     result = _run(
         tmp_path,
         release_root,
         promotion_reference_pointer_path=reference_pointer_path,
+        pit_machine_operational_path=pit_machine_path,
     )
 
     assert calls == ["raw", "input", "inference", "shadow", "promotion"]
     assert captured["raw"]["symbols"] == orchestration.DEFAULT_SYMBOLS
     assert captured["raw"]["strict_t_minus_one"] == date(2026, 7, 30)
     assert captured["raw"]["raw_lookback_days"] == 730
+    assert captured["input"]["pit_machine_operational_path"] == (
+        pit_machine_path.resolve()
+    )
     assert captured["input"]["strict_t_minus_one"] == date(2026, 7, 30)
     assert captured["inference"]["policy_hash"] == orchestration.POLICY_HASH
     assert captured["inference"]["expected_universe_hash"] == (

@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
+from data_module.ml_storage_capacity import (
+    SCHEDULED_REQUIRED_FREE_BYTES,
+    SCHEDULED_SAFETY_RESERVE_BYTES,
+)
 from scripts.scheduled import run_ml_raw_pit_refresh as runner
 
 
@@ -259,14 +263,30 @@ def test_main_runs_builder_and_validates_new_publication(
         "_taipei_now",
         lambda: datetime(2026, 8, 12, 12, 0, tzinfo=_TAIPEI),
     )
+    monkeypatch.setattr(
+        runner.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(
+            total=SCHEDULED_REQUIRED_FREE_BYTES + 10_000,
+            used=10_000,
+            free=SCHEDULED_REQUIRED_FREE_BYTES + 1_000,
+        ),
+    )
     observed: dict[str, object] = {}
 
-    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+    class _FakeBuilderProcess:
+        pid = 999_991
+        returncode = 0
+
+        def communicate(self) -> tuple[str, str]:
+            return "builder ok", ""
+
+    def fake_popen(command: list[str], **kwargs: object) -> _FakeBuilderProcess:
         observed["command"] = command
         observed["kwargs"] = kwargs
-        return SimpleNamespace(returncode=0, stdout="builder ok", stderr="")
+        return _FakeBuilderProcess()
 
-    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    monkeypatch.setattr(runner.subprocess, "Popen", fake_popen)
 
     exit_code = runner.main(
         [
@@ -357,8 +377,8 @@ def test_main_blocks_before_builder_when_storage_is_below_threshold(
             str(data_root),
             "--output-root",
             str(output_root),
-            "--minimum-free-space-bytes",
-            "20",
+                "--minimum-free-space-bytes",
+                str(SCHEDULED_SAFETY_RESERVE_BYTES),
         ]
     )
 
@@ -374,7 +394,9 @@ def test_main_blocks_before_builder_when_storage_is_below_threshold(
     assert builder_called is False
     assert refresh_payload["status"] == "blocked_insufficient_storage"
     assert refresh_payload["storage_preflight"]["free_bytes"] == 5
-    assert refresh_payload["storage_preflight"]["minimum_free_space_bytes"] == 20
+    assert refresh_payload["storage_preflight"]["minimum_free_space_bytes"] == (
+        SCHEDULED_SAFETY_RESERVE_BYTES
+    )
 
 
 def test_main_records_locked_without_starting_work(
@@ -385,7 +407,19 @@ def test_main_records_locked_without_starting_work(
     status_path = output_root / "scheduled" / "ml_raw_pit_refresh" / "latest_status.json"
     status_path.parent.mkdir(parents=True, exist_ok=True)
     status_path.write_text(json.dumps({"status": "running", "process_id": 999}), encoding="utf-8")
+    _write_freshness_status(output_root)
     monkeypatch.setattr(runner, "_acquire_lock", lambda _path: None)
+    monkeypatch.setattr(
+        runner,
+        "_storage_preflight",
+        lambda _path, minimum_free_space_bytes: {
+            "total_bytes": 400 * 1024**3,
+            "used_bytes": 0,
+            "free_bytes": 300 * 1024**3,
+            "minimum_free_space_bytes": minimum_free_space_bytes,
+            "within_minimum_free_space": True,
+        },
+    )
 
     exit_code = runner.main(
         [
@@ -402,3 +436,45 @@ def test_main_records_locked_without_starting_work(
     assert exit_code == 0
     assert payload["status"] == "skipped_locked"
     assert payload["reason"] == "another_raw_pit_refresh_is_running"
+
+
+def test_raw_direct_custody_guard_blocks_live_owner_and_allows_stale_recovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_root = tmp_path / "release_v4"
+    states = iter([("verified", 2468), ("stale", 2468)])
+    monkeypatch.setattr(
+        runner.direct_chain_runner,
+        "_maintenance_lock_state",
+        lambda _training: next(states),
+    )
+    monkeypatch.setattr(
+        runner.direct_chain_runner.maintenance,
+        "_target_processes",
+        lambda _root: [],
+    )
+
+    assert runner._direct_chain_instance_lock_present(release_root) is True
+    assert runner._direct_chain_instance_lock_present(release_root) is False
+
+
+def test_raw_direct_custody_guard_blocks_live_continuation_after_owner_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_root = tmp_path / "release_v4"
+    monkeypatch.setattr(
+        runner.direct_chain_runner.maintenance,
+        "_target_processes",
+        lambda _root: [(8642, "continue_ml_direct_v3_refresh_chain.py")],
+    )
+    monkeypatch.setattr(
+        runner.direct_chain_runner,
+        "_maintenance_lock_state",
+        lambda _training: (_ for _ in ()).throw(
+            AssertionError("live continuation should be sufficient custody")
+        ),
+    )
+
+    assert runner._direct_chain_instance_lock_present(release_root) is True

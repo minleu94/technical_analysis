@@ -305,6 +305,7 @@ def _horizon_poison_labels(
     corporate_action_effective_date: str | None = None,
     exclusion_sink: list[dict[str, object]] | None = None,
     progress_events: list[str] | None = None,
+    batch_size: int = 100,
 ) -> dict[int, dict[str, object]]:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
@@ -372,7 +373,7 @@ def _horizon_poison_labels(
         benchmark_entity_id="TAIEX",
         cutoff=datetime.fromisoformat("2024-02-01T08:30:00+08:00"),
         horizons=(2, 4),
-        batch_size=100,
+        batch_size=batch_size,
         corporate_action_effective_dates=(
             {}
             if corporate_action_effective_date is None
@@ -1042,6 +1043,14 @@ def test_label_spool_progress_callback_reports_lifecycle() -> None:
         for event in events
     )
     assert events[-1] == "label_spool_complete"
+
+
+def test_label_spool_progress_callback_reports_persisted_batches() -> None:
+    events: list[str] = []
+
+    _horizon_poison_labels(progress_events=events, batch_size=1)
+
+    assert "label_spool_labels_batch_written" in events
 
 
 def test_later_horizon_gap_does_not_discard_valid_short_horizon_label() -> None:

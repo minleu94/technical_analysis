@@ -7,6 +7,7 @@ from pathlib import Path
 
 import joblib
 import pytest
+from typing import Any, cast
 
 from app_module.allocation_release_adapter import AllocationReleaseAdapter
 from ml_module.allocation_release_contract import (
@@ -19,7 +20,10 @@ from ml_module.allocation_release_contract import (
     canonical_json,
     feature_order_hash,
 )
-from tests.test_ml_allocation_inference_service import _inference_rows
+from tests.test_ml_allocation_inference_service import (
+    _inference_rows,
+    _research_rows,
+)
 
 
 pytest_plugins = ("tests.test_ml_allocation_training_service",)
@@ -166,6 +170,37 @@ def test_release_adapter_binds_artifact_components_and_replays_rows(
     assert parity.row_count == 2
 
 
+def test_release_adapter_research_shadow_entrypoint_preserves_safety_flags(
+    tmp_path: Path,
+    training_result,
+) -> None:
+    manifest = _write_release(tmp_path, training_result)
+    loaded = AllocationReleaseAdapter().load(
+        tmp_path / "release",
+        expected_release_identity_hash=manifest.release_identity_hash,
+    )
+    rows = _research_rows()
+
+    with pytest.raises(ValueError, match="08:30"):
+        loaded.infer(
+            rows=rows,
+            universe_id=_UNIVERSE_ID,
+            policy_hash=_POLICY_HASH,
+        )
+
+    result = loaded.infer_research_shadow(
+        rows=rows,
+        universe_id=_UNIVERSE_ID,
+        policy_hash=_POLICY_HASH,
+    )
+    audit = result.audit_payload()
+    assert audit["decision_at"] == "2027-01-04T18:00:00+08:00"
+    assert audit["inference_readback_mode"] == "post_freeze_research_shadow"
+    assert result.formal_oos_allowed is False
+    assert result.production_action_allowed is False
+    assert result.production_blend_alpha_bp == 0
+
+
 def test_release_adapter_applies_attached_integer_calibrator(
     tmp_path: Path,
     training_result,
@@ -191,7 +226,7 @@ def test_release_adapter_rejects_diagnostic_calibration(
 ) -> None:
     manifest = _write_release(tmp_path, training_result)
     payload = manifest.to_dict()
-    calibration = dict(payload["calibration"])
+    calibration = dict(cast(dict[str, Any], payload["calibration"]))
     calibration["oof_diagnostic_only"] = True
     payload["calibration"] = calibration
     # The constructor is the fail-closed boundary, before identity can be

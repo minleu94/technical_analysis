@@ -158,6 +158,45 @@ class LoadedAllocationRelease:
             expected_universe_hash=expected_universe_hash,
         )
 
+    def infer_research_shadow(
+        self,
+        *,
+        rows: Sequence[PortfolioMLDatasetRow],
+        model_id: str | None = None,
+        universe_id: str,
+        policy_id: str | None = None,
+        policy_hash: str,
+        expected_universe_hash: str | None = None,
+    ) -> MLAllocationInferenceResult:
+        """以明確的 post-freeze research clock 驗證 target-free rows。
+
+        這個入口只允許 ``row:post-freeze-shadow:`` rows，正式 daily
+        ``infer`` 仍維持台北 08:30 契約；研究晚間 capture 不會因此取得
+        formal、alpha 或 broker 權限。
+        """
+
+        effective_model_id = self.manifest.model_id if model_id is None else model_id
+        effective_policy_id = (
+            self.manifest.missing_policy.policy_id
+            if policy_id is None
+            else policy_id
+        )
+        if effective_model_id != self.manifest.model_id:
+            raise ValueError("inference model id does not match release")
+        if effective_policy_id != self.manifest.missing_policy.policy_id:
+            raise ValueError("inference missing policy id does not match release")
+        if policy_hash != self.manifest.missing_policy.policy_hash:
+            raise ValueError("inference missing policy hash does not match release")
+        return self.service.infer(
+            rows=rows,
+            model_id=effective_model_id,
+            universe_id=universe_id,
+            policy_id=effective_policy_id,
+            policy_hash=policy_hash,
+            expected_universe_hash=expected_universe_hash,
+            allow_research_shadow=True,
+        )
+
     def compare_frozen_rows(
         self,
         *,
@@ -197,7 +236,9 @@ class LoadedAllocationRelease:
         )
         return ReleaseParityResult(
             status="matched" if not mismatches else "mismatch",
-            row_count=len(release_rows),
+            # parity 筆數採兩邊 row set 的聯集；只計 release rows 會讓
+            # consumer 靜默漏掉 OOC row，卻仍回報看似完整的比較。
+            row_count=len(row_ids),
             release_output_hash=release_hash,
             ooc_output_hash=ooc_hash,
             mismatched_row_ids=mismatches,

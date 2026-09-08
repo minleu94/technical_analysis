@@ -34,6 +34,16 @@ from app_module.portfolio_allocation_dtos import (
 )
 from financial_module.portfolio_turnover import canonical_turnover_bp
 from ml_module.allocation_contracts import PITFeatureValue, PortfolioMLDatasetRow
+from ml_module.allocation_rank_contract import (
+    DEFAULT_RANK_CONTRACT,
+    rank_values_bp,
+    validate_rank_contract,
+)
+from ml_module.allocation_family_weight_contract import (
+    FAMILY_WEIGHT_POLICY_LEGACY_UNKNOWN,
+    FAMILY_WEIGHT_STATUS_LEGACY_UNKNOWN,
+    validate_family_weight_binding,
+)
 from ml_module.allocation_training_service import (
     ARTIFACT_SCHEMA_VERSION,
     CLASSIFICATION_EXPERT_HEADS,
@@ -73,6 +83,13 @@ _ARTIFACT_FIELDS = frozenset(
         "production_action_allowed",
         "formal_oos_allowed",
         "broker_order_allowed",
+        "meta_probability_input",
+        "training_profile",
+        "complexity_policy",
+        "rank_contract",
+        "family_weight_policy",
+        "feature_family_weights_status",
+        "target_summary",
     }
 )
 
@@ -136,6 +153,17 @@ class _ArtifactContract:
     base_models: Mapping[str, Any]
     meta_models: Mapping[str, Any]
     feature_family_weights_bp: tuple[tuple[str, int], ...]
+    # 舊版 artifact 沒有此欄位，缺省代表沿用原本的 calibrated meta
+    # 輸入；OOC release 則明確標記為 raw_oof。
+    meta_probability_input: str = "calibrated"
+    training_profile: str | None = None
+    complexity_policy: Mapping[str, Any] | None = None
+    # 舊版 artifact 缺少此欄位時，沿用既有 symbol tie-break；新 artifact
+    # 必須把 rank 政策與 Meta vector 一起凍結。
+    rank_contract: str = DEFAULT_RANK_CONTRACT
+    family_weight_policy: str = FAMILY_WEIGHT_POLICY_LEGACY_UNKNOWN
+    feature_family_weights_status: str = FAMILY_WEIGHT_STATUS_LEGACY_UNKNOWN
+    target_summary: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -238,6 +266,7 @@ class MLAllocationInferenceService:
         policy_id: str,
         policy_hash: str,
         expected_universe_hash: str | None = None,
+        allow_research_shadow: bool = False,
     ) -> MLAllocationInferenceResult:
         """產生不具 alpha、apply 或 broker 權限的配置提案。"""
 
@@ -253,7 +282,12 @@ class MLAllocationInferenceService:
                 field_name="expected_universe_hash",
             )
 
-        canonical_rows, decision_at = self._validate_rows(rows)
+        if not isinstance(allow_research_shadow, bool):
+            raise TypeError("allow_research_shadow must be bool")
+        canonical_rows, decision_at = self._validate_rows(
+            rows,
+            allow_research_shadow=allow_research_shadow,
+        )
         feature_snapshot_hashes = {
             row.row_id: _feature_snapshot_hash(row) for row in canonical_rows
         }
@@ -277,6 +311,7 @@ class MLAllocationInferenceService:
         expert_outputs = self._predict_experts(
             rows=canonical_rows,
             pack_coverage=pack_coverage,
+            allow_research_shadow=allow_research_shadow,
         )
         row_coverage_bp = {
             row.row_id: self._row_coverage_bp(
@@ -375,6 +410,11 @@ class MLAllocationInferenceService:
         audit_without_replay_hash = {
             "schema_version": "ml-allocation-inference-audit-v3",
             "decision_at": decision_at.isoformat(),
+            "inference_readback_mode": (
+                "post_freeze_research_shadow"
+                if allow_research_shadow
+                else "daily_08_30"
+            ),
             "model_id": model_id,
             "model_artifact_hash": self._artifact_hash,
             "dataset_id": self._artifact.dataset_id,
@@ -388,6 +428,12 @@ class MLAllocationInferenceService:
                 for source_id, source_hash in self._artifact.source_manifest_hashes
             ],
             "training_as_of": self._artifact.training_as_of,
+            "rank_contract": self._artifact.rank_contract,
+            "family_weight_policy": self._artifact.family_weight_policy,
+            "feature_family_weights_status": (
+                self._artifact.feature_family_weights_status
+            ),
+            "target_summary": self._artifact.target_summary,
             "universe_id": universe_id,
             "universe_hash": universe_hash,
             "policy_id": policy_id,
@@ -468,6 +514,8 @@ class MLAllocationInferenceService:
     def _validate_rows(
         self,
         rows: Sequence[PortfolioMLDatasetRow],
+        *,
+        allow_research_shadow: bool = False,
     ) -> tuple[tuple[PortfolioMLDatasetRow, ...], datetime]:
         if not rows:
             raise ValueError("inference rows are required")
@@ -481,8 +529,22 @@ class MLAllocationInferenceService:
         if len(symbols) != len(set(symbols)):
             raise ValueError("inference symbols must be unique")
         canonical = tuple(sorted(rows, key=lambda row: row.symbol))
-        decision_at = _parse_decision_at(canonical[0].decision_at)
-        if any(_parse_decision_at(row.decision_at) != decision_at for row in canonical):
+        if not isinstance(allow_research_shadow, bool):
+            raise TypeError("allow_research_shadow must be bool")
+        if allow_research_shadow and any(
+            not row.row_id.startswith("row:post-freeze-shadow:")
+            for row in canonical
+        ):
+            raise ValueError(
+                "research shadow inference requires post-freeze-shadow rows"
+            )
+        parse_decision = (
+            _parse_research_shadow_decision_at
+            if allow_research_shadow
+            else _parse_decision_at
+        )
+        decision_at = parse_decision(canonical[0].decision_at)
+        if any(parse_decision(row.decision_at) != decision_at for row in canonical):
             raise ValueError("all inference rows must share one decision_at")
         training_as_of = _parse_available_at(
             self._artifact.training_as_of,
@@ -580,7 +642,10 @@ class MLAllocationInferenceService:
         *,
         rows: tuple[PortfolioMLDatasetRow, ...],
         pack_coverage: Mapping[str, Mapping[str, tuple[int, int]]],
+        allow_research_shadow: bool = False,
     ) -> dict[str, dict[str, _ExpertOutput]]:
+        if not isinstance(allow_research_shadow, bool):
+            raise TypeError("allow_research_shadow must be bool")
         result: dict[str, dict[str, _ExpertOutput]] = {
             row.row_id: {} for row in rows
         }
@@ -680,7 +745,9 @@ class MLAllocationInferenceService:
                                 "uncalibrated_downside_probability_bp"
                             ),
                             allow_raw_fallback=(
-                                self._probability_calibrator is not None
+                                self._artifact.meta_probability_input
+                                == "raw_oof"
+                                or self._probability_calibrator is not None
                             ),
                         )
                     )
@@ -720,6 +787,8 @@ class MLAllocationInferenceService:
             rank_by_row_id = _rank_bp(
                 rows=active_rows,
                 predicted_values=quantized_expected,
+                rank_contract=self._artifact.rank_contract,
+                allow_research_shadow=allow_research_shadow,
             )
             missing_head_ids = tuple(
                 sorted(model_payload["head_missing_reasons"])
@@ -806,7 +875,10 @@ class MLAllocationInferenceService:
                     value
                     for expert_key in self._artifact.expert_keys
                     for value in _expert_vector(
-                        expert_outputs[row.row_id][expert_key]
+                        expert_outputs[row.row_id][expert_key],
+                        meta_probability_input=(
+                            self._artifact.meta_probability_input
+                        ),
                     )
                 ]
                 for row in active_rows
@@ -1136,7 +1208,19 @@ def _parse_artifact(value: object) -> _ArtifactContract:
     if not isinstance(value, dict):
         raise TypeError("artifact payload must be an object")
     unknown = set(value) - _ARTIFACT_FIELDS
-    missing = _ARTIFACT_FIELDS - set(value)
+    # 這些欄位是在 OOC release 才加入的 metadata；缺少時保留舊版
+    # direct artifact 的 calibrated meta 語意，避免 legacy artifact 被
+    # 靜默改變輸入分布。
+    optional_metadata = {
+        "meta_probability_input",
+        "training_profile",
+        "complexity_policy",
+        "rank_contract",
+        "family_weight_policy",
+        "feature_family_weights_status",
+        "target_summary",
+    }
+    missing = (_ARTIFACT_FIELDS - optional_metadata) - set(value)
     if unknown:
         raise ValueError(f"unsupported artifact field: {sorted(unknown)[0]}")
     if missing:
@@ -1168,11 +1252,29 @@ def _parse_artifact(value: object) -> _ArtifactContract:
     feature_packs = _feature_packs(value["feature_packs"])
     horizons = _positive_integer_tuple(value["horizons"], field_name="horizons")
     expert_keys = _string_tuple(value["expert_keys"], field_name="expert_keys")
+    # 完整 trainer 會發佈兩種 algorithm；bounded
+    # ``minimal_linear_shadow`` 則刻意只發佈 deterministic ridge/logistic
+    # expert。由 artifact key 推導凍結的 algorithm 集合，同時要求每個
+    # pack/horizon 的完整覆蓋；任意接受子集會讓部分 release 看似完整。
+    parsed_algorithms: list[str] = []
+    for expert_key in expert_keys:
+        parts = expert_key.split("|", 2)
+        if len(parts) != 3 or parts[2] not in EXPERT_ALGORITHMS:
+            raise ValueError("artifact expert key contains unsupported algorithm")
+        if parts[2] not in parsed_algorithms:
+            parsed_algorithms.append(parts[2])
+    if not parsed_algorithms:
+        raise ValueError("artifact must contain at least one expert algorithm")
+    algorithms = tuple(
+        algorithm
+        for algorithm in EXPERT_ALGORITHMS
+        if algorithm in parsed_algorithms
+    )
     expected_expert_keys = tuple(
         f"{pack.pack_id}|h{horizon}|{algorithm}"
         for pack in feature_packs
         for horizon in horizons
-        for algorithm in EXPERT_ALGORITHMS
+        for algorithm in algorithms
     )
     if expert_keys != expected_expert_keys:
         raise ValueError("artifact expert keys do not match frozen packs/horizons")
@@ -1188,6 +1290,69 @@ def _parse_artifact(value: object) -> _ArtifactContract:
     )
     if expert_vector_width != EXPERT_VECTOR_WIDTH:
         raise ValueError("artifact expert vector width mismatch")
+
+    meta_probability_input = value.get(
+        "meta_probability_input",
+        "calibrated",
+    )
+    if meta_probability_input not in {"calibrated", "raw_oof"}:
+        raise ValueError("artifact meta probability input is unsupported")
+    rank_contract = validate_rank_contract(
+        value.get("rank_contract", DEFAULT_RANK_CONTRACT),
+        field_name="artifact.rank_contract",
+    )
+    family_weight_policy, family_weight_status = validate_family_weight_binding(
+        value.get(
+            "family_weight_policy",
+            FAMILY_WEIGHT_POLICY_LEGACY_UNKNOWN,
+        ),
+        value.get(
+            "feature_family_weights_status",
+            FAMILY_WEIGHT_STATUS_LEGACY_UNKNOWN,
+        ),
+        field_prefix="artifact.feature_family_weights",
+    )
+    target_summary_value = value.get("target_summary")
+    target_summary: Mapping[str, Any] | None
+    if target_summary_value is None:
+        target_summary = None
+    else:
+        target_summary = _mapping(
+            target_summary_value,
+            field_name="target_summary",
+        )
+    training_profile = value.get("training_profile")
+    if training_profile is not None:
+        training_profile = _text(
+            training_profile,
+            field_name="training_profile",
+        )
+    complexity_policy_value = value.get("complexity_policy")
+    complexity_policy: Mapping[str, Any] | None
+    if complexity_policy_value is None:
+        complexity_policy = None
+    else:
+        complexity_policy = _mapping(
+            complexity_policy_value,
+            field_name="complexity_policy",
+        )
+    if meta_probability_input == "raw_oof":
+        if training_profile not in {
+            "minimal_linear_shadow",
+            "derived_linear_shadow",
+        }:
+            raise ValueError(
+                "raw_oof meta input requires a linear shadow profile"
+            )
+        if complexity_policy != {
+            "algorithm_count": 1,
+            "horizon_count": 1,
+            "formal_oos_allowed": False,
+            "production_alpha_bp": 0,
+        }:
+            raise ValueError(
+                "raw_oof meta input requires the bounded complexity policy"
+            )
 
     base_models = _mapping(value["base_models"], field_name="base_models")
     if set(base_models) != set(expert_keys):
@@ -1338,6 +1503,13 @@ def _parse_artifact(value: object) -> _ArtifactContract:
         base_models=base_models,
         meta_models=meta_models,
         feature_family_weights_bp=family_weights,
+        meta_probability_input=meta_probability_input,
+        training_profile=training_profile,
+        complexity_policy=complexity_policy,
+        rank_contract=rank_contract,
+        family_weight_policy=family_weight_policy,
+        feature_family_weights_status=family_weight_status,
+        target_summary=target_summary,
     )
 
 
@@ -1430,6 +1602,12 @@ def _predict_array(
     field_name: str,
 ) -> NDArray[np.float64]:
     predictor = getattr(model, method_name, None)
+    if not callable(predictor) and method_name == "predict":
+        # OOC 線性 head 刻意序列化為小型 module-level boundary model，透過
+        # ``predict_numeric`` 載入，不需重建 sklearn pipeline。
+        predictor = getattr(model, "predict_numeric", None)
+        if callable(predictor) and getattr(model, "classifier", False) is True:
+            raise ValueError(f"{field_name} regression predictor is a classifier")
     if not callable(predictor):
         raise ValueError(f"{field_name} predictor is unavailable")
     try:
@@ -1451,6 +1629,14 @@ def _predict_probability_array(
     field_name: str,
 ) -> NDArray[np.float64]:
     predictor = getattr(model, "predict_proba", None)
+    uses_numeric_probability = False
+    if not callable(predictor):
+        predictor = getattr(model, "predict_numeric", None)
+        uses_numeric_probability = callable(predictor)
+        if uses_numeric_probability and getattr(model, "classifier", None) is not True:
+            raise ValueError(
+                f"{field_name} numeric probability predictor is not a classifier"
+            )
     if not callable(predictor):
         raise ValueError(f"{field_name} predictor is unavailable")
     try:
@@ -1460,6 +1646,16 @@ def _predict_probability_array(
         )
     except Exception as exc:
         raise ValueError(f"{field_name} prediction failed") from exc
+    if uses_numeric_probability:
+        if (
+            result.ndim != 1
+            or result.shape != (len(matrix),)
+            or not np.all(np.isfinite(result))
+            or np.any(result < 0)
+            or np.any(result > 1)
+        ):
+            raise ValueError(f"{field_name} output shape/value is invalid")
+        return result
     if (
         result.ndim != 2
         or result.shape != (len(matrix), 2)
@@ -1542,21 +1738,57 @@ def _rank_bp(
     *,
     rows: tuple[PortfolioMLDatasetRow, ...],
     predicted_values: tuple[int, ...],
+    rank_contract: str = DEFAULT_RANK_CONTRACT,
+    allow_research_shadow: bool = False,
 ) -> dict[str, int]:
-    ordered = sorted(
-        zip(predicted_values, (row.symbol for row in rows), rows),
-        key=lambda item: (item[0], item[1]),
+    if len(rows) != len(predicted_values):
+        raise ValueError("rank rows and predictions must have equal length")
+    if not isinstance(allow_research_shadow, bool):
+        raise TypeError("allow_research_shadow must be bool")
+    # rank 的分母是同一個 decision date 的股票橫截面；跨日混排會讓
+    # daily batch 的日期數量改變 rank，且與 trainer/OOC derived 不一致。
+    # research capture 仍按原始 observed timestamp 分日，但不應回到正式
+    # 08:30 parser；入口已先以 row identity 限制此模式，正式 infer 維持
+    # 原本的 clock gate。
+    parse_decision = (
+        _parse_research_shadow_decision_at
+        if allow_research_shadow
+        else _parse_decision_at
     )
-    if len(ordered) == 1:
-        return {ordered[0][2].row_id: 5_000}
-    denominator = len(ordered) - 1
-    return {
-        row.row_id: (rank * 10_000) // denominator
-        for rank, (_, _, row) in enumerate(ordered)
-    }
+    grouped: dict[str, list[tuple[int, str, int]]] = {}
+    for index, (row, prediction) in enumerate(zip(rows, predicted_values)):
+        decision_date = parse_decision(row.decision_at).date().isoformat()
+        grouped.setdefault(decision_date, []).append(
+            (prediction, row.symbol, index)
+        )
+    result: dict[str, int] = {}
+    for values in grouped.values():
+        ranks = rank_values_bp(
+            tuple(item[0] for item in values),
+            tuple(item[1] for item in values),
+            rank_contract=rank_contract,
+        )
+        for item, rank in zip(values, ranks):
+            result[rows[item[2]].row_id] = rank
+    return result
 
 
-def _expert_vector(output: _ExpertOutput) -> tuple[int, ...]:
+def _expert_vector(
+    output: _ExpertOutput,
+    *,
+    meta_probability_input: str = "calibrated",
+) -> tuple[int, ...]:
+    if meta_probability_input not in {"calibrated", "raw_oof"}:
+        raise ValueError("unsupported meta probability input")
+    # 舊版 direct artifact 的 meta head 是以 calibrated 機率訓練，維持
+    # 原本的向量語意。minimal OOC release 以 raw_oof 明確綁定，避免外接
+    # calibrator 改變 final meta 原先看到的特徵分布；兩個 bp 值都保留在
+    # row audit，供風險與 parity 檢查使用。
+    downside_probability = (
+        output.uncalibrated_downside_probability_bp
+        if meta_probability_input == "raw_oof"
+        else output.downside_probability_bp
+    )
     values = (
         output.expected_excess_return_bp,
         (
@@ -1569,7 +1801,7 @@ def _expert_vector(output: _ExpertOutput) -> tuple[int, ...]:
         output.predicted_realized_volatility_bp,
         output.predicted_max_drawdown_bp,
         output.predicted_tail_loss_bp,
-        output.downside_probability_bp,
+        downside_probability,
         output.fill_feasibility_probability_bp,
         output.rank_bp,
     )
@@ -1877,7 +2109,15 @@ def _require_predictor(
     method_name: str,
     field_name: str,
 ) -> None:
-    if not callable(getattr(value, method_name, None)):
+    predictor = getattr(value, method_name, None)
+    if not callable(predictor) and method_name in {"predict", "predict_proba"}:
+        predictor = getattr(value, "predict_numeric", None)
+        if callable(predictor):
+            if method_name == "predict_proba" and getattr(value, "classifier", None) is not True:
+                raise ValueError(f"{field_name} numeric probability predictor is not a classifier")
+            if method_name == "predict" and getattr(value, "classifier", False) is True:
+                raise ValueError(f"{field_name} numeric predictor is a classifier")
+    if not callable(predictor):
         raise ValueError(f"{field_name} must implement {method_name}")
 
 
@@ -1954,6 +2194,12 @@ def _parse_decision_at(value: str) -> datetime:
     if parsed.timetz().replace(tzinfo=None) != time(8, 30):
         raise ValueError("decision_at must be 08:30 Asia/Taipei")
     return parsed
+
+
+def _parse_research_shadow_decision_at(value: str) -> datetime:
+    """解析已標記的 post-freeze research capture，不放寬正式入口。"""
+
+    return _parse_available_at(value, field_name="research_shadow.decision_at")
 
 
 def _canonical_json(value: object) -> str:

@@ -41,8 +41,15 @@ from data_module.portfolio_ml_out_of_core_store import (
     STORE_SCHEMA_VERSION,
     TARGET_FIELDS,
 )
+from data_module.portfolio_ml_target_diagnostics import (
+    ALLOCATION_TEACHER_GATE_SCHEMA_VERSION,
+    evaluate_allocation_teacher_eligibility,
+)
+from data_module.ml_direct_shared_block_resolver import (
+    resolve_direct_year_artifact_paths,
+)
 from data_module.ml_storage_capacity import (
-    DEFAULT_SAFETY_RESERVE_BYTES,
+    heavy_chain_capacity_budget,
     MLStorageCapacityBudget,
     StorageCapacityError,
     directory_size_bytes as capacity_directory_size_bytes,
@@ -54,8 +61,29 @@ from ml_module.allocation_training_service import (
     EXPERT_VECTOR_WIDTH,
     REGRESSION_EXPERT_HEADS,
 )
+from ml_module.allocation_rank_contract import (
+    DEFAULT_RANK_CONTRACT,
+    RANK_CONTRACT_V2,
+    rank_values_bp,
+    validate_rank_contract,
+)
+from ml_module.allocation_family_weight_contract import (
+    FAMILY_WEIGHT_POLICY_COEFFICIENT_V1,
+    FAMILY_WEIGHT_POLICY_DEGENERATE_EQUAL_V1,
+    FAMILY_WEIGHT_STATUS_COEFFICIENT_SIGNAL,
+    FAMILY_WEIGHT_STATUS_DEGENERATE_UNIDENTIFIED_EQUAL,
+    FAMILY_WEIGHT_STATUS_LEGACY_COEFFICIENT,
+    validate_family_weight_policy,
+)
 from ml_module.ooc_cross_fitted_calibration import (
     cross_fitted_binned_calibration,
+)
+from ml_module.allocation_ooc_shared_artifact_store import (
+    DEFAULT_MAX_STORE_BYTES,
+    OOCArtifactResolution,
+    OOC_ARTIFACT_KEY_SCHEMA_VERSION,
+    OOCSharedArtifactStore,
+    semantic_key_hash,
 )
 
 
@@ -104,6 +132,14 @@ class AllocationOutOfCoreTrainingRequest:
     safety_reserve_bytes: int | None = None
     training_profile: str = "full_shadow"
     complexity_policy: Mapping[str, object] | None = None
+    rank_contract: str = DEFAULT_RANK_CONTRACT
+    family_weight_policy: str = FAMILY_WEIGHT_POLICY_COEFFICIENT_V1
+    # Keep the new shared numeric root at the end so existing positional
+    # request construction retains its pre-existing field order.
+    shared_numeric_store_root: Path | None = None
+    # OOC model／OOF artifact 的 immutable registry；None 時維持既有
+    # run-local artifact 行為，確保舊 caller 與已發布 run 相容。
+    shared_artifact_store_root: Path | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -195,6 +231,14 @@ class AllocationOutOfCoreTrainingRequest:
                 algorithms=self.algorithms,
                 horizons=self.horizons,
             )
+        validate_rank_contract(
+            self.rank_contract,
+            field_name="rank_contract",
+        )
+        validate_family_weight_policy(
+            self.family_weight_policy,
+            field_name="family_weight_policy",
+        )
 
     @property
     def profile(self) -> str:
@@ -223,14 +267,10 @@ def _capacity_budget_for_request(
     persistent_budget = request.persistent_storage_budget_bytes
     if persistent_budget is None:
         persistent_budget = request.persistent_new_bytes_budget
-    return MLStorageCapacityBudget(
+    return heavy_chain_capacity_budget(
         persistent_new_bytes_budget=persistent_budget,
         temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
-        safety_reserve_bytes=(
-            request.safety_reserve_bytes
-            if request.safety_reserve_bytes is not None
-            else DEFAULT_SAFETY_RESERVE_BYTES
-        ),
+        safety_reserve_bytes=request.safety_reserve_bytes,
     )
 
 
@@ -289,6 +329,7 @@ class _YearStore:
     year: int
     row_count: int
     directory: Path
+    rows_path: Path
     feature_count: int
     label_width: int
     values: np.memmap
@@ -299,9 +340,19 @@ class _YearStore:
 
 
 class _NumericStore:
-    def __init__(self, manifest_path: Path) -> None:
+    def __init__(
+        self,
+        manifest_path: Path,
+        *,
+        shared_numeric_store_root: Path | None = None,
+    ) -> None:
         self.manifest_path = manifest_path.resolve()
         self.run_directory = self.manifest_path.parent
+        self.shared_numeric_store_root = (
+            None
+            if shared_numeric_store_root is None
+            else Path(shared_numeric_store_root).resolve()
+        )
         self.manifest = _read_json(self.manifest_path)
         _validate_store_manifest(
             manifest=self.manifest,
@@ -371,6 +422,11 @@ class _NumericStore:
                 field_name="folds",
             )
         )
+        store_identity = self.manifest.get("store_identity")
+        self.direct_numeric_shared_mode = (
+            isinstance(store_identity, Mapping)
+            and "direct_builder_schema_version" in store_identity
+        )
         years: list[_YearStore] = []
         for item in _mapping_sequence(
             self.manifest.get("years"),
@@ -386,6 +442,27 @@ class _NumericStore:
                 field_name="row_count",
             )
             directory = self.run_directory / f"year={year:04d}"
+            if self.direct_numeric_shared_mode:
+                artifact_paths = resolve_direct_year_artifact_paths(
+                    item,
+                    year_directory=directory,
+                    shared_store_root=self.shared_numeric_store_root,
+                )
+            else:
+                artifact_paths = {
+                    artifact_id: directory / artifact_id
+                    for artifact_id in (
+                        "features.values.i64",
+                        "features.masks.u8",
+                        "targets.i32",
+                        "labels.i32",
+                        "labels.masks.u8",
+                    )
+                }
+            rows_path = artifact_paths.get(
+                "rows.sqlite",
+                directory / "rows.sqlite",
+            )
             label_width = len(self.horizons) * len(LABEL_FIELDS)
             years.append(
                 _YearStore(
@@ -393,34 +470,35 @@ class _NumericStore:
                     year=year,
                     row_count=row_count,
                     directory=directory,
+                    rows_path=rows_path,
                     feature_count=len(self.feature_ids),
                     label_width=label_width,
                     values=np.memmap(
-                        directory / "features.values.i64",
+                        artifact_paths["features.values.i64"],
                         dtype="<i8",
                         mode="r",
                         shape=(row_count, len(self.feature_ids)),
                     ),
                     masks=np.memmap(
-                        directory / "features.masks.u8",
+                        artifact_paths["features.masks.u8"],
                         dtype="u1",
                         mode="r",
                         shape=(row_count, len(self.feature_ids)),
                     ),
                     targets=np.memmap(
-                        directory / "targets.i32",
+                        artifact_paths["targets.i32"],
                         dtype="<i4",
                         mode="r",
                         shape=(row_count, len(TARGET_FIELDS)),
                     ),
                     labels=np.memmap(
-                        directory / "labels.i32",
+                        artifact_paths["labels.i32"],
                         dtype="<i4",
                         mode="r",
                         shape=(row_count, label_width),
                     ),
                     label_masks=np.memmap(
-                        directory / "labels.masks.u8",
+                        artifact_paths["labels.masks.u8"],
                         dtype="u1",
                         mode="r",
                         shape=(row_count, label_width),
@@ -545,7 +623,7 @@ class _NumericStore:
                 dtype=np.int64,
             )
             connection = sqlite3.connect(
-                f"file:{(year.directory / 'rows.sqlite').as_posix()}?mode=ro",
+                f"file:{year.rows_path.as_posix()}?mode=ro",
                 uri=True,
             )
             connection.execute("PRAGMA query_only=ON")
@@ -592,7 +670,7 @@ class _NumericStore:
     ) -> bool:
         year = self.years[ordinal]
         connection = sqlite3.connect(
-            f"file:{(year.directory / 'rows.sqlite').as_posix()}?mode=ro",
+            f"file:{year.rows_path.as_posix()}?mode=ro",
             uri=True,
         )
         connection.execute("PRAGMA query_only=ON")
@@ -641,7 +719,7 @@ class _NumericStore:
                 )
             year = self.years[ordinal]
             connection = sqlite3.connect(
-                f"file:{(year.directory / 'rows.sqlite').as_posix()}?mode=ro",
+                f"file:{year.rows_path.as_posix()}?mode=ro",
                 uri=True,
             )
             connection.execute("PRAGMA query_only=ON")
@@ -675,6 +753,64 @@ class _NumericStore:
             if target_cursor != len(local_indexes):
                 raise ValueError("row refs exceed rows custody")
         return selected[:selected_count].copy()
+
+
+def _summarize_store_targets(
+    store: _NumericStore,
+    *,
+    chunk_rows: int = 65_536,
+) -> dict[str, dict[str, int | None]]:
+    """以 bounded memmap scan 產生 gate 所需的 target summary。
+
+    這裡只讀取已凍結的 teacher target，不讀 labels、h5 或任何成熟後的
+    outcome；因此 gate 不會用未來報酬替缺少的 teacher provenance 背書。
+    """
+
+    if isinstance(chunk_rows, bool) or not isinstance(chunk_rows, int):
+        raise ValueError("target summary chunk_rows must be an integer")
+    if chunk_rows <= 0:
+        raise ValueError("target summary chunk_rows must be positive")
+    summary: dict[str, dict[str, int | None]] = {
+        field_name: {
+            "min": None,
+            "max": None,
+            "nonzero_count": 0,
+            "observed_count": 0,
+        }
+        for field_name in TARGET_FIELDS
+    }
+    for year in store.years:
+        for start in range(0, year.row_count, chunk_rows):
+            end = min(year.row_count, start + chunk_rows)
+            values = np.asarray(year.targets[start:end], dtype=np.int64)
+            if values.ndim != 2 or values.shape[1] != len(TARGET_FIELDS):
+                raise ValueError("teacher target memmap shape is invalid")
+            for position, field_name in enumerate(TARGET_FIELDS):
+                column = values[:, position]
+                if column.size == 0:
+                    continue
+                item = summary[field_name]
+                observed_min = int(column.min())
+                observed_max = int(column.max())
+                prior_min = item["min"]
+                prior_max = item["max"]
+                item["min"] = (
+                    observed_min
+                    if prior_min is None
+                    else min(int(prior_min), observed_min)
+                )
+                item["max"] = (
+                    observed_max
+                    if prior_max is None
+                    else max(int(prior_max), observed_max)
+                )
+                item["nonzero_count"] = int(item["nonzero_count"] or 0) + int(
+                    np.count_nonzero(column)
+                )
+                item["observed_count"] = int(item["observed_count"] or 0) + int(
+                    column.size
+                )
+    return summary
 
 
 class _PeakRSSMonitor:
@@ -760,7 +896,40 @@ class AllocationOutOfCoreTrainingService:
         monitor = _PeakRSSMonitor(
             memory_budget_mb=request.memory_budget_mb
         )
-        store = _NumericStore(request.store_manifest_path)
+        store = _NumericStore(
+            request.store_manifest_path,
+            shared_numeric_store_root=request.shared_numeric_store_root,
+        )
+        # Teacher target fit 必須先通過 provenance gate。這個 bounded scan
+        # 只讀 target memmap；缺 PIT／ledger／Rule 或不完整 candidate
+        # provenance 時，在建立 output／artifact 前停止，避免把全 cash
+        # fallback 產物誤標成有效 allocation teacher。base expert outcome
+        # research 由獨立比較器執行，不經過這條 teacher fit 路徑。
+        teacher_gate = evaluate_allocation_teacher_eligibility(
+            target_summary=_summarize_store_targets(store),
+            assembly_blockers=_text_sequence(
+                store.manifest.get("assembly_blockers", ())
+            ),
+            teacher_target_diagnostics=store.manifest.get(
+                "teacher_target_diagnostics"
+            ),
+            teacher_input_provenance=store.manifest.get(
+                "teacher_input_provenance"
+            ),
+            portfolio_state_policy=store.manifest.get(
+                "portfolio_state_policy"
+            ),
+        )
+        if teacher_gate["allowed"] is not True:
+            reasons = ",".join(
+                str(item) for item in teacher_gate.get("reasons", ())
+            )
+            raise ValueError(
+                "allocation teacher eligibility gate blocked: "
+                f"{teacher_gate['status']}"
+                + (f"; reasons={reasons}" if reasons else "")
+            )
+        shared_artifact_store = _build_shared_artifact_store(request)
         selected_horizons = (
             request.horizons if request.horizons else store.horizons
         )
@@ -772,10 +941,23 @@ class AllocationOutOfCoreTrainingService:
             "store_manifest_file_hash": store.manifest_file_hash,
             "algorithms": list(request.algorithms),
             "horizons": list(selected_horizons),
+            "training_profile": request.training_profile,
+            "rank_contract": request.rank_contract,
+            "family_weight_policy": request.family_weight_policy,
+            "complexity_policy": (
+                None
+                if request.complexity_policy is None
+                else dict(request.complexity_policy)
+            ),
             "ridge_alpha_bp": request.ridge_alpha_bp,
             "logistic_iterations": request.logistic_iterations,
             "hgb_max_iter": request.hgb_max_iter,
             "hgb_max_fit_rows": request.hgb_max_fit_rows,
+            "allocation_teacher_gate_schema_version": (
+                ALLOCATION_TEACHER_GATE_SCHEMA_VERSION
+            ),
+            "allocation_teacher_gate_hash": teacher_gate["identity_hash"],
+            "allocation_teacher_gate_status": teacher_gate["status"],
         }
         run_id = "allocation-ooc-" + _sha256_json(run_identity)[7:31]
         output_root.mkdir(parents=True, exist_ok=True)
@@ -791,6 +973,7 @@ class AllocationOutOfCoreTrainingService:
                 manifest=existing,
                 run_directory=run_directory,
                 expected_identity=run_identity,
+                shared_artifact_store=shared_artifact_store,
             )
             _write_latest_pointer(
                 latest_manifest_path=latest_manifest_path,
@@ -874,9 +1057,15 @@ class AllocationOutOfCoreTrainingService:
                 temporary_roots=tuple(temporary_roots),
                 temporary_peak_bytes_observed=peak_capacity_temporary_bytes,
             )
+            observed_temporary_bytes = result.temporary_peak_bytes_observed
+            if observed_temporary_bytes is None:
+                raise StorageCapacityError(
+                    "capacity preflight returned an unknown temporary peak",
+                    preflight=result.as_dict(),
+                )
             peak_capacity_temporary_bytes = max(
                 peak_capacity_temporary_bytes,
-                result.temporary_peak_bytes_observed,
+                observed_temporary_bytes,
             )
             last_capacity_preflight = result.as_dict()
             capacity_checkpoint_count += 1
@@ -940,22 +1129,85 @@ class AllocationOutOfCoreTrainingService:
                         pack.get("pack_id"),
                         field_name="pack_id",
                     )
-                    pending = _pending_expert_keys(
-                        artifacts_root=artifacts_root,
-                        fold_id=fold_id,
-                        pack_id=pack_id,
-                        horizons=selected_horizons,
-                        algorithms=request.algorithms,
-                    )
-                    if not pending:
-                        base_artifacts.extend(
-                            _existing_pack_artifacts(
+                    cached_artifacts: dict[tuple[int, str], dict[str, Any]] = {}
+                    semantic_keys: dict[tuple[int, str], dict[str, Any]] = {}
+                    pending: list[tuple[int, str]] = []
+                    for horizon in selected_horizons:
+                        for algorithm in request.algorithms:
+                            candidate = (horizon, algorithm)
+                            final_directory = _expert_directory(
                                 artifacts_root=artifacts_root,
                                 fold_id=fold_id,
                                 pack_id=pack_id,
-                                horizons=selected_horizons,
-                                algorithms=request.algorithms,
+                                horizon=horizon,
+                                algorithm=algorithm,
                             )
+                            semantic_key = _build_ooc_artifact_semantic_key(
+                                request=request,
+                                store=store,
+                                artifact_kind="base_oof_expert",
+                                artifact_scope={
+                                    "fold_id": fold_id,
+                                    "pack_id": pack_id,
+                                    "horizon_trading_days": horizon,
+                                    "algorithm": algorithm,
+                                },
+                                split_contract={
+                                    "fold": dict(fold),
+                                    "train_row_count": len(train_refs),
+                                    "raw_train_row_count": raw_train_row_count,
+                                    "test_row_count": len(test_refs),
+                                },
+                                maturity_contract={
+                                    "cutoff_exclusive": label_maturity_cutoff_exclusive,
+                                    "raw_train_row_count": raw_train_row_count,
+                                    "mature_train_row_count": len(train_refs),
+                                },
+                                time_start=_required_text(
+                                    fold.get("test_start"),
+                                    field_name="fold.test_start",
+                                ),
+                                time_end=_required_text(
+                                    fold.get("test_end"),
+                                    field_name="fold.test_end",
+                                ),
+                            )
+                            semantic_keys[candidate] = semantic_key
+                            if (final_directory / "manifest.json").is_file():
+                                cached_artifacts[candidate] = _read_and_validate_artifact(
+                                    final_directory,
+                                    shared_artifact_store=shared_artifact_store,
+                                )
+                            elif shared_artifact_store is not None:
+                                resolved = shared_artifact_store.resolve(semantic_key)
+                                if resolved is not None:
+                                    cached_artifacts[candidate] = _install_shared_artifact_manifest(
+                                        resolution=resolved,
+                                        final_directory=final_directory,
+                                        run_directory=run_directory,
+                                    )
+                                    _append_event(
+                                        audit,
+                                        event_type="base_expert_shared_reused",
+                                        natural_key=_expert_natural_key(
+                                            cached_artifacts[candidate]
+                                        ),
+                                        payload={
+                                            **cached_artifacts[candidate],
+                                            "shared_artifact_key_hash": semantic_key_hash(
+                                                semantic_key
+                                            ),
+                                        },
+                                    )
+                                else:
+                                    pending.append(candidate)
+                            else:
+                                pending.append(candidate)
+                    if not pending:
+                        base_artifacts.extend(
+                            cached_artifacts[(horizon, algorithm)]
+                            for horizon in selected_horizons
+                            for algorithm in request.algorithms
                         )
                         capacity_checkpoint(
                             f"ooc_fold_{fold_id}_pack_{pack_id}_reused",
@@ -996,10 +1248,9 @@ class AllocationOutOfCoreTrainingService:
                                 horizon=horizon,
                                 algorithm=algorithm,
                             )
-                            if (final_directory / "manifest.json").is_file():
-                                artifact = _read_and_validate_artifact(
-                                    final_directory
-                                )
+                            candidate = (horizon, algorithm)
+                            if candidate in cached_artifacts:
+                                artifact = cached_artifacts[candidate]
                             else:
                                 artifact = self._train_base_expert(
                                     request=request,
@@ -1019,6 +1270,8 @@ class AllocationOutOfCoreTrainingService:
                                         label_maturity_cutoff_exclusive
                                     ),
                                     batch_size=effective_batch_size,
+                                    shared_artifact_store=shared_artifact_store,
+                                    semantic_key=semantic_keys[candidate],
                                 )
                             base_artifacts.append(artifact)
                             _append_event(
@@ -1074,6 +1327,7 @@ class AllocationOutOfCoreTrainingService:
                 selected_horizons=selected_horizons,
                 batch_size=effective_batch_size,
                 audit=audit,
+                shared_artifact_store=shared_artifact_store,
             )
             capacity_checkpoint("ooc_final_base_complete", temporary_roots=())
             monitor.assert_within_budget(stage="final_base_experts")
@@ -1089,6 +1343,7 @@ class AllocationOutOfCoreTrainingService:
                 selected_horizons=selected_horizons,
                 batch_size=effective_batch_size,
                 audit=audit,
+                shared_artifact_store=shared_artifact_store,
             )
             capacity_checkpoint("ooc_meta_folds_complete", temporary_roots=())
             capacity_checkpoint("ooc_final_meta_start")
@@ -1102,6 +1357,7 @@ class AllocationOutOfCoreTrainingService:
                 selected_horizons=selected_horizons,
                 batch_size=effective_batch_size,
                 audit=audit,
+                shared_artifact_store=shared_artifact_store,
             )
             capacity_checkpoint("ooc_final_meta_complete", temporary_roots=())
             monitor.assert_within_budget(stage="final_meta")
@@ -1158,6 +1414,15 @@ class AllocationOutOfCoreTrainingService:
                 "feature_packs": list(store.feature_packs),
                 "horizons": list(selected_horizons),
                 "algorithms": list(request.algorithms),
+                "training_profile": request.training_profile,
+                "allocation_teacher_eligibility": teacher_gate,
+                "rank_contract": request.rank_contract,
+                "family_weight_policy": request.family_weight_policy,
+                "complexity_policy": (
+                    None
+                    if request.complexity_policy is None
+                    else dict(request.complexity_policy)
+                ),
                 "fold_count": len(store.folds),
                 "base_expert_count": len(base_artifacts),
                 "base_experts": [
@@ -1301,6 +1566,8 @@ class AllocationOutOfCoreTrainingService:
         raw_train_row_count: int,
         label_maturity_cutoff_exclusive: str,
         batch_size: int,
+        shared_artifact_store: OOCSharedArtifactStore | None = None,
+        semantic_key: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         final_directory.parent.mkdir(parents=True, exist_ok=True)
         staging = Path(
@@ -1362,6 +1629,7 @@ class AllocationOutOfCoreTrainingService:
                     store=store,
                     test_refs=test_refs,
                     oof=oof,
+                    rank_contract=request.rank_contract,
                 )
                 oof.flush()
                 _close_memmap(oof)
@@ -1417,6 +1685,7 @@ class AllocationOutOfCoreTrainingService:
                 ),
                 "expert_head_ids": list(EXPERT_HEAD_IDS),
                 "expert_vector_width": EXPERT_VECTOR_WIDTH,
+                "rank_contract": request.rank_contract,
                 "preprocessing_strategy": preprocessing_strategy,
                 "head_models": head_records,
                 "fit_population": (
@@ -1436,14 +1705,49 @@ class AllocationOutOfCoreTrainingService:
                 "production_alpha_bp": 0,
                 "broker_order_allowed": False,
             }
+            if shared_artifact_store is not None:
+                if semantic_key is None:
+                    raise ValueError(
+                        "shared OOC artifact publication requires semantic key"
+                    )
+                artifact["artifact_storage"] = "shared_immutable"
+                artifact["shared_artifact_key_hash"] = semantic_key_hash(
+                    semantic_key
+                )
+                publication = shared_artifact_store.publish(
+                    semantic_key=semantic_key,
+                    artifact_manifest=artifact,
+                    source_directory=staging,
+                    temporary_roots=(staging,),
+                    temporary_budget_bytes=(
+                        _capacity_budget_for_request(request)
+                        .temporary_peak_bytes_budget
+                    ),
+                )
+                artifact["shared_artifact_reference"] = publication["reference"]
+                for payload in artifact["artifacts"]:
+                    relative = _required_text(
+                        payload.get("path"),
+                        field_name="artifact.path",
+                    )
+                    (staging / relative).unlink(missing_ok=True)
             artifact["manifest_hash"] = _sha256_json(artifact)
             _write_json(staging / "manifest.json", artifact)
             os.replace(staging, final_directory)
-            return _artifact_with_relative_path(
+            result = _artifact_with_relative_path(
                 artifact=artifact,
                 artifact_directory=final_directory,
                 run_directory=run_directory,
             )
+            if shared_artifact_store is not None:
+                result["_shared_artifact_store_root"] = str(
+                    shared_artifact_store.root
+                )
+                result["_shared_artifact_paths"] = {
+                    path: str(value)
+                    for path, value in publication["file_paths"].items()
+                }
+            return result
         except Exception:
             _safe_remove_tree(staging, final_directory.parent)
             raise
@@ -1459,12 +1763,14 @@ class AllocationOutOfCoreTrainingService:
         selected_horizons: tuple[int, ...],
         batch_size: int,
         audit: sqlite3.Connection,
+        shared_artifact_store: OOCSharedArtifactStore | None = None,
     ) -> list[dict[str, Any]]:
         existing_artifacts = _existing_final_base_artifacts(
             artifacts_root=artifacts_root,
             store=store,
             horizons=selected_horizons,
             algorithms=request.algorithms,
+            shared_artifact_store=shared_artifact_store,
         )
         if existing_artifacts is not None:
             for artifact in existing_artifacts:
@@ -1479,6 +1785,69 @@ class AllocationOutOfCoreTrainingService:
                     payload=artifact,
                 )
             return existing_artifacts
+
+        shared_artifacts: dict[tuple[str, int, str], dict[str, Any]] = {}
+        semantic_keys: dict[tuple[str, int, str], dict[str, Any]] = {}
+        for pack in store.feature_packs:
+            pack_id = _required_text(pack.get("pack_id"), field_name="pack_id")
+            for horizon in selected_horizons:
+                for algorithm in request.algorithms:
+                    key = (pack_id, horizon, algorithm)
+                    semantic_key = _build_ooc_artifact_semantic_key(
+                        request=request,
+                        store=store,
+                        artifact_kind="final_base_expert",
+                        artifact_scope={
+                            "fold_id": "final",
+                            "pack_id": pack_id,
+                            "horizon_trading_days": horizon,
+                            "algorithm": algorithm,
+                        },
+                        split_contract={
+                            "all_folds": [dict(item) for item in store.folds],
+                            "fold_id": "final",
+                        },
+                        maturity_contract={
+                            "cutoff_exclusive": _required_text(
+                                store.manifest.get("training_as_of"),
+                                field_name="training_as_of",
+                            )[:10],
+                            "all_store_rows": store.manifest.get("row_count"),
+                            "maturity_filter": "all_label_mature_rows_before_training_as_of",
+                        },
+                        time_start=_store_time_start(store),
+                        time_end=_required_text(
+                            store.manifest.get("training_as_of"),
+                            field_name="training_as_of",
+                        )[:10],
+                    )
+                    semantic_keys[key] = semantic_key
+                    if shared_artifact_store is not None:
+                        final_directory = _final_expert_directory(
+                            artifacts_root=artifacts_root,
+                            pack_id=pack_id,
+                            horizon=horizon,
+                            algorithm=algorithm,
+                        )
+                        if not (final_directory / "manifest.json").is_file():
+                            resolved = shared_artifact_store.resolve(semantic_key)
+                            if resolved is not None:
+                                shared_artifacts[key] = _install_shared_artifact_manifest(
+                                    resolution=resolved,
+                                    final_directory=final_directory,
+                                    run_directory=run_directory,
+                                )
+        if shared_artifact_store is not None and len(shared_artifacts) == (
+            len(store.feature_packs) * len(selected_horizons) * len(request.algorithms)
+        ):
+            for artifact in shared_artifacts.values():
+                _append_event(
+                    audit,
+                    event_type="final_base_expert_shared_reused",
+                    natural_key=_expert_natural_key(artifact),
+                    payload=artifact,
+                )
+            return _canonical_artifacts(list(shared_artifacts.values()))
 
         final_work = work_root / "final-base"
         _prepare_clean_work_directory(final_work, work_root)
@@ -1536,8 +1905,11 @@ class AllocationOutOfCoreTrainingService:
                         )
                         if (final_directory / "manifest.json").is_file():
                             artifact = _read_and_validate_artifact(
-                                final_directory
+                                final_directory,
+                                shared_artifact_store=shared_artifact_store,
                             )
+                        elif (pack_id, horizon, algorithm) in shared_artifacts:
+                            artifact = shared_artifacts[(pack_id, horizon, algorithm)]
                         else:
                             artifact = self._train_base_expert(
                                 request=request,
@@ -1557,6 +1929,10 @@ class AllocationOutOfCoreTrainingService:
                                     final_maturity_cutoff
                                 ),
                                 batch_size=batch_size,
+                                shared_artifact_store=shared_artifact_store,
+                                semantic_key=semantic_keys[
+                                    (pack_id, horizon, algorithm)
+                                ],
                             )
                         results.append(artifact)
                         _append_event(
@@ -1595,6 +1971,7 @@ class AllocationOutOfCoreTrainingService:
         selected_horizons: tuple[int, ...],
         batch_size: int,
         audit: sqlite3.Connection,
+        shared_artifact_store: OOCSharedArtifactStore | None = None,
     ) -> list[dict[str, Any]]:
         del selected_horizons
         results: list[dict[str, Any]] = []
@@ -1610,7 +1987,10 @@ class AllocationOutOfCoreTrainingService:
                 artifacts_root / "meta" / f"fold={fold_id}"
             )
             if (final_directory / "manifest.json").is_file():
-                artifact = _read_and_validate_artifact(final_directory)
+                artifact = _read_and_validate_artifact(
+                    final_directory,
+                    shared_artifact_store=shared_artifact_store,
+                )
                 results.append(artifact)
                 continue
             previous_folds = store.folds[:fold_index]
@@ -1618,6 +1998,51 @@ class AllocationOutOfCoreTrainingService:
                 fold.get("test_start"),
                 field_name="test_start",
             )
+            semantic_key = _build_ooc_artifact_semantic_key(
+                request=request,
+                store=store,
+                artifact_kind="meta_oof_allocator",
+                artifact_scope={
+                    "fold_id": fold_id,
+                    "expert_ids": list(expert_ids),
+                },
+                split_contract={
+                    "target_fold": dict(fold),
+                    "previous_folds": [dict(item) for item in previous_folds],
+                    "base_oof_manifest_hashes": _artifact_manifest_hashes(
+                        base_artifacts,
+                        fold_ids=(
+                            _required_text(item.get("fold_id"), field_name="fold_id")
+                            for item in previous_folds
+                        ),
+                    ),
+                },
+                maturity_contract={
+                    "cutoff_exclusive": cutoff,
+                    "mature_prior_oof_only": True,
+                },
+                time_start=_store_time_start(store),
+                time_end=_required_text(
+                    fold.get("test_end"),
+                    field_name="fold.test_end",
+                ),
+            )
+            if shared_artifact_store is not None:
+                resolved = shared_artifact_store.resolve(semantic_key)
+                if resolved is not None:
+                    artifact = _install_shared_artifact_manifest(
+                        resolution=resolved,
+                        final_directory=final_directory,
+                        run_directory=run_directory,
+                    )
+                    results.append(artifact)
+                    _append_event(
+                        audit,
+                        event_type="meta_fold_shared_reused",
+                        natural_key=fold_id,
+                        payload=artifact,
+                    )
+                    continue
             meta_work = work_root / "meta" / f"fold={fold_id}"
             _prepare_clean_work_directory(meta_work, work_root)
             train_matrix, train_refs = _materialize_meta_train_matrix(
@@ -1659,6 +2084,8 @@ class AllocationOutOfCoreTrainingService:
                 ),
                 label_maturity_cutoff_exclusive=cutoff,
                 batch_size=batch_size,
+                shared_artifact_store=shared_artifact_store,
+                semantic_key=semantic_key,
             )
             results.append(artifact)
             _append_event(
@@ -1691,12 +2118,56 @@ class AllocationOutOfCoreTrainingService:
         selected_horizons: tuple[int, ...],
         batch_size: int,
         audit: sqlite3.Connection,
+        shared_artifact_store: OOCSharedArtifactStore | None = None,
     ) -> dict[str, Any]:
         del selected_horizons
         final_directory = artifacts_root / "meta" / "final"
         if (final_directory / "manifest.json").is_file():
-            return _read_and_validate_artifact(final_directory)
+            return _read_and_validate_artifact(
+                final_directory,
+                shared_artifact_store=shared_artifact_store,
+            )
         expert_ids = _expert_ids(base_artifacts)
+        semantic_key = _build_ooc_artifact_semantic_key(
+            request=request,
+            store=store,
+            artifact_kind="final_meta_allocator",
+            artifact_scope={
+                "fold_id": "final",
+                "expert_ids": list(expert_ids),
+            },
+            split_contract={
+                "all_folds": [dict(item) for item in store.folds],
+                "base_oof_manifest_hashes": _artifact_manifest_hashes(
+                    base_artifacts,
+                    fold_ids=(
+                        _required_text(item.get("fold_id"), field_name="fold_id")
+                        for item in store.folds
+                    ),
+                ),
+            },
+            maturity_contract={
+                "cutoff_exclusive": "9999-12-31",
+                "mature_prior_oof_only": True,
+            },
+            time_start=_store_time_start(store),
+            time_end="9999-12-31",
+        )
+        if shared_artifact_store is not None:
+            resolved = shared_artifact_store.resolve(semantic_key)
+            if resolved is not None:
+                artifact = _install_shared_artifact_manifest(
+                    resolution=resolved,
+                    final_directory=final_directory,
+                    run_directory=run_directory,
+                )
+                _append_event(
+                    audit,
+                    event_type="final_meta_shared_reused",
+                    natural_key="final",
+                    payload=artifact,
+                )
+                return artifact
         selections, train_row_count = _collect_meta_training_selections(
             store=store,
             previous_folds=store.folds,
@@ -1730,6 +2201,8 @@ class AllocationOutOfCoreTrainingService:
                 batch_size=batch_size,
             ),
             train_row_count=train_row_count,
+            shared_artifact_store=shared_artifact_store,
+            semantic_key=semantic_key,
         )
         _append_event(
             audit,
@@ -2438,6 +2911,8 @@ def _fit_meta_artifact(
         | None
     ) = None,
     train_row_count: int | None = None,
+    shared_artifact_store: OOCSharedArtifactStore | None = None,
+    semantic_key: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     final_directory.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(
@@ -2505,6 +2980,16 @@ def _fit_meta_artifact(
             np.zeros(width + 1, dtype=np.float64) for _ in range(5)
         ]
         class_counts = np.zeros(2, dtype=np.int64)
+        target_mins = np.full(
+            len(TARGET_FIELDS),
+            np.iinfo(np.int64).max,
+            dtype=np.int64,
+        )
+        target_maxs = np.full(
+            len(TARGET_FIELDS),
+            np.iinfo(np.int64).min,
+            dtype=np.int64,
+        )
         for raw_matrix, refs_batch in train_stream():
             transformed = _transform_linear_batch(
                 raw_matrix,
@@ -2516,15 +3001,25 @@ def _fit_meta_artifact(
             targets = store.read_target_batch(
                 np.asarray(refs_batch, dtype=np.int64)
             )
+            target_values = np.asarray(targets, dtype=np.int64)
+            if len(target_values):
+                target_mins = np.minimum(
+                    target_mins,
+                    np.min(target_values, axis=0),
+                )
+                target_maxs = np.maximum(
+                    target_maxs,
+                    np.max(target_values, axis=0),
+                )
             common_gram = augmented.T @ augmented
             for position in range(5):
                 grams[position] += common_gram
                 xtys[position] += (
                     augmented.T
-                    @ np.asarray(targets[:, position], dtype=np.float64)
+                    @ np.asarray(target_values[:, position], dtype=np.float64)
                 )
-            class_counts[0] += int(np.sum(targets[:, 5] == 0))
-            class_counts[1] += int(np.sum(targets[:, 5] == 1))
+            class_counts[0] += int(np.sum(target_values[:, 5] == 0))
+            class_counts[1] += int(np.sum(target_values[:, 5] == 1))
         alpha = float(
             Decimal(request.ridge_alpha_bp) / Decimal(10_000)
         )
@@ -2636,11 +3131,54 @@ def _fit_meta_artifact(
             del oof
             artifacts_to_hash.append(staging / "oof.i32")
             oof_shape = [len(test_refs), len(TARGET_FIELDS)]
-        family_weights = _feature_family_weights(
-            expert_ids=expert_ids,
-            models=models,
-            family_coverage_bp=store.feature_family_coverage_bp,
+        target_summary = {
+            field_name: {
+                "min": int(target_mins[position]),
+                "max": int(target_maxs[position]),
+                "constant": bool(
+                    target_mins[position] == target_maxs[position]
+                ),
+            }
+            for position, field_name in enumerate(TARGET_FIELDS)
+        }
+        numeric_targets_constant = all(
+            bool(target_summary[field_name]["constant"])
+            for field_name in TARGET_FIELDS[:5]
         )
+        if (
+            request.family_weight_policy
+            == FAMILY_WEIGHT_POLICY_DEGENERATE_EQUAL_V1
+            and not numeric_targets_constant
+        ):
+            raise ValueError(
+                "degenerate-equal-v1 requires constant numeric Meta targets"
+            )
+        if (
+            numeric_targets_constant
+            and request.family_weight_policy
+            == FAMILY_WEIGHT_POLICY_DEGENERATE_EQUAL_V1
+        ):
+            # 指定退化 policy 且 numeric Meta target 全為常數時，係數只有
+            # 數值求解殘差；固定採 eligible family 等權，標示 coverage 未識別。
+            family_weights = _feature_family_weights(
+                expert_ids=expert_ids,
+                models={},
+                family_coverage_bp=store.feature_family_coverage_bp,
+            )
+            family_weight_status = (
+                FAMILY_WEIGHT_STATUS_DEGENERATE_UNIDENTIFIED_EQUAL
+            )
+        else:
+            family_weights = _feature_family_weights(
+                expert_ids=expert_ids,
+                models=models,
+                family_coverage_bp=store.feature_family_coverage_bp,
+            )
+            family_weight_status = (
+                FAMILY_WEIGHT_STATUS_LEGACY_COEFFICIENT
+                if numeric_targets_constant
+                else FAMILY_WEIGHT_STATUS_COEFFICIENT_SIGNAL
+            )
         artifact: dict[str, Any] = {
             "schema_version": META_SCHEMA_VERSION,
             "artifact_kind": (
@@ -2664,6 +3202,10 @@ def _fit_meta_artifact(
             "causal_prior_fold_oof_only": fold_id == "final"
             or fold_id not in training_source_fold_ids,
             "expert_vector_width": EXPERT_VECTOR_WIDTH,
+            "rank_contract": request.rank_contract,
+            "family_weight_policy": request.family_weight_policy,
+            "target_summary": target_summary,
+            "feature_family_weights_status": family_weight_status,
             "head_models": head_records,
             "feature_family_weights_bp": [
                 {"family_id": family_id, "weight_bp": weight_bp}
@@ -2679,14 +3221,49 @@ def _fit_meta_artifact(
             "production_alpha_bp": 0,
             "broker_order_allowed": False,
         }
+        if shared_artifact_store is not None:
+            if semantic_key is None:
+                raise ValueError(
+                    "shared OOC artifact publication requires semantic key"
+                )
+            artifact["artifact_storage"] = "shared_immutable"
+            artifact["shared_artifact_key_hash"] = semantic_key_hash(
+                semantic_key
+            )
+            publication = shared_artifact_store.publish(
+                semantic_key=semantic_key,
+                artifact_manifest=artifact,
+                source_directory=staging,
+                temporary_roots=(staging,),
+                temporary_budget_bytes=(
+                    _capacity_budget_for_request(request)
+                    .temporary_peak_bytes_budget
+                ),
+            )
+            artifact["shared_artifact_reference"] = publication["reference"]
+            for payload in artifact["artifacts"]:
+                relative = _required_text(
+                    payload.get("path"),
+                    field_name="artifact.path",
+                )
+                (staging / relative).unlink(missing_ok=True)
         artifact["manifest_hash"] = _sha256_json(artifact)
         _write_json(staging / "manifest.json", artifact)
         os.replace(staging, final_directory)
-        return _artifact_with_relative_path(
+        result = _artifact_with_relative_path(
             artifact=artifact,
             artifact_directory=final_directory,
             run_directory=run_directory,
         )
+        if shared_artifact_store is not None:
+            result["_shared_artifact_store_root"] = str(
+                shared_artifact_store.root
+            )
+            result["_shared_artifact_paths"] = {
+                path: str(value)
+                for path, value in publication["file_paths"].items()
+            }
+        return result
     except Exception:
         _safe_remove_tree(staging, final_directory.parent)
         raise
@@ -2906,12 +3483,12 @@ def _materialize_meta_fold_matrix(
     )
     for expert_index, expert_id in enumerate(expert_ids):
         item = by_expert[expert_id]
-        artifact_directory = run_directory / _required_text(
-            item.get("artifact_path"),
-            field_name="artifact_path",
-        )
         oof = np.memmap(
-            artifact_directory / "oof.i32",
+            _artifact_payload_path(
+                artifact=item,
+                run_directory=run_directory,
+                relative_path="oof.i32",
+            ),
             dtype=OOF_DTYPE,
             mode="r",
             shape=(row_count, EXPERT_VECTOR_WIDTH),
@@ -3098,17 +3675,17 @@ def _iter_meta_training_batches(
         oof_mmaps: list[np.memmap] = []
         try:
             for expert_id in expert_ids:
-                artifact_directory = run_directory / _required_text(
-                    by_expert[expert_id].get("artifact_path"),
-                    field_name="artifact_path",
-                )
                 row_count = _required_integer(
                     by_expert[expert_id].get("test_row_count"),
                     field_name="test_row_count",
                 )
                 oof_mmaps.append(
                     np.memmap(
-                        artifact_directory / "oof.i32",
+                        _artifact_payload_path(
+                            artifact=by_expert[expert_id],
+                            run_directory=run_directory,
+                            relative_path="oof.i32",
+                        ),
                         dtype=OOF_DTYPE,
                         mode="r",
                         shape=(row_count, EXPERT_VECTOR_WIDTH),
@@ -3150,6 +3727,7 @@ def _write_rank_column(
     store: _NumericStore,
     test_refs: NDArray[np.integer[Any]],
     oof: np.memmap,
+    rank_contract: str = DEFAULT_RANK_CONTRACT,
 ) -> None:
     rank_column = len(EXPERT_HEAD_IDS)
     current_date = ""
@@ -3158,21 +3736,23 @@ def _write_rank_column(
     def flush() -> None:
         if not rows:
             return
-        ordered = sorted(rows, key=lambda item: (item[0], item[1]))
-        if len(ordered) == 1:
-            oof[ordered[0][2], rank_column] = 5_000
-            rows.clear()
-            return
-        denominator = len(ordered) - 1
-        for rank, (_, _, position) in enumerate(ordered):
-            oof[position, rank_column] = (rank * 10_000) // denominator
+        ranks = rank_values_bp(
+            tuple(item[0] for item in rows),
+            tuple(item[1] for item in rows),
+            rank_contract=rank_contract,
+        )
+        for item, rank in zip(rows, ranks):
+            oof[item[2], rank_column] = rank
         rows.clear()
 
     for position, decision_date, row_id in store.iter_decision_dates(test_refs):
         if current_date and decision_date != current_date:
             flush()
         current_date = decision_date
-        rows.append((int(oof[position, 0]), row_id, position))
+        # rows.sqlite 的 row_id 是 ``...:<symbol>``；抽出 canonical symbol
+        # 讓 OOC 與 in-memory trainer/inference 使用同一個 tie key。
+        tie_key = row_id.rsplit(":", 1)[-1]
+        rows.append((int(oof[position, 0]), tie_key, position))
     flush()
 
 
@@ -3325,16 +3905,9 @@ def _calibration_summary(
         fold = fold_by_id[fold_id]
         refs = store.open_fold_refs(fold, "test")
         row_count = len(refs)
-        directory = (
-            Path(artifact["_run_directory"])
-            / _required_text(
-                artifact.get("artifact_path"),
-                field_name="artifact_path",
-            )
-            if "_run_directory" in artifact
-            else None
-        )
-        if directory is None:
+        if "_run_directory" not in artifact and not isinstance(
+            artifact.get("_shared_artifact_paths"), Mapping
+        ):
             _close_memmap(refs)
             continue
         horizon = _required_integer(
@@ -3344,7 +3917,11 @@ def _calibration_summary(
         fold_index = fold_index_by_id[fold_id]
         calibration_ready = calibration_ready_by_fold.get(fold_id)
         oof = np.memmap(
-            directory / "oof.i32",
+            _artifact_payload_path(
+                artifact=artifact,
+                run_directory=Path(str(artifact.get("_run_directory", ""))),
+                relative_path="oof.i32",
+            ),
             dtype=OOF_DTYPE,
             mode="r",
             shape=(row_count, EXPERT_VECTOR_WIDTH),
@@ -3485,21 +4062,18 @@ def _legacy_uncalibrated_calibration_summary(
         )
         refs = store.open_fold_refs(fold_by_id[fold_id], "test")
         row_count = len(refs)
-        directory = (
-            Path(artifact["_run_directory"])
-            / _required_text(
-                artifact.get("artifact_path"),
-                field_name="artifact_path",
-            )
-            if "_run_directory" in artifact
-            else None
-        )
-        if directory is None:
+        if "_run_directory" not in artifact and not isinstance(
+            artifact.get("_shared_artifact_paths"), Mapping
+        ):
             # 呼叫端 canonical payload 不持有隱藏路徑時，由 artifact_path
             # 的絕對 parent 無法推導；校準改由 manifest 所在 run 注入。
             continue
         oof = np.memmap(
-            directory / "oof.i32",
+            _artifact_payload_path(
+                artifact=artifact,
+                run_directory=Path(str(artifact.get("_run_directory", ""))),
+                relative_path="oof.i32",
+            ),
             dtype=OOF_DTYPE,
             mode="r",
             shape=(row_count, EXPERT_VECTOR_WIDTH),
@@ -3780,6 +4354,7 @@ def _existing_final_base_artifacts(
     store: _NumericStore,
     horizons: Sequence[int],
     algorithms: Sequence[str],
+    shared_artifact_store: OOCSharedArtifactStore | None = None,
 ) -> list[dict[str, Any]] | None:
     """Return final-base artifacts only when the complete set is valid.
 
@@ -3805,7 +4380,12 @@ def _existing_final_base_artifacts(
                 )
                 if not (directory / "manifest.json").is_file():
                     return None
-                artifacts.append(_read_and_validate_artifact(directory))
+                artifacts.append(
+                    _read_and_validate_artifact(
+                        directory,
+                        shared_artifact_store=shared_artifact_store,
+                    )
+                )
     expected_count = len(store.feature_packs) * len(horizons) * len(algorithms)
     canonical = _canonical_artifacts(artifacts)
     if len(canonical) != expected_count:
@@ -3813,7 +4393,11 @@ def _existing_final_base_artifacts(
     return canonical
 
 
-def _read_and_validate_artifact(directory: Path) -> dict[str, Any]:
+def _read_and_validate_artifact(
+    directory: Path,
+    *,
+    shared_artifact_store: OOCSharedArtifactStore | None = None,
+) -> dict[str, Any]:
     manifest_path = directory / "manifest.json"
     manifest = _read_json(manifest_path)
     expected = _required_sha256(
@@ -3824,13 +4408,39 @@ def _read_and_validate_artifact(directory: Path) -> dict[str, Any]:
     body.pop("manifest_hash", None)
     if _sha256_json(body) != expected:
         raise ValueError(f"artifact manifest hash mismatch: {directory}")
+    shared_paths: dict[str, str] = {}
+    shared_reference = manifest.get("shared_artifact_reference")
+    if shared_reference is not None:
+        if shared_artifact_store is None:
+            raise ValueError(
+                "shared OOC artifact requires shared artifact store root"
+            )
+        resolution = shared_artifact_store.resolve_reference(
+            _as_mapping(
+                shared_reference,
+                field_name="shared_artifact_reference",
+            )
+        )
+        core = dict(manifest)
+        core.pop("manifest_hash", None)
+        core.pop("shared_artifact_reference", None)
+        if _sha256_json(core) != resolution.core_manifest_hash:
+            raise ValueError("shared OOC artifact core manifest mismatch")
+        if core != dict(resolution.artifact_manifest):
+            raise ValueError("shared OOC artifact manifest differs from descriptor")
+        shared_paths = {
+            relative: str(path)
+            for relative, path in resolution.file_paths.items()
+        }
     for item in _mapping_sequence(
         manifest.get("artifacts"),
         field_name="artifacts",
     ):
-        path = directory / _required_text(
-            item.get("path"),
-            field_name="artifact.path",
+        relative = _required_text(item.get("path"), field_name="artifact.path")
+        path = (
+            Path(shared_paths[relative])
+            if relative in shared_paths
+            else directory / relative
         )
         if _file_sha256(path) != _required_sha256(
             item.get("file_sha256"),
@@ -3845,11 +4455,21 @@ def _read_and_validate_artifact(directory: Path) -> dict[str, Any]:
         run_directory = run_directory.parent
     if run_directory.parent.name != "runs":
         raise ValueError("artifact directory is outside a training run")
-    return _artifact_with_relative_path(
+    result = _artifact_with_relative_path(
         artifact=result,
         artifact_directory=directory,
         run_directory=run_directory,
     )
+    if shared_paths:
+        if shared_artifact_store is None:
+            raise RuntimeError(
+                "shared artifact paths require an opened shared artifact store"
+            )
+        result["_shared_artifact_store_root"] = str(
+            shared_artifact_store.root
+        )
+        result["_shared_artifact_paths"] = shared_paths
+    return result
 
 
 def _artifact_with_relative_path(
@@ -3864,6 +4484,30 @@ def _artifact_with_relative_path(
     ).as_posix()
     result["_run_directory"] = str(run_directory)
     return result
+
+
+def _artifact_payload_path(
+    *,
+    artifact: Mapping[str, Any],
+    run_directory: Path,
+    relative_path: str,
+) -> Path:
+    """解析 local 或 shared artifact payload，拒絕未宣告的路徑。"""
+
+    shared_paths = artifact.get("_shared_artifact_paths")
+    if isinstance(shared_paths, Mapping) and relative_path in shared_paths:
+        value = shared_paths[relative_path]
+        if not isinstance(value, str) or not value:
+            raise ValueError("shared artifact payload path is invalid")
+        path = Path(value).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        return path
+    artifact_directory = run_directory / _required_text(
+        artifact.get("artifact_path"),
+        field_name="artifact_path",
+    )
+    return artifact_directory / relative_path
 
 
 def _canonical_artifacts(
@@ -4068,13 +4712,58 @@ def _validate_training_manifest(
     manifest: Mapping[str, Any],
     run_directory: Path,
     expected_identity: Mapping[str, Any],
+    shared_artifact_store: OOCSharedArtifactStore | None = None,
 ) -> None:
     if manifest.get("schema_version") != TRAINING_SCHEMA_VERSION:
         raise ValueError("existing training schema mismatch")
     if manifest.get("status") != "complete":
         raise ValueError("existing training is incomplete")
-    if _canonical_json(manifest.get("run_identity")) != _canonical_json(
-        expected_identity
+    validate_rank_contract(
+        manifest.get("rank_contract", DEFAULT_RANK_CONTRACT),
+        field_name="training.rank_contract",
+    )
+    validate_family_weight_policy(
+        manifest.get(
+            "family_weight_policy",
+            FAMILY_WEIGHT_POLICY_COEFFICIENT_V1,
+        ),
+        field_name="training.family_weight_policy",
+    )
+    teacher_gate = manifest.get("allocation_teacher_eligibility")
+    if not isinstance(teacher_gate, Mapping):
+        raise ValueError(
+            "existing training is missing allocation teacher eligibility gate"
+        )
+    if teacher_gate.get("schema_version") != (
+        ALLOCATION_TEACHER_GATE_SCHEMA_VERSION
+    ):
+        raise ValueError("existing allocation teacher gate schema mismatch")
+    if teacher_gate.get("allowed") is not True:
+        raise ValueError("existing allocation teacher eligibility is blocked")
+    expected_gate_hash = expected_identity.get("allocation_teacher_gate_hash")
+    if teacher_gate.get("identity_hash") != expected_gate_hash:
+        raise ValueError("existing allocation teacher gate identity mismatch")
+    existing_identity = manifest.get("run_identity")
+    normalized_identity: object = existing_identity
+    if isinstance(existing_identity, Mapping):
+        normalized_identity = dict(existing_identity)
+        # 舊 run identity 沒有 rank metadata；補上 v1 才能安全 resume，且
+        # 不會把 frozen parent 的 bytes 或 logical hash 改寫成新版本。
+        normalized_identity.setdefault("rank_contract", DEFAULT_RANK_CONTRACT)
+        # 舊 run 沒有 policy 欄位；其既有 family score 實作是 coefficient
+        # policy，補這個歷史預設只用於 identity 比對，不改寫舊 bytes。
+        normalized_identity.setdefault(
+            "family_weight_policy",
+            FAMILY_WEIGHT_POLICY_COEFFICIENT_V1,
+        )
+    normalized_expected = dict(expected_identity)
+    normalized_expected.setdefault("rank_contract", DEFAULT_RANK_CONTRACT)
+    normalized_expected.setdefault(
+        "family_weight_policy",
+        FAMILY_WEIGHT_POLICY_COEFFICIENT_V1,
+    )
+    if _canonical_json(normalized_identity) != _canonical_json(
+        normalized_expected
     ):
         raise ValueError("existing training identity mismatch")
     expected_hash = _required_sha256(
@@ -4090,28 +4779,32 @@ def _validate_training_manifest(
         field_name="base_experts",
     ):
         _read_and_validate_artifact(
-            run_directory / str(item["artifact_path"])
+            run_directory / str(item["artifact_path"]),
+            shared_artifact_store=shared_artifact_store,
         )
     for item in _mapping_sequence(
         manifest.get("final_base_experts"),
         field_name="final_base_experts",
     ):
         _read_and_validate_artifact(
-            run_directory / str(item["artifact_path"])
+            run_directory / str(item["artifact_path"]),
+            shared_artifact_store=shared_artifact_store,
         )
     for item in _mapping_sequence(
         manifest.get("meta_folds"),
         field_name="meta_folds",
     ):
         _read_and_validate_artifact(
-            run_directory / str(item["artifact_path"])
+            run_directory / str(item["artifact_path"]),
+            shared_artifact_store=shared_artifact_store,
         )
     final_meta = _as_mapping(
         manifest.get("final_meta"),
         field_name="final_meta",
     )
     _read_and_validate_artifact(
-        run_directory / str(final_meta["artifact_path"])
+        run_directory / str(final_meta["artifact_path"]),
+        shared_artifact_store=shared_artifact_store,
     )
 
 
@@ -4121,7 +4814,246 @@ def _request_payload(
     payload = asdict(request)
     payload["store_manifest_path"] = str(request.store_manifest_path)
     payload["output_root"] = str(request.output_root)
+    payload["shared_numeric_store_root"] = (
+        None
+        if request.shared_numeric_store_root is None
+        else str(request.shared_numeric_store_root)
+    )
+    payload["shared_artifact_store_root"] = (
+        None
+        if request.shared_artifact_store_root is None
+        else str(request.shared_artifact_store_root)
+    )
     return payload
+
+
+def _build_shared_artifact_store(
+    request: AllocationOutOfCoreTrainingRequest,
+) -> OOCSharedArtifactStore | None:
+    if request.shared_artifact_store_root is None:
+        return None
+    persistent_budget = request.persistent_storage_budget_bytes
+    if persistent_budget is None:
+        persistent_budget = request.persistent_new_bytes_budget
+    max_store_bytes = DEFAULT_MAX_STORE_BYTES
+    if persistent_budget is not None:
+        max_store_bytes = min(max_store_bytes, persistent_budget)
+    return OOCSharedArtifactStore(
+        request.shared_artifact_store_root,
+        max_store_bytes=max_store_bytes,
+    )
+
+
+def _store_time_start(store: _NumericStore) -> str:
+    starts = [
+        _required_text(fold.get("test_start"), field_name="fold.test_start")
+        for fold in store.folds
+    ]
+    if not starts:
+        raise ValueError("OOC artifact semantic key requires fold time range")
+    return min(starts)
+
+
+def _artifact_manifest_hashes(
+    artifacts: Sequence[Mapping[str, Any]],
+    *,
+    fold_ids: Iterable[str],
+) -> list[dict[str, str]]:
+    selected = set(fold_ids)
+    result: list[dict[str, str]] = []
+    for artifact in artifacts:
+        fold_id = _required_text(artifact.get("fold_id"), field_name="artifact.fold_id")
+        if fold_id not in selected:
+            continue
+        result.append(
+            {
+                "fold_id": fold_id,
+                "expert_id": _required_text(
+                    artifact.get("expert_id"),
+                    field_name="artifact.expert_id",
+                ),
+                "manifest_hash": _required_sha256(
+                    artifact.get("manifest_hash"),
+                    field_name="artifact.manifest_hash",
+                ),
+            }
+        )
+    result.sort(key=lambda item: (item["fold_id"], item["expert_id"]))
+    if not result:
+        raise ValueError("OOC semantic key requires source artifact hashes")
+    return result
+
+
+def _build_ooc_artifact_semantic_key(
+    *,
+    request: AllocationOutOfCoreTrainingRequest,
+    store: _NumericStore,
+    artifact_kind: str,
+    artifact_scope: Mapping[str, Any],
+    split_contract: Mapping[str, Any],
+    maturity_contract: Mapping[str, Any],
+    time_start: str,
+    time_end: str,
+) -> dict[str, Any]:
+    """建立完整 OOC artifact key；任何訓練／校準依賴改變都會失效。"""
+
+    label_fields = list(
+        _text_tuple(store.manifest.get("label_fields"), field_name="label_fields")
+    )
+    target_fields = list(
+        _text_tuple(store.manifest.get("target_fields"), field_name="target_fields")
+    )
+    label_target_payload = {
+        "schema_version": "allocation-ooc-label-target-contract.v1",
+        "label_fields": label_fields,
+        "target_fields": target_fields,
+        "integer_bp_targets_and_labels": bool(
+            _as_mapping(store.manifest.get("safety"), field_name="safety").get(
+                "integer_bp_targets_and_labels"
+            )
+        ),
+    }
+    label_contract_hash = _sha256_json(label_target_payload)
+    selected_horizons = (
+        tuple(request.horizons)
+        if request.horizons
+        else tuple(store.horizons)
+    )
+    model_contract = {
+        "selected_horizons": list(selected_horizons),
+        "requested_algorithms": list(request.algorithms),
+        "artifact_scope": dict(artifact_scope),
+        "ridge_alpha_bp": request.ridge_alpha_bp,
+        "logistic_iterations": request.logistic_iterations,
+        "hgb_max_iter": request.hgb_max_iter,
+        "hgb_max_fit_rows": request.hgb_max_fit_rows,
+    }
+    maturity_payload = {
+        "schema_version": "allocation-ooc-label-maturity.v1",
+        **dict(maturity_contract),
+        "label_fields": label_fields,
+        "target_fields": target_fields,
+    }
+    fold_ids = [
+        _required_text(fold.get("fold_id"), field_name="fold_id")
+        for fold in store.folds
+    ]
+    calibration_contract = {
+        "schema_version": "allocation-ooc-calibration-contract.v1",
+        "method": "cross_fitted_binned_calibration",
+        "namespace": "calibrator",
+        "withheld_oof_fold_ids": fold_ids,
+        "fit_calibration_row_identity_separation": "prior_oof_only",
+        "production_attached": False,
+        "diagnostic_only": True,
+    }
+    key: dict[str, Any] = {
+        "schema_version": OOC_ARTIFACT_KEY_SCHEMA_VERSION,
+        "namespace": {
+            "base_oof_expert": "base_oof",
+            "final_base_expert": "final_base",
+            "meta_oof_allocator": "meta_oof",
+            "final_meta_allocator": "final_meta",
+        }.get(artifact_kind, artifact_kind),
+        "artifact_kind": artifact_kind,
+        "artifact_scope": dict(artifact_scope),
+        "store_lineage": {
+            "schema_version": store.manifest.get("schema_version"),
+            "store_manifest_hash": store.manifest.get("manifest_hash"),
+            "store_manifest_file_hash": store.manifest_file_hash,
+            "dataset_id": store.manifest.get("dataset_id"),
+            "dataset_identity_hash": store.manifest.get("dataset_identity_hash"),
+            "source_manifest_hashes": store.manifest.get("source_manifest_hashes"),
+            "source_training_manifest_hash": store.manifest.get(
+                "source_training_manifest_hash"
+            ),
+            "source_training_manifest_file_hash": store.manifest.get(
+                "source_training_manifest_file_hash"
+            ),
+        },
+        "feature_contract": {
+            "schema_version": "allocation-ooc-feature-contract.v1",
+            "registry_hash": store.manifest.get("feature_registry_hash"),
+            "feature_ids": list(store.feature_ids),
+            "feature_scales": list(store.feature_scales),
+            "feature_packs": [dict(pack) for pack in store.feature_packs],
+        },
+        "label_target_contract": {
+            **label_target_payload,
+            "contract_hash": label_contract_hash,
+        },
+        "split_contract": {
+            "schema_version": "allocation-ooc-split-contract.v1",
+            **dict(split_contract),
+            "outer_fold_ids": fold_ids,
+            "purge_minimum_trading_days": _as_mapping(
+                store.manifest.get("safety"), field_name="safety"
+            ).get("purge_minimum_trading_days"),
+            "embargo_minimum_trading_days": _as_mapping(
+                store.manifest.get("safety"), field_name="safety"
+            ).get("embargo_minimum_trading_days"),
+        },
+        "maturity_contract": maturity_payload,
+        "model_contract": model_contract,
+        "training_contract": {
+            "profile": request.training_profile,
+            "complexity_policy": (
+                None
+                if request.complexity_policy is None
+                else dict(request.complexity_policy)
+            ),
+            "rank_contract": request.rank_contract,
+            "family_weight_policy": request.family_weight_policy,
+            "batch_size": request.batch_size,
+            "workers": request.workers,
+        },
+        "calibration_contract": calibration_contract,
+        "implementation_contract": {
+            "training_schema_version": TRAINING_SCHEMA_VERSION,
+            "expert_schema_version": EXPERT_SCHEMA_VERSION,
+            "meta_schema_version": META_SCHEMA_VERSION,
+            "oof_dtype": OOF_DTYPE.str,
+            "shared_store_schema_version": "allocation-ooc-artifact-store.v1",
+            "key_builder_version": "allocation-ooc-semantic-key-builder.v1",
+        },
+        "time_range": {
+            "start": time_start,
+            "end": time_end,
+        },
+        "lane": "research_shadow",
+    }
+    # 先由 shared store 做嚴格欄位／hash／時間範圍驗證；這裡保留一個
+    # 明確的 local check，讓錯誤在尚未接觸 artifact registry 前就停止。
+    if semantic_key_hash(key) == "":
+        raise AssertionError("unreachable empty semantic key hash")
+    return key
+
+
+def _install_shared_artifact_manifest(
+    *,
+    resolution: OOCArtifactResolution,
+    final_directory: Path,
+    run_directory: Path,
+) -> dict[str, Any]:
+    """在新 run 只安裝小型 manifest，payload 維持在 shared registry。"""
+
+    final_directory.parent.mkdir(parents=True, exist_ok=True)
+    artifact = dict(resolution.artifact_manifest)
+    artifact["artifact_storage"] = "shared_immutable"
+    artifact["shared_artifact_key_hash"] = resolution.semantic_key_hash
+    artifact["shared_artifact_reference"] = dict(resolution.reference)
+    artifact["manifest_hash"] = _sha256_json(artifact)
+    _write_json(final_directory / "manifest.json", artifact)
+    result = _artifact_with_relative_path(
+        artifact=artifact,
+        artifact_directory=final_directory,
+        run_directory=run_directory,
+    )
+    result["_shared_artifact_store_root"] = str(resolution.store_root)
+    result["_shared_artifact_paths"] = {
+        path: str(value) for path, value in resolution.file_paths.items()
+    }
+    return result
 
 
 def _validate_complexity_policy(

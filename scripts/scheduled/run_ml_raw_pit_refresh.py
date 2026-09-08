@@ -29,9 +29,24 @@ if str(REPO_ROOT) not in sys.path:
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
 from data_module.ml_storage_capacity import (
     BYTES_PER_GIB,
+    build_heavy_chain_reservation_handoff_environment,
+    HEAVY_CHAIN_LOCK_FILENAME,
+    HEAVY_CHAIN_RESERVATION_HELD_ENV,
     MLStorageCapacityBudget,
+    MLStorageChainReservation,
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+    SCHEDULED_SAFETY_RESERVE_BYTES,
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+    StorageCapacityPreflight,
+    acquire_heavy_chain_reservation,
     evaluate_capacity,
+    heavy_chain_capacity_budget,
+    heavy_chain_lock_path,
+    normalise_capacity_usage,
+    release_heavy_chain_reservation,
+    resolve_heavy_chain_safety_reserve,
 )
+from scripts.scheduled import run_ml_direct_chain_maintenance as direct_chain_runner
 from scripts.scheduled.scheduled_clock import scheduled_now
 
 
@@ -41,8 +56,16 @@ _SCHEMA_VERSION = "ml-raw-pit-refresh-status.v1"
 _POINTER_SCHEMA_VERSION = "ml-pit-year-shards-pointer.v1"
 _DATASET_SCHEMA_VERSION = "ml-pit-year-shard-dataset.v1"
 _RAW_ROOT_NAME = "ml_pit_year_shards"
-_DEFAULT_MINIMUM_FREE_SPACE_BYTES = 20 * 1024**3
-_DEFAULT_RAW_PERSISTENT_STORAGE_BUDGET_BYTES = 35 * BYTES_PER_GIB
+_DEFAULT_MINIMUM_FREE_SPACE_BYTES = SCHEDULED_SAFETY_RESERVE_BYTES
+_DEFAULT_RAW_PERSISTENT_STORAGE_BUDGET_BYTES = (
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET
+)
+_DEFAULT_RAW_TEMPORARY_STORAGE_BUDGET_BYTES = (
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET
+)
+_DIRECT_TRAINING_OUTPUT_DIR_NAME = (
+    "portfolio_ml_direct_ooc_training_production_v4_v5"
+)
 _ALLOWED_DATA_UPDATE_STATUSES = frozenset(
     {"passed", "passed_with_warnings"}
 )
@@ -102,6 +125,7 @@ def _parser() -> argparse.ArgumentParser:
         "--temporary-peak-bytes-budget",
         dest="temporary_storage_budget_bytes",
         type=int,
+        default=_DEFAULT_RAW_TEMPORARY_STORAGE_BUDGET_BYTES,
         help="raw PIT publication 暫存峰值 bytes 上限（供容量 preflight）",
     )
     parser.add_argument(
@@ -140,9 +164,9 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     )
     temporary = Path(temporary_name)
     try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\r\n") as stream:
             json.dump(payload, stream, ensure_ascii=False, indent=2, sort_keys=True)
-            stream.write("\n")
+            stream.write("\r\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
@@ -262,18 +286,17 @@ def _capacity_budget_from_args(args: argparse.Namespace) -> MLStorageCapacityBud
             "minimum_free_space_bytes",
             _DEFAULT_MINIMUM_FREE_SPACE_BYTES,
         )
-    if isinstance(reserve, bool) or not isinstance(reserve, int):
-        raise TypeError("safety_reserve_bytes must be integer")
-    return MLStorageCapacityBudget(
+    reserve = resolve_heavy_chain_safety_reserve(reserve)
+    return heavy_chain_capacity_budget(
         persistent_new_bytes_budget=getattr(
             args,
             "persistent_storage_budget_bytes",
-            None,
+            _DEFAULT_RAW_PERSISTENT_STORAGE_BUDGET_BYTES,
         ),
         temporary_peak_bytes_budget=getattr(
             args,
             "temporary_storage_budget_bytes",
-            None,
+            _DEFAULT_RAW_TEMPORARY_STORAGE_BUDGET_BYTES,
         ),
         safety_reserve_bytes=reserve,
     )
@@ -369,52 +392,20 @@ def _refresh_needed(
     return current.manifest_mtime < proof.completed_at.astimezone(timezone.utc)
 
 
-def _acquire_lock(lock_path: Path) -> tuple[Path, Any] | None:
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    for _ in range(2):
-        try:
-            handle = lock_path.open("x", encoding="utf-8", newline="\n")
-            handle.write(f"{os.getpid()}\n")
-            handle.flush()
-            return lock_path, handle
-        except FileExistsError:
-            try:
-                owner_pid = int(lock_path.read_text(encoding="utf-8").strip())
-            except (OSError, ValueError):
-                owner_pid = 0
-            if owner_pid and _pid_is_live(owner_pid):
-                return None
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                continue
-    return None
+def _acquire_lock(lock_path: Path) -> MLStorageChainReservation | None:
+    """保留舊 private caller 名稱，實際使用 raw/Direct 共用 reservation。"""
+
+    return acquire_heavy_chain_reservation(lock_path)
 
 
-def _pid_is_live(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except (OSError, ProcessLookupError):
-        return False
-    return True
-
-
-def _release_lock(lock: tuple[Path, Any] | None) -> None:
-    if lock is None:
-        return
-    path, handle = lock
-    try:
-        handle.close()
-    finally:
-        path.unlink(missing_ok=True)
+def _release_lock(lock: MLStorageChainReservation | None) -> None:
+    release_heavy_chain_reservation(lock)
 
 
 def _append_log(log_path: Path, message: str) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8", newline="\n") as stream:
-        stream.write(message.rstrip() + "\n")
+    with log_path.open("a", encoding="utf-8", newline="\r\n") as stream:
+        stream.write(message.rstrip() + "\r\n")
 
 
 def _storage_preflight(
@@ -440,6 +431,53 @@ def _storage_preflight(
     }
 
 
+def _capacity_evaluation(
+    storage_preflight: dict[str, Any],
+    *,
+    capacity_budget: MLStorageCapacityBudget,
+    stage: str,
+) -> StorageCapacityPreflight:
+    """以 scheduled bound 重算 raw 容量，不把未知估算折成 0。"""
+
+    return evaluate_capacity(
+        budget=capacity_budget,
+        usage=normalise_capacity_usage(storage_preflight),
+        stage=stage,
+        persistent_new_bytes_estimate=(
+            capacity_budget.persistent_new_bytes_budget
+        ),
+        temporary_peak_bytes_observed=(
+            capacity_budget.temporary_peak_bytes_budget
+        ),
+    )
+
+
+def _direct_chain_instance_lock_present(release_root: Path) -> bool:
+    """只有可驗證的 Direct owner 才會阻擋 raw，stale lock 可恢復。"""
+
+    training_output_dir = (
+        release_root / _DIRECT_TRAINING_OUTPUT_DIR_NAME
+    )
+    try:
+        # maintainer 異常退出後，continuation/下游仍可能存活；以既有
+        # output-bound process custody 先擋住 raw，避免只依賴已變 stale 的
+        # instance lock 檔案。
+        if direct_chain_runner.maintenance._target_processes(release_root):
+            return True
+    except (OSError, RuntimeError, ValueError):
+        return True
+    try:
+        state, _owner_pid = direct_chain_runner._maintenance_lock_state(
+            training_output_dir
+        )
+    except OSError:
+        # 無法判斷 owner 時保守阻擋 raw，避免與不可觀測 chain 競爭。
+        return True
+    if state in {"missing_or_invalid", "stale"}:
+        return False
+    return True
+
+
 def _builder_command(
     *,
     database: Path,
@@ -451,6 +489,7 @@ def _builder_command(
     persistent_storage_budget_bytes: int | None = None,
     temporary_storage_budget_bytes: int | None = None,
     safety_reserve_bytes: int | None = None,
+    daily_price_source_dir: Path | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -485,6 +524,10 @@ def _builder_command(
         )
     if safety_reserve_bytes is not None:
         command.extend(["--safety-reserve-bytes", str(safety_reserve_bytes)])
+    if daily_price_source_dir is not None:
+        command.extend(
+            ["--daily-price-source-dir", str(daily_price_source_dir.resolve())]
+        )
     return command
 
 
@@ -514,6 +557,10 @@ def _base_status(
         "broker_order_allowed": False,
         "status_path": str(status_path),
         "log_path": str(log_path),
+        "heavy_chain_lock_path": str(
+            raw_root.parent / HEAVY_CHAIN_LOCK_FILENAME
+        ),
+        "heavy_chain_lock_scope": "release_root",
         **fields,
     }
 
@@ -540,25 +587,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     status_path = args.status_path.resolve() if args.status_path else run_root / "latest_status.json"
     log_path = args.log_path.resolve() if args.log_path else run_root / "refresh.log"
     data_update_status_path = output_root / "scheduled" / "data_update_quick" / "latest_status.json"
-    lock_path = raw_root / ".ml_raw_pit_refresh.lock"
+    # Raw 與 Direct/OOC 必須在同一 release root 互斥，避免兩個長鏈同時
+    # 消耗同一 filesystem 的預算；raw private lock 名稱不再另開一把鎖。
+    lock_path = heavy_chain_lock_path(release_root)
     started_at = scheduled_now()
-    lock = _acquire_lock(lock_path)
-    if lock is None:
-        _write_json(
-            status_path,
-            _base_status(
-                status="skipped_locked",
-                output_root=output_root,
-                raw_root=raw_root,
-                database=database,
-                status_path=status_path,
-                log_path=log_path,
-                started_at=started_at.isoformat(timespec="seconds"),
-                completed_at=scheduled_now().isoformat(timespec="seconds"),
-                reason="another_raw_pit_refresh_is_running",
-            ),
-        )
-        return 0
+    lock: MLStorageChainReservation | None = None
+    inherited_env_value = os.environ.get(HEAVY_CHAIN_RESERVATION_HELD_ENV)
     _write_json(
         status_path,
         _base_status(
@@ -604,25 +638,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 minimum_free_space_bytes=args.minimum_free_space_bytes,
             )
             capacity_budget = _capacity_budget_from_args(args)
-            capacity_usage = dict(storage_preflight)
-            # 舊 embedding caller 可能只回傳 free／minimum 欄位；補齊
-            # 供共用容量 contract 使用的非金融整數欄位。
-            capacity_usage.setdefault("used_bytes", 0)
-            capacity_usage.setdefault(
-                "total_bytes",
-                int(capacity_usage["free_bytes"])
-                + int(capacity_usage["used_bytes"]),
-            )
-            capacity_preflight = evaluate_capacity(
-                budget=capacity_budget,
-                usage=capacity_usage,
+            capacity_preflight = _capacity_evaluation(
+                storage_preflight,
+                capacity_budget=capacity_budget,
                 stage="scheduled_raw_pit_bootstrap",
-                # Raw exporter 在啟動前尚未知道本次各 shard 的精確
-                # 寫入量；以設定的持久上限作最壞情況 headroom 預留。
-                persistent_new_bytes_estimate=(
-                    capacity_budget.persistent_new_bytes_budget or 0
-                ),
-                temporary_peak_bytes_observed=0,
             )
             storage_preflight["capacity_budget"] = capacity_budget.as_dict()
             storage_preflight["capacity_preflight"] = (
@@ -656,6 +675,128 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 _write_json(status_path, payload)
                 return 0
+            if _direct_chain_instance_lock_present(release_root):
+                _write_json(
+                    status_path,
+                    _base_status(
+                        status="skipped_locked",
+                        output_root=output_root,
+                        raw_root=raw_root,
+                        database=database,
+                        status_path=status_path,
+                        log_path=log_path,
+                        started_at=started_at.isoformat(timespec="seconds"),
+                        completed_at=scheduled_now().isoformat(
+                            timespec="seconds"
+                        ),
+                        latest_core_date=proof.latest_core_date.isoformat(),
+                        decision_at=proof.decision_at,
+                        data_update_status=proof.data_update_status,
+                        current_publication_id=(
+                            None if current is None else current.publication_id
+                        ),
+                        heavy_chain_reservation={
+                            "state": "unavailable",
+                            "lock_path": str(lock_path),
+                            "reason": "direct_instance_lock_present",
+                        },
+                        reason="direct_chain_maintenance_is_running",
+                    ),
+                )
+                return 0
+            lock = _acquire_lock(lock_path)
+            if lock is None:
+                _write_json(
+                    status_path,
+                    _base_status(
+                        status="skipped_locked",
+                        output_root=output_root,
+                        raw_root=raw_root,
+                        database=database,
+                        status_path=status_path,
+                        log_path=log_path,
+                        started_at=started_at.isoformat(timespec="seconds"),
+                        completed_at=scheduled_now().isoformat(
+                            timespec="seconds"
+                        ),
+                        latest_core_date=proof.latest_core_date.isoformat(),
+                        decision_at=proof.decision_at,
+                        data_update_status=proof.data_update_status,
+                        current_publication_id=(
+                            None if current is None else current.publication_id
+                        ),
+                        heavy_chain_reservation={
+                            "state": "unavailable",
+                            "lock_path": str(lock_path),
+                        },
+                        # 保留舊 raw 狀態 reason；reservation 區塊明列
+                        # 實際共用 heavy-chain lock 範圍。
+                        reason="another_raw_pit_refresh_is_running",
+                    ),
+                )
+                return 0
+            _write_json(
+                status_path,
+                _base_status(
+                    status="running",
+                    output_root=output_root,
+                    raw_root=raw_root,
+                    database=database,
+                    status_path=status_path,
+                    log_path=log_path,
+                    started_at=started_at.isoformat(timespec="seconds"),
+                    data_update_status_path=str(data_update_status_path),
+                    heavy_chain_reservation={
+                        "state": "acquired",
+                        "lock_path": str(lock_path),
+                        "owner_process_id": lock.owner_pid,
+                    },
+                ),
+            )
+            # Reservation 取得後重讀 free space 與容量，避免上一條 chain
+            # 在第一次 preflight 後新增檔案而讓 raw 沿用過時觀察值。
+            storage_preflight = _storage_preflight(
+                raw_root,
+                minimum_free_space_bytes=args.minimum_free_space_bytes,
+            )
+            capacity_preflight = _capacity_evaluation(
+                storage_preflight,
+                capacity_budget=capacity_budget,
+                stage="scheduled_raw_pit_locked_recheck",
+            )
+            storage_preflight["capacity_budget"] = capacity_budget.as_dict()
+            storage_preflight["capacity_preflight"] = (
+                capacity_preflight.as_dict()
+            )
+            if (
+                not storage_preflight["within_minimum_free_space"]
+                or not capacity_preflight.within_budget
+            ):
+                payload = _base_status(
+                    status="blocked_insufficient_storage",
+                    output_root=output_root,
+                    raw_root=raw_root,
+                    database=database,
+                    status_path=status_path,
+                    log_path=log_path,
+                    started_at=started_at.isoformat(timespec="seconds"),
+                    completed_at=scheduled_now().isoformat(timespec="seconds"),
+                    latest_core_date=proof.latest_core_date.isoformat(),
+                    decision_at=proof.decision_at,
+                    data_update_status=proof.data_update_status,
+                    current_publication_id=(
+                        None if current is None else current.publication_id
+                    ),
+                    storage_preflight=storage_preflight,
+                    capacity_recheck=True,
+                    error_type="InsufficientFreeSpace",
+                    error=(
+                        "raw PIT output filesystem free space changed after "
+                        "the heavy-chain reservation"
+                    ),
+                )
+                _write_json(status_path, payload)
+                return 0
             if not database.is_file():
                 raise RuntimeError(f"database_missing:{database}")
             command = _builder_command(
@@ -672,24 +813,51 @@ def main(argv: Sequence[str] | None = None) -> int:
                     capacity_budget.temporary_peak_bytes_budget
                 ),
                 safety_reserve_bytes=capacity_budget.safety_reserve_bytes,
+                daily_price_source_dir=args.data_root.resolve() / "daily_price",
+            )
+            # raw runner 已持有 canonical reservation；builder CLI 仍會執行
+            # 自己的容量 preflight，但只接受綁定 owner sidecar、canonical
+            # path 與實際 parent 的一次性 handoff，不能靠裸 marker 繞鎖。
+            if lock is None:
+                raise RuntimeError("raw heavy-chain reservation disappeared")
+            child_environment = (
+                build_heavy_chain_reservation_handoff_environment(
+                    lock,
+                    environment=os.environ.copy(),
+                    parent_pid=os.getpid(),
+                )
             )
             _append_log(log_path, json.dumps({"event": "builder_start", "command": command}, ensure_ascii=False))
-            completed = subprocess.run(
+            builder_process = subprocess.Popen(
                 command,
                 cwd=REPO_ROOT,
-                capture_output=True,
+                env=child_environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                check=False,
             )
-            if completed.stdout:
-                _append_log(log_path, completed.stdout)
-            if completed.stderr:
-                _append_log(log_path, completed.stderr)
-            if completed.returncode != 0:
+            try:
+                lock.authorize_child(builder_process.pid)
+            except Exception:
+                try:
+                    builder_process.terminate()
+                    builder_process.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    try:
+                        builder_process.kill()
+                    except OSError:
+                        pass
+                raise
+            builder_stdout, builder_stderr = builder_process.communicate()
+            if builder_stdout:
+                _append_log(log_path, builder_stdout)
+            if builder_stderr:
+                _append_log(log_path, builder_stderr)
+            if builder_process.returncode != 0:
                 raise RuntimeError(
-                    f"raw_pit_builder_failed:{completed.returncode}"
+                    f"raw_pit_builder_failed:{builder_process.returncode}"
                 )
             published = _latest_raw_publication(raw_root)
             if published is None:
@@ -714,7 +882,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dataset_manifest_hash=published.dataset_manifest_hash,
                 publication_manifest_path=str(published.publication_manifest_path),
                 dataset_manifest_path=str(published.dataset_manifest_path),
-                builder_returncode=completed.returncode,
+                builder_returncode=builder_process.returncode,
                 storage_preflight=storage_preflight,
             )
             _write_json(status_path, payload)
@@ -750,6 +918,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             _append_log(log_path, f"failure: {type(exc).__name__}: {exc}")
             return 1
     finally:
+        if inherited_env_value is None:
+            os.environ.pop(HEAVY_CHAIN_RESERVATION_HELD_ENV, None)
+        else:
+            os.environ[HEAVY_CHAIN_RESERVATION_HELD_ENV] = inherited_env_value
         _release_lock(lock)
 
 

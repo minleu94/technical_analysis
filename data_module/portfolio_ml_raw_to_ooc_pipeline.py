@@ -33,6 +33,11 @@ from data_module.portfolio_ml_out_of_core_store import (
     PortfolioMLOutOfCoreStorePublication,
     PortfolioMLOutOfCoreStoreRequest,
 )
+from data_module.ml_storage_capacity import (
+    heavy_chain_capacity_budget,
+    MLStorageCapacityBudget,
+    preflight_capacity,
+)
 
 
 PIPELINE_SCHEMA_VERSION = "portfolio-ml-raw-to-ooc-pipeline.v2"
@@ -63,6 +68,10 @@ class PortfolioMLRawToOOCRequest:
     memory_budget_mb: int = 4_096
     temporary_storage_budget_bytes: int | None = None
     resume: bool = True
+    # heavy capacity aliases 放在舊欄位之後，保留既有 positional API。
+    persistent_storage_budget_bytes: int | None = None
+    persistent_new_bytes_budget: int | None = None
+    safety_reserve_bytes: int | None = None
 
     def __post_init__(self) -> None:
         legacy.PortfolioMLDatasetAssemblyRequest(
@@ -108,6 +117,30 @@ class PortfolioMLRawToOOCRequest:
                 raise ValueError(
                     "temporary_storage_budget_bytes must be positive"
                 )
+        aliases = (
+            self.persistent_storage_budget_bytes,
+            self.persistent_new_bytes_budget,
+        )
+        if (
+            aliases[0] is not None
+            and aliases[1] is not None
+            and aliases[0] != aliases[1]
+        ):
+            raise ValueError(
+                "persistent_storage_budget_bytes and "
+                "persistent_new_bytes_budget must match"
+            )
+        for field_name, value in (
+            ("persistent_storage_budget_bytes", aliases[0]),
+            ("persistent_new_bytes_budget", aliases[1]),
+            ("safety_reserve_bytes", self.safety_reserve_bytes),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{field_name} must be integer or None")
+            if value <= 0:
+                raise ValueError(f"{field_name} must be positive")
         if not isinstance(self.resume, bool):
             raise TypeError("resume must be bool")
         if self.research_symbols is not None:
@@ -143,6 +176,19 @@ class PortfolioMLRawToOOCPublication:
     ) = None
 
 
+def _capacity_budget_for_request(
+    request: PortfolioMLRawToOOCRequest,
+) -> MLStorageCapacityBudget:
+    persistent_budget = request.persistent_storage_budget_bytes
+    if persistent_budget is None:
+        persistent_budget = request.persistent_new_bytes_budget
+    return heavy_chain_capacity_budget(
+        persistent_new_bytes_budget=persistent_budget,
+        temporary_peak_bytes_budget=request.temporary_storage_budget_bytes,
+        safety_reserve_bytes=request.safety_reserve_bytes,
+    )
+
+
 class PortfolioMLRawToOOCBuilder:
     """以年度 transaction checkpoint 驅動既有 assembler 與數值 store。"""
 
@@ -150,6 +196,8 @@ class PortfolioMLRawToOOCBuilder:
         self,
         request: PortfolioMLRawToOOCRequest,
     ) -> PortfolioMLRawToOOCPublication:
+        capacity_budget = _capacity_budget_for_request(request)
+        temporary_budget_bytes = capacity_budget.temporary_peak_bytes_budget
         raw_manifest_path = request.raw_manifest_path.resolve()
         raw_manifest = legacy._read_json(raw_manifest_path)
         legacy._validate_raw_dataset_manifest(raw_manifest)
@@ -178,8 +226,12 @@ class PortfolioMLRawToOOCBuilder:
             "purge_trading_days": request.purge_trading_days,
             "embargo_trading_days": request.embargo_trading_days,
             "temporary_storage_budget_bytes": (
-                request.temporary_storage_budget_bytes
+                temporary_budget_bytes
             ),
+            "persistent_storage_budget_bytes": (
+                capacity_budget.persistent_new_bytes_budget
+            ),
+            "safety_reserve_bytes": capacity_budget.safety_reserve_bytes,
         }
         if request.formal_portfolio_ledger_path is not None:
             identity["formal_portfolio_ledger_file_hash"] = _file_sha256(
@@ -200,6 +252,13 @@ class PortfolioMLRawToOOCBuilder:
             )
         pipeline_id = "raw-ooc-" + _sha256_json(identity)[7:31]
         output_root = request.output_root.resolve()
+        # 在建立 spool 前檢查中央 reserve 與預設新增上限；不讓未設定
+        # budget 的 transitional raw path 先寫入大量中介資料。
+        initial_capacity = preflight_capacity(
+            probe_path=output_root,
+            budget=capacity_budget,
+            stage="raw_to_ooc_before_output",
+        )
         runs_root = output_root / "runs"
         runs_root.mkdir(parents=True, exist_ok=True)
         run_directory = runs_root / pipeline_id
@@ -280,7 +339,7 @@ class PortfolioMLRawToOOCBuilder:
         )
         _validate_temporary_storage_preflight(
             raw_manifest=raw_manifest,
-            budget_bytes=request.temporary_storage_budget_bytes,
+            budget_bytes=temporary_budget_bytes,
         )
         connection = sqlite3.connect(spool_path)
         connection.row_factory = sqlite3.Row
@@ -344,7 +403,7 @@ class PortfolioMLRawToOOCBuilder:
                     _enforce_temporary_storage_budget(
                         observed_bytes=peak_temporary_bytes,
                         budget_bytes=(
-                            request.temporary_storage_budget_bytes
+                            temporary_budget_bytes
                         ),
                     )
                 except Exception:
@@ -428,7 +487,7 @@ class PortfolioMLRawToOOCBuilder:
             )
             _enforce_temporary_storage_budget(
                 observed_bytes=peak_temporary_bytes,
-                budget_bytes=request.temporary_storage_budget_bytes,
+                budget_bytes=temporary_budget_bytes,
             )
         finally:
             connection.close()
@@ -559,8 +618,13 @@ class PortfolioMLRawToOOCBuilder:
                 "workers": request.workers,
                 "memory_budget_mb": request.memory_budget_mb,
                 "temporary_storage_budget_bytes": (
-                    request.temporary_storage_budget_bytes
+                    temporary_budget_bytes
                 ),
+                "persistent_storage_budget_bytes": (
+                    capacity_budget.persistent_new_bytes_budget
+                ),
+                "safety_reserve_bytes": capacity_budget.safety_reserve_bytes,
+                "capacity_preflight": initial_capacity.as_dict(),
                 "peak_temporary_bytes": peak_temporary_bytes,
             },
             "safety": {

@@ -17,6 +17,17 @@ from data_module.portfolio_ml_raw_to_ooc_pipeline import (  # noqa: E402
     PortfolioMLRawToOOCBuilder,
     PortfolioMLRawToOOCRequest,
 )
+from data_module.ml_storage_capacity import (  # noqa: E402
+    BYTES_PER_GIB,
+    CANONICAL_HEAVY_CHAIN_SAFETY_RESERVE_BYTES,
+    MLStorageChainReservationHandoff,
+    StorageCapacityError,
+    acquire_heavy_chain_reservation,
+    release_heavy_chain_reservation,
+    heavy_chain_lock_path,
+    resolve_heavy_chain_lock_path,
+    validate_heavy_chain_reservation_handoff,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -47,7 +58,27 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--temporary-storage-budget-bytes",
         type=int,
+        default=BYTES_PER_GIB,
         help="中介 SQLite/JSONL 的硬上限；低於 raw 壓縮檔下界即 fail closed。",
+    )
+    parser.add_argument(
+        "--persistent-storage-budget-bytes",
+        "--persistent-new-bytes-budget",
+        dest="persistent_storage_budget_bytes",
+        type=int,
+        default=BYTES_PER_GIB,
+        help="raw-to-OOC 本次持久新增 bytes 上限",
+    )
+    parser.add_argument(
+        "--safety-reserve-bytes",
+        type=int,
+        default=CANONICAL_HEAVY_CHAIN_SAFETY_RESERVE_BYTES,
+        help="heavy chain 執行後必須保留的 filesystem bytes",
+    )
+    parser.add_argument(
+        "--heavy-lock-path",
+        type=Path,
+        help="可選；正式 release_v4 output 必須與 canonical lock 相同",
     )
     parser.add_argument("--no-resume", action="store_true")
     return parser
@@ -56,7 +87,28 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_utf8_streams()
     args = _parser().parse_args(argv)
+    reservation = None
+    handoff: MLStorageChainReservationHandoff | None = None
     try:
+        lock_path = resolve_heavy_chain_lock_path(
+            args.output_dir,
+            explicit_path=args.heavy_lock_path,
+        )
+        if lock_path is None:
+            lock_path = heavy_chain_lock_path(args.output_dir)
+        handoff = validate_heavy_chain_reservation_handoff(
+            lock_path
+        )
+        if lock_path is not None and handoff is None:
+            reservation = acquire_heavy_chain_reservation(lock_path)
+            if reservation is None:
+                raise StorageCapacityError(
+                    "ML heavy-chain reservation is already held",
+                    preflight={
+                        "lock_path": str(lock_path),
+                        "blocker": "heavy_chain_reservation_unavailable",
+                    },
+                )
         publication = PortfolioMLRawToOOCBuilder().build(
             PortfolioMLRawToOOCRequest(
                 raw_manifest_path=args.raw_manifest,
@@ -91,10 +143,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 temporary_storage_budget_bytes=(
                     args.temporary_storage_budget_bytes
                 ),
+                persistent_storage_budget_bytes=(
+                    args.persistent_storage_budget_bytes
+                ),
+                safety_reserve_bytes=args.safety_reserve_bytes,
                 resume=not args.no_resume,
             )
         )
-    except (OSError, TypeError, ValueError, KeyError, RuntimeError) as exc:
+    except (
+        OSError,
+        StorageCapacityError,
+        TypeError,
+        ValueError,
+        KeyError,
+        RuntimeError,
+    ) as exc:
         print(
             json.dumps(
                 {
@@ -110,6 +173,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    finally:
+        if handoff is not None:
+            handoff.close()
+        release_heavy_chain_reservation(reservation)
     print(
         json.dumps(
             {

@@ -51,6 +51,7 @@ from tests.test_portfolio_ml_dataset_assembler import (
     _official_corporate_action_publication,
     _raw_publication,
 )
+from tests.ml_teacher_fixture import attach_synthetic_teacher_provenance
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -153,6 +154,10 @@ def bounded_e2e(tmp_path_factory: pytest.TempPathFactory) -> _BoundedE2E:
             embargo_trading_days=5,
             batch_size=29,
         )
+    )
+    attach_synthetic_teacher_provenance(
+        training.manifest_path,
+        fixture_root=root / "synthetic-teacher-provenance",
     )
     store_request = PortfolioMLOutOfCoreStoreRequest(
         training_manifest_path=training.manifest_path,
@@ -575,6 +580,31 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
         publication.run_directory / "heartbeat.json"
     )
 
+    # 這個 bounded 三年度 fixture 走完整年度組裝與 checkpoint resume；
+    # 第二年度必須收到第一年度最後 20 個 causal volume events，不能只
+    # 在 writer 單元測試中手工注入 carry。
+    direct_years = sorted(
+        manifest["years"],
+        key=lambda item: int(item["year"]),
+    )
+    assert direct_years[0]["replay_source"][
+        "volume_history_seed_event_count"
+    ] == 0
+    assert any(
+        int(item["replay_source"]["volume_history_seed_event_count"]) > 0
+        for item in direct_years[1:]
+    )
+    assert all(
+        int(
+            item["replay_source"][
+                "volume_history_max_event_count_per_symbol"
+            ]
+        )
+        <= 20
+        for item in direct_years
+    )
+    assert manifest["execution"]["replay_volume_cross_year_carry"] is True
+
     assert replay.run_id == publication.run_id
     assert replay.manifest_hash == publication.manifest_hash
     assert replay.manifest_file_hash == publication.manifest_file_hash
@@ -698,6 +728,10 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
     assert finalized_year in adopted_checkpoint["completed_years"]
     assert adopted_checkpoint["complete"] is True
 
+    attach_synthetic_teacher_provenance(
+        publication.manifest_path,
+        fixture_root=tmp_path / "direct-synthetic-teacher-provenance",
+    )
     trained = AllocationOutOfCoreTrainingService().train(
         AllocationOutOfCoreTrainingRequest(
             store_manifest_path=publication.manifest_path,
@@ -821,7 +855,12 @@ def test_long_halt_label_maturity_poison_is_excluded(
     store = object.__new__(_NumericStore)
     store.years = cast(
         tuple[Any, ...],
-        (SimpleNamespace(directory=year_directory),),
+        (
+            SimpleNamespace(
+                directory=year_directory,
+                rows_path=year_directory / "rows.sqlite",
+            ),
+        ),
     )
     refs = np.asarray(((0, 0), (0, 1)), dtype=np.int64)
     selected = store.mature_positions(refs, cutoff="2025-08-01")
@@ -1099,6 +1138,130 @@ def test_ooc_training_cli_reports_memory_error_as_structured_blocked(
     }
 
 
+def test_ooc_shared_artifact_store_reuses_second_builder_without_fit(
+    bounded_e2e: _BoundedE2E,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """兩個獨立輸出 root 應共用 immutable OOC payload，第二次不重訓。"""
+
+    import ml_module.allocation_out_of_core_training_service as trainer_module
+
+    shared_root = tmp_path / "shared-ooc-artifacts"
+    first_request = AllocationOutOfCoreTrainingRequest(
+        store_manifest_path=bounded_e2e.store_manifest_path,
+        output_root=tmp_path / "ooc-run-a",
+        algorithms=("ridge_logistic",),
+        horizons=(5,),
+        batch_size=31,
+        workers=1,
+        memory_budget_mb=1_024,
+        logistic_iterations=2,
+        shared_artifact_store_root=shared_root,
+    )
+    first = AllocationOutOfCoreTrainingService().train(first_request)
+    shared_bytes_after_first = sum(
+        path.stat().st_size
+        for path in shared_root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    )
+
+    def _unexpected_fit(*_: object, **__: object) -> object:
+        raise AssertionError("second OOC run must reuse shared artifacts")
+
+    monkeypatch.setattr(trainer_module, "_fit_linear_base_expert", _unexpected_fit)
+    monkeypatch.setattr(trainer_module, "_fit_hgb_base_expert", _unexpected_fit)
+    monkeypatch.setattr(trainer_module, "_fit_meta_artifact", _unexpected_fit)
+    monkeypatch.setattr(
+        trainer_module.AllocationOutOfCoreTrainingService,
+        "_train_base_expert",
+        _unexpected_fit,
+    )
+
+    second_request = replace(
+        first_request,
+        output_root=tmp_path / "ooc-run-b",
+    )
+    second = AllocationOutOfCoreTrainingService().train(second_request)
+    shared_bytes_after_second = sum(
+        path.stat().st_size
+        for path in shared_root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    )
+
+    assert first.run_id == second.run_id
+    assert shared_bytes_after_second == shared_bytes_after_first
+    first_manifest = _read_json(first.manifest_path)
+    second_manifest = _read_json(second.manifest_path)
+    first_artifacts = (
+        first_manifest["base_experts"]
+        + first_manifest["final_base_experts"]
+        + first_manifest["meta_folds"]
+        + [first_manifest["final_meta"]]
+    )
+    second_artifacts = (
+        second_manifest["base_experts"]
+        + second_manifest["final_base_experts"]
+        + second_manifest["meta_folds"]
+        + [second_manifest["final_meta"]]
+    )
+
+    def _artifact_identity(item: dict[str, object]) -> str:
+        return "|".join(
+            str(item.get(field_name))
+            for field_name in (
+                "artifact_kind",
+                "fold_id",
+                "pack_id",
+                "horizon_trading_days",
+                "algorithm",
+                "expert_id",
+            )
+        )
+
+    first_by_natural_key = {
+        _artifact_identity(item): item for item in first_artifacts
+    }
+    second_by_natural_key = {
+        _artifact_identity(item): item for item in second_artifacts
+    }
+    assert set(first_by_natural_key) == set(second_by_natural_key)
+    assert all(
+        item.get("artifact_storage") == "shared_immutable"
+        and item.get("shared_artifact_reference")
+        for item in second_artifacts
+    )
+    assert {
+        key: item["shared_artifact_key_hash"]
+        for key, item in first_by_natural_key.items()
+    } == {
+        key: item["shared_artifact_key_hash"]
+        for key, item in second_by_natural_key.items()
+    }
+    for artifact in second_artifacts:
+        artifact_directory = second.run_directory / str(
+            artifact["artifact_path"]
+        )
+        assert [
+            path.name
+            for path in artifact_directory.iterdir()
+            if path.is_file()
+        ] == ["manifest.json"]
+    with sqlite3.connect(second.run_directory / "custody.sqlite") as connection:
+        event_types = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT event_type FROM custody_events"
+            )
+        }
+    assert {
+        "base_expert_shared_reused",
+        "final_base_expert_shared_reused",
+        "meta_fold_shared_reused",
+        "final_meta_shared_reused",
+    }.issubset(event_types)
+
+
 @pytest.mark.parametrize(
     ("script", "required_flag"),
     (
@@ -1128,6 +1291,8 @@ def test_ooc_cli_help_is_utf8_and_complete(
     )
     output = completed.stdout.decode("utf-8")
     assert required_flag in output
+    if script == "train_ml_allocation_out_of_core.py":
+        assert "--shared-artifact-store" in output
     assert "\ufffd" not in output
     if script == "build_portfolio_ml_ooc_from_raw.py":
         assert "--corporate-action-manifest" in output

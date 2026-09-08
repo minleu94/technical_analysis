@@ -27,6 +27,9 @@ from ml_module.feature_eligibility import (
     build_feature_eligibility_manifest,
     table_family,
 )
+from data_module.statement_report_basis_contract import (
+    resolve_statement_report_basis,
+)
 
 
 TableAvailabilityState = Literal["available", "degraded", "empty", "missing", "blocked"]
@@ -47,6 +50,7 @@ _BAD_QUALITY_TOKENS = frozenset(
         "unavailable",
     }
 )
+_REPORT_BASES = frozenset({"consolidated", "individual"})
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,7 @@ class PITFeatureObservation:
     quality: str
     values: tuple[PITFeatureValue, ...]
     source_row_hash: str
+    report_basis: str | None = None
 
     def __post_init__(self) -> None:
         if not all(
@@ -125,6 +130,15 @@ class PITFeatureObservation:
             raise ValueError("PIT observation feature ids must be unique and ordered")
         if not self.source_row_hash.startswith("sha256:"):
             raise ValueError("source_row_hash must be a sha256 identity")
+        if self.source_table == "fundamental_statement_items":
+            basis = self.report_basis
+            if basis is None or not basis.strip():
+                raise ValueError("statement report_basis is missing")
+            if basis not in _REPORT_BASES:
+                raise ValueError("statement report_basis is unsupported")
+            object.__setattr__(self, "report_basis", basis)
+        elif self.report_basis is not None:
+            raise ValueError("report_basis is only valid for statement items")
 
 
 @dataclass(frozen=True)
@@ -216,6 +230,7 @@ class _RuntimeTablePolicy:
     identity_columns: tuple[str, ...]
     stock_column: str | None
     industry_column: str | None = None
+    optional_identity_columns: tuple[str, ...] = ()
 
 
 _RUNTIME_POLICIES: dict[str, _RuntimeTablePolicy] = {
@@ -227,7 +242,9 @@ _RUNTIME_POLICIES: dict[str, _RuntimeTablePolicy] = {
         ("stock_code", "period"), "stock_code"
     ),
     "fundamental_statement_items": _RuntimeTablePolicy(
-        ("stock_code", "statement_type", "period", "item_code"), "stock_code"
+        ("stock_code", "statement_type", "period", "item_code"),
+        "stock_code",
+        optional_identity_columns=("report_basis",),
     ),
     "fundamental_valuation_metrics": _RuntimeTablePolicy(
         ("stock_code", "metric_name"), "stock_code"
@@ -379,6 +396,14 @@ class MLAllFieldSnapshotProvider:
     ) -> tuple[SourceTableAvailability, tuple[PITFeatureObservation, ...]]:
         family = table_family(table_name)
         runtime = _RUNTIME_POLICIES[table_name]
+        identity_columns = (
+            *runtime.identity_columns,
+            *tuple(
+                column
+                for column in runtime.optional_identity_columns
+                if column in {record.column_name for record in records}
+            ),
+        )
         columns = {record.column_name for record in records}
         feature_records = tuple(
             sorted(
@@ -408,7 +433,7 @@ class MLAllFieldSnapshotProvider:
         time_policy = records[0].time_policy
         required_columns = {
             time_policy.event_at,
-            *(column for column in runtime.identity_columns if column),
+            *(column for column in identity_columns if column),
         }
         missing_required = tuple(sorted(required_columns - columns))
         if missing_required or not feature_records:
@@ -437,7 +462,7 @@ class MLAllFieldSnapshotProvider:
         metadata_columns = tuple(
             column
             for column in (
-                *runtime.identity_columns,
+                *identity_columns,
                 time_policy.event_at,
                 time_policy.announced_at,
                 time_policy.available_at,
@@ -445,6 +470,7 @@ class MLAllFieldSnapshotProvider:
                 time_policy.revision_id,
                 "quality" if "quality" in columns else None,
                 "source" if "source" in columns else None,
+                "source_version" if "source_version" in columns else None,
             )
             if column is not None and column in columns
         )
@@ -506,8 +532,16 @@ class MLAllFieldSnapshotProvider:
             quality = _row_text(row, "quality") or "not_provided"
             entity_id = "|".join(
                 _row_text(row, column) or "<missing>"
-                for column in runtime.identity_columns
+                for column in identity_columns
             )
+            report_basis: str | None = None
+            if table_name == "fundamental_statement_items":
+                report_basis = resolve_statement_report_basis(
+                    explicit_value=_row_text(row, "report_basis"),
+                    explicit_column_present="report_basis" in columns,
+                    source=_row_text(row, "source"),
+                    source_version=_row_text(row, "source_version"),
+                )
             age_days = max(0, (decision.date() - available.astimezone(_TAIPEI).date()).days)
             values = tuple(
                 _feature_value(
@@ -527,6 +561,7 @@ class MLAllFieldSnapshotProvider:
                 "source_table": table_name,
                 "family": family,
                 "entity_id": entity_id,
+                "report_basis": report_basis,
                 "event_at": _event_datetime(event_date).isoformat(),
                 "available_at": available.isoformat(),
                 "announced_at": announced.isoformat() if announced else None,
@@ -559,6 +594,7 @@ class MLAllFieldSnapshotProvider:
                     quality=quality,
                     values=values,
                     source_row_hash=_sha256(_canonical_json(row_payload)),
+                    report_basis=report_basis,
                 )
             )
 

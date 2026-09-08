@@ -37,6 +37,11 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from ml_module.allocation_contracts import AllocationTargets, PortfolioMLDatasetRow
+from ml_module.allocation_rank_contract import (
+    DEFAULT_RANK_CONTRACT,
+    rank_values_bp,
+    validate_rank_contract,
+)
 from ml_module.purged_walk_forward import PurgedWalkForwardFold
 
 
@@ -433,6 +438,7 @@ class AllocationTrainingResult:
     artifact_hash: str
     replay_hash: str
     audit_json: str
+    rank_contract: str = DEFAULT_RANK_CONTRACT
     production_alpha_bp: int = 0
     production_action_allowed: bool = False
 
@@ -464,6 +470,7 @@ class AllocationTrainingResult:
             raise ValueError("artifact_bytes are required")
         _require_sha256(self.artifact_hash, field_name="artifact_hash")
         _require_sha256(self.replay_hash, field_name="replay_hash")
+        validate_rank_contract(self.rank_contract)
         if sum(value for _, value in self.feature_family_weights_bp) != 10_000:
             raise ValueError("feature family weights must equal 10000")
         if self.production_alpha_bp != 0 or self.production_action_allowed:
@@ -487,6 +494,7 @@ class AllocationTrainingService:
         random_state: int = 42,
         hgb_max_iter: int = 60,
         ridge_alpha: int = 1,
+        rank_contract: str = DEFAULT_RANK_CONTRACT,
     ) -> None:
         if isinstance(random_state, bool) or not isinstance(random_state, int):
             raise TypeError("random_state must be integer")
@@ -505,6 +513,7 @@ class AllocationTrainingService:
         self._random_state = random_state
         self._hgb_max_iter = hgb_max_iter
         self._ridge_alpha = ridge_alpha
+        self._rank_contract = validate_rank_contract(rank_contract)
 
     def fit(
         self,
@@ -564,6 +573,7 @@ class AllocationTrainingService:
                             test=test,
                             train_ids=train_ids,
                             test_ids=test_ids,
+                            rank_contract=self._rank_contract,
                         )
                         base_predictions.extend(predictions)
                         expert_audits.append(audit)
@@ -632,6 +642,7 @@ class AllocationTrainingService:
             "expert_keys": expert_keys,
             "expert_head_ids": EXPERT_HEAD_IDS,
             "expert_vector_width": EXPERT_VECTOR_WIDTH,
+            "rank_contract": self._rank_contract,
             "base_models": final_base_models,
             "meta_models": final_meta_models,
             "feature_family_weights_bp": family_weights,
@@ -660,6 +671,7 @@ class AllocationTrainingService:
             "horizons": list(canonical_horizons),
             "expert_head_ids": list(EXPERT_HEAD_IDS),
             "expert_vector_width": EXPERT_VECTOR_WIDTH,
+            "rank_contract": self._rank_contract,
             "feature_packs": [
                 {
                     "pack_id": pack.pack_id,
@@ -752,6 +764,7 @@ class AllocationTrainingService:
             artifact_hash=artifact_hash,
             replay_hash=replay_hash,
             audit_json=audit_json,
+            rank_contract=self._rank_contract,
         )
 
     def _validate_samples(
@@ -995,6 +1008,7 @@ class AllocationTrainingService:
         test: tuple[AllocationTrainingSample, ...],
         train_ids: tuple[str, ...],
         test_ids: tuple[str, ...],
+        rank_contract: str = DEFAULT_RANK_CONTRACT,
     ) -> tuple[tuple[BaseExpertOOFPrediction, ...], ExpertFoldAudit]:
         if len(train) < 10:
             raise ValueError("every expert fold requires at least ten train rows")
@@ -1060,6 +1074,7 @@ class AllocationTrainingService:
         rank_by_index = _rank_bp_by_decision(
             test=test,
             predicted_returns=quantized_returns,
+            rank_contract=rank_contract,
         )
         predictions = tuple(
             BaseExpertOOFPrediction(
@@ -1845,22 +1860,25 @@ def _rank_bp_by_decision(
     *,
     test: tuple[AllocationTrainingSample, ...],
     predicted_returns: tuple[int, ...],
+    rank_contract: str = DEFAULT_RANK_CONTRACT,
 ) -> dict[int, int]:
     grouped: dict[str, list[tuple[int, str, int]]] = {}
     for index, (sample, prediction) in enumerate(zip(test, predicted_returns)):
         decision_date = _parse_decision_at(sample.row.decision_at).date().isoformat()
         grouped.setdefault(decision_date, []).append(
-            (prediction, sample.row.row_id, index)
+            (prediction, sample.row.symbol, index)
         )
     ranks: dict[int, int] = {}
     for rows in grouped.values():
-        ordered = sorted(rows, key=lambda item: (item[0], item[1]))
-        if len(ordered) == 1:
-            ranks[ordered[0][2]] = 5_000
-            continue
-        denominator = len(ordered) - 1
-        for rank, (_, _, index) in enumerate(ordered):
-            ranks[index] = (rank * 10_000) // denominator
+        values = tuple(item[0] for item in rows)
+        tie_keys = tuple(item[1] for item in rows)
+        rank_values = rank_values_bp(
+            values,
+            tie_keys,
+            rank_contract=rank_contract,
+        )
+        for item, rank in zip(rows, rank_values):
+            ranks[item[2]] = rank
     return ranks
 
 

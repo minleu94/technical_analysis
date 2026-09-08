@@ -200,6 +200,14 @@ def _configure_standard_streams_utf8() -> None:
             pass
 
 
+def _required_text(value: str | None, *, field_name: str) -> str:
+    """把 optional CLI contract 收窄成 service 所需的非空字串。"""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} 必須提供")
+    return value
+
+
 def _run(
     *,
     artifact_path: Path | None,
@@ -219,10 +227,18 @@ def _run(
         release = AllocationReleaseAdapter().load(release_root)
         artifact_for_paths = release_root / release.manifest.artifact_file
     else:
-        if artifact_path is None or expected_artifact_hash is None or expected_dataset_id is None:
+        if artifact_path is None:
             raise ValueError(
                 "artifact_path、expected_artifact_hash 與 expected_dataset_id 必須同時提供"
             )
+        expected_artifact_hash_value = _required_text(
+            expected_artifact_hash,
+            field_name="expected_artifact_hash",
+        )
+        expected_dataset_id_value = _required_text(
+            expected_dataset_id,
+            field_name="expected_dataset_id",
+        )
         artifact_for_paths = artifact_path
         release = None
     _validate_distinct_paths(
@@ -244,8 +260,8 @@ def _run(
     else:
         service = MLAllocationInferenceService.from_artifact_path(
             artifact_for_paths,
-            expected_artifact_hash=expected_artifact_hash,
-            expected_dataset_id=expected_dataset_id,
+            expected_artifact_hash=expected_artifact_hash_value,
+            expected_dataset_id=expected_dataset_id_value,
         )
         result = service.infer(
             rows=rows,

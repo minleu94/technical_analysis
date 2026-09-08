@@ -15,8 +15,9 @@ OHLC 證明的 T-1 交易日。Portfolio state 固定為非 live、T-1、cash-on
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 from dataclasses import asdict, replace
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 import gzip
 import hashlib
 import json
@@ -25,7 +26,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 
@@ -44,13 +45,20 @@ from data_module.portfolio_ml_dataset_assembler import (  # noqa: E402
     _feature_pack_payloads,
     _finalize_long_format_definitions,
     _initialize_spool,
+    _membership_provenance_for_decision,
+    _sectors_for_decision,
+    _spool_sector_memberships,
     _validate_raw_dataset_manifest,
+)
+from data_module.company_registry import (  # noqa: E402
+    INDUSTRY_CODE_TO_CATEGORY,
 )
 from ml_module.allocation_contracts import (  # noqa: E402
     AllocationWeightContract,
     CausalPortfolioState,
     PITFeatureValue,
     PortfolioMLDatasetRow,
+    post_freeze_shadow_decision_scope,
 )
 from scripts.build_ml_allocation_matured_replay_input import (  # noqa: E402
     _atomic_commit_outputs,
@@ -78,6 +86,16 @@ _ALLOWED_MODEL_ONLY_SOURCE_IDS = frozenset(
     {
         "sidecar:official_corporate_action_ledger",
         "sidecar:pit_sector_membership",
+    }
+)
+# 目前凍結模型把產業資料定義為一般收盤產業指數。這個明確的
+# feature-registry 契約不包含報酬指數；未來若增加另一種指數，必須先以
+# 新 feature id 定義語意，否則 machine membership 只會保留缺值。
+_INDUSTRY_PRICE_FEATURE_IDS = frozenset(
+    {
+        "industry_indices.收盤指數",
+        "industry_indices.漲跌百分比",
+        "industry_indices.漲跌點數",
     }
 )
 
@@ -114,12 +132,23 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--decision-at",
         required=True,
-        help="單一決策時間，固定為 Asia/Taipei 08:30",
+        help=(
+            "單一決策時間；正式／無 machine 輸入固定為 Asia/Taipei 08:30，"
+            "machine shadow 可用已發生且帶 timezone 的實際盤後時間"
+        ),
     )
     parser.add_argument(
         "--expected-price-date",
         required=True,
         help="呼叫端依官方交易日曆決定的嚴格 T-1 日期 YYYY-MM-DD",
+    )
+    parser.add_argument(
+        "--pit-machine-operational-publication",
+        type=Path,
+        help=(
+            "可選的受控 machine PIT operational publication；只在明確 "
+            "decision_at 後讀取，不回填歷史"
+        ),
     )
     parser.add_argument(
         "--expected-symbol-count",
@@ -162,6 +191,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             decision_at=args.decision_at,
             expected_price_date=args.expected_price_date,
+            pit_machine_operational_publication=(
+                args.pit_machine_operational_publication
+            ),
             expected_symbol_count=args.expected_symbol_count,
             post_freeze_shadow_input_output=(
                 args.post_freeze_shadow_input_output
@@ -203,6 +235,7 @@ def _run(
     expected_training_manifest_file_hash: str,
     decision_at: str,
     expected_price_date: str,
+    pit_machine_operational_publication: Path | None,
     expected_symbol_count: int,
     post_freeze_shadow_input_output: Path,
     audit_output: Path,
@@ -243,7 +276,10 @@ def _run(
     ):
         _require_sha256(value, field_name=field_name)
 
-    requested_decision = _decision_datetime(decision_at)
+    requested_decision = _requested_decision_datetime(
+        decision_at,
+        machine_operational_path=pit_machine_operational_publication,
+    )
     price_date = _iso_date(
         expected_price_date,
         field_name="expected_price_date",
@@ -406,6 +442,12 @@ def _run(
             feature_registry_hash=model_feature_registry_hash,
             source_manifest_hashes=model_source_hashes,
             batch_size=batch_size,
+            machine_operational_path=pit_machine_operational_publication,
+            machine_now=(
+                datetime.now(timezone.utc)
+                if pit_machine_operational_publication is not None
+                else None
+            ),
         )
     finally:
         if connection is not None:
@@ -480,6 +522,11 @@ def _run(
             "positive_ohlc_required": True,
         },
         "feature_counts": feature_counts,
+        "pit_machine_operational_publication": (
+            None
+            if pit_machine_operational_publication is None
+            else str(pit_machine_operational_publication.resolve())
+        ),
         "row_payload_hashes": row_payload_hashes,
         "portfolio_state_hash": state.state_hash,
         "portfolio_state_policy": {
@@ -542,6 +589,7 @@ def _run(
         "expected_price_date": price_date.isoformat(),
         "selected_row_count": len(rows),
         "selected_symbol_count": len(symbols),
+        "feature_counts": feature_counts,
         "inference_input_uncompressed_hash": input_hash,
         "inference_input_compressed_hash": compressed_hash,
         "audit_hash": audit_hash,
@@ -905,11 +953,25 @@ def _assemble_shadow_rows(
     feature_registry_hash: str,
     source_manifest_hashes: tuple[tuple[str, str], ...],
     batch_size: int,
+    machine_operational_path: Path | None = None,
+    machine_now: datetime | None = None,
 ) -> tuple[
     tuple[PortfolioMLDatasetRow, ...],
     CausalPortfolioState,
     Mapping[str, Any],
 ]:
+    machine_sector_manifest_hash: str | None = None
+    machine_sector_count = 0
+    if machine_operational_path is not None:
+        machine_sector_manifest_hash, machine_sector_count = (
+            _spool_sector_memberships(
+                connection,
+                None,
+                training_as_of=decision_at,
+                machine_operational_path=machine_operational_path,
+                machine_now=machine_now,
+            )
+        )
     _advance_current_features(
         connection,
         previous_cutoff="0001-01-01T00:00:00+08:00",
@@ -949,6 +1011,76 @@ def _assemble_shadow_rows(
         for pack in _feature_pack_payloads(definitions)
         for feature_id in pack["feature_ids"]
     }
+    industry_feature_ids = frozenset(
+        definition.feature_id
+        for definition in definitions
+        if definition.scope == "industry"
+    )
+    sectors: dict[str, str] = {}
+    membership_provenance: dict[str, tuple[str | None, str]] = {}
+    symbol_markets: dict[str, str | None] = {}
+    symbol_market_sources: dict[str, str] = {}
+    industry_current_by_sector: dict[str, dict[str, _CurrentValue]] = {}
+    industry_entity_lineage: dict[str, str | None] = {}
+    industry_index_kind: str | None = None
+    industry_index_contract: tuple[str, str] | None = None
+    industry_index_market_scope: str | None = None
+    if machine_operational_path is not None:
+        decision_date = decision_at.astimezone(_TAIPEI).date().isoformat()
+        sectors = _sectors_for_decision(
+            connection,
+            decision_date=decision_date,
+            decision_at=decision_at.isoformat(),
+        )
+        membership_provenance = _membership_provenance_for_decision(
+            connection,
+            decision_date=decision_date,
+            decision_at=decision_at.isoformat(),
+        )
+        symbol_markets = {
+            symbol: provenance[0]
+            for symbol, provenance in membership_provenance.items()
+        }
+        symbol_market_sources = {
+            symbol: provenance[1]
+            for symbol, provenance in membership_provenance.items()
+        }
+        industry_index_kind = _industry_index_kind(
+            definition.feature_id for definition in by_scope["industry"]
+        )
+        industry_index_contract = _industry_index_contract(
+            by_scope["industry"]
+        )
+        if industry_index_contract is None:
+            industry_index_kind = None
+        industry_index_market_scope = (
+            None
+            if industry_index_contract is None
+            else industry_index_contract[1]
+        )
+        for sector_id in sorted(set(sectors.values())):
+            industry_current: dict[str, _CurrentValue] = {}
+            selected_entity: str | None = None
+            for entity_id in _industry_entity_candidates(
+                sector_id,
+                index_kind=industry_index_kind,
+            ):
+                candidate = _strict_t_minus_one_values(
+                    _current_values(
+                        connection,
+                        scope="industry",
+                        entity_key=entity_id,
+                        decision_at=decision_at.isoformat(),
+                    ),
+                    feature_by_id=feature_by_id,
+                    expected_price_date=expected_price_date,
+                )
+                if candidate:
+                    industry_current = candidate
+                    selected_entity = entity_id
+                    break
+            industry_current_by_sector[sector_id] = industry_current
+            industry_entity_lineage[sector_id] = selected_entity
     market_current = _strict_t_minus_one_values(
         _current_values(
             connection,
@@ -967,79 +1099,117 @@ def _assemble_shadow_rows(
     rows: list[PortfolioMLDatasetRow] = []
     observed_count = 0
     missing_count = 0
+    industry_observed_count = 0
+    industry_missing_count = 0
+    industry_scope_mismatch_symbols: list[str] = []
     missing_by_family: dict[str, int] = {}
-    for symbol in symbols:
-        stock_current = _strict_t_minus_one_values(
-            _current_values(
-                connection,
-                scope="stock",
-                entity_key=symbol,
-                decision_at=decision_at.isoformat(),
-            ),
-            feature_by_id=feature_by_id,
-            expected_price_date=expected_price_date,
-        )
-        features, missing_families = _build_feature_snapshot(
-            decision_at=decision_at,
-            definitions=definitions,
-            feature_by_id=feature_by_id,
-            by_scope=by_scope,
-            stock_current=stock_current,
-            market_current=market_current,
-            # 沒有 canonical PIT sector membership sidecar，不可用現在 mapping。
-            industry_current={},
-        )
-        normalized_features = _normalize_missing_t_minus_one_events(
-            features,
-            feature_by_id=feature_by_id,
-            expected_price_date=expected_price_date,
-            decision_at=decision_at,
-        )
-        observed_feature_families = {
-            feature.feature_id: feature.family_id
-            for feature in normalized_features
-        }
-        if observed_feature_families != expected_feature_families:
-            raise ValueError(
-                "assembled feature IDs/families differ from frozen schema"
+    decision_scope = (
+        post_freeze_shadow_decision_scope()
+        if machine_operational_path is not None
+        else nullcontext()
+    )
+    with decision_scope:
+        for symbol in symbols:
+            stock_current = _strict_t_minus_one_values(
+                _current_values(
+                    connection,
+                    scope="stock",
+                    entity_key=symbol,
+                    decision_at=decision_at.isoformat(),
+                ),
+                feature_by_id=feature_by_id,
+                expected_price_date=expected_price_date,
             )
-        exact_missing_families = tuple(
-            sorted(
-                {
-                    feature.family_id
+            features, missing_families = _build_feature_snapshot(
+                decision_at=decision_at,
+                definitions=definitions,
+                feature_by_id=feature_by_id,
+                by_scope=by_scope,
+                stock_current=stock_current,
+                market_current=market_current,
+                industry_current=(
+                    industry_current_by_sector.get(sectors.get(symbol, ""), {})
+                    if machine_operational_path is not None
+                    and symbol_markets.get(symbol) == "TWSE"
+                    else {}
+                ),
+                industry_missing_reason=(
+                    None
+                    if machine_operational_path is None
+                    or symbol_markets.get(symbol) == "TWSE"
+                    else (
+                        "industry_scope_mismatch:registry=TWSE:"
+                        f"membership_market={symbol_markets.get(symbol) or 'unknown'}"
+                    )
+                ),
+            )
+            normalized_features = _normalize_missing_t_minus_one_events(
+                features,
+                feature_by_id=feature_by_id,
+                expected_price_date=expected_price_date,
+                decision_at=decision_at,
+            )
+            observed_feature_families = {
+                feature.feature_id: feature.family_id
+                for feature in normalized_features
+            }
+            if observed_feature_families != expected_feature_families:
+                raise ValueError(
+                    "assembled feature IDs/families differ from frozen schema"
+                )
+            exact_missing_families = tuple(
+                sorted(
+                    {
+                        feature.family_id
+                        for feature in normalized_features
+                        if not feature.observed
+                    }
+                )
+            )
+            if missing_families != exact_missing_families:
+                raise ValueError("derived missing-family mask mismatch")
+            if (
+                machine_operational_path is not None
+                and symbol_markets.get(symbol) != "TWSE"
+                and any(
+                    feature.feature_id in industry_feature_ids
+                    and not feature.observed
                     for feature in normalized_features
-                    if not feature.observed
-                }
+                )
+            ):
+                industry_scope_mismatch_symbols.append(symbol)
+            row = PortfolioMLDatasetRow(
+                row_id=(
+                    "row:post-freeze-shadow:"
+                    f"{decision_at.date().isoformat()}:{symbol}"
+                ),
+                decision_at=decision_at.isoformat(),
+                symbol=symbol,
+                features=normalized_features,
+                missing_family_ids=exact_missing_families,
+                portfolio_state=state,
+                dataset_identity_hash=dataset_identity_hash,
+                feature_registry_hash=feature_registry_hash,
+                source_manifest_hashes=source_manifest_hashes,
+                targets=None,
             )
-        )
-        if missing_families != exact_missing_families:
-            raise ValueError("derived missing-family mask mismatch")
-        row = PortfolioMLDatasetRow(
-            row_id=(
-                "row:post-freeze-shadow:"
-                f"{decision_at.date().isoformat()}:{symbol}"
-            ),
-            decision_at=decision_at.isoformat(),
-            symbol=symbol,
-            features=normalized_features,
-            missing_family_ids=exact_missing_families,
-            portfolio_state=state,
-            dataset_identity_hash=dataset_identity_hash,
-            feature_registry_hash=feature_registry_hash,
-            source_manifest_hashes=source_manifest_hashes,
-            targets=None,
-        )
-        rows.append(row)
-        observed_count += sum(
-            int(feature.observed) for feature in normalized_features
-        )
-        missing_count += sum(
-            int(not feature.observed) for feature in normalized_features
-        )
-        for family_id in exact_missing_families:
-            missing_by_family[family_id] = (
-                missing_by_family.get(family_id, 0) + 1
+            rows.append(row)
+            observed_count += sum(
+                int(feature.observed) for feature in normalized_features
             )
+            missing_count += sum(
+                int(not feature.observed) for feature in normalized_features
+            )
+            for feature in normalized_features:
+                definition = feature_by_id.get(feature.feature_id)
+                if definition is None or definition.scope != "industry":
+                    continue
+                industry_observed_count += int(feature.observed)
+                industry_missing_count += int(not feature.observed)
+            for family_id in exact_missing_families:
+                missing_by_family[family_id] = (
+                    missing_by_family.get(family_id, 0) + 1
+                )
     return (
         tuple(rows),
         state,
@@ -1053,8 +1223,108 @@ def _assemble_shadow_rows(
             "missing_family_row_counts": dict(
                 sorted(missing_by_family.items())
             ),
+            "industry_feature_observed_count": industry_observed_count,
+            "industry_feature_missing_count": industry_missing_count,
+            "machine_sector_manifest_hash": machine_sector_manifest_hash,
+            "machine_sector_row_count": machine_sector_count,
+            "machine_sector_mapped_symbol_count": len(sectors),
+            "machine_symbol_markets": dict(
+                sorted(
+                    (symbol, symbol_markets.get(symbol))
+                    for symbol in symbols
+                )
+            ),
+            "machine_symbol_market_sources": dict(
+                sorted(
+                    (symbol, symbol_market_sources.get(symbol, ""))
+                    for symbol in symbols
+                )
+            ),
+            "industry_scope_mismatch_symbols": sorted(
+                industry_scope_mismatch_symbols
+            ),
+            "industry_entity_lineage": dict(
+                sorted(industry_entity_lineage.items())
+            ),
+            "industry_index_kind": industry_index_kind,
+            "industry_index_market_scope": industry_index_market_scope,
+            "industry_index_source_id": (
+                "sqlite.industry_indices"
+                if industry_index_contract is not None
+                else None
+            ),
         },
     )
+
+
+def _industry_index_kind(feature_ids: Iterable[str]) -> str | None:
+    """由凍結 feature registry 決定產業指數的明確語意。
+
+    registry 沒有收盤／報酬指數語意時，不猜測資料庫中的 entity；這讓
+    未知或日後變更的 feature schema 維持缺值並留下 blocker。
+    """
+
+    normalized = frozenset(feature_ids)
+    if normalized and normalized.issubset(_INDUSTRY_PRICE_FEATURE_IDS):
+        return "price_index"
+    return None
+
+
+def _industry_index_contract(
+    definitions: Iterable[_FeatureDefinition],
+) -> tuple[str, str] | None:
+    """驗證 feature registry 的指數種類、來源與市場範圍契約。"""
+
+    normalized = tuple(definitions)
+    if not normalized or any(
+        definition.table_name != "industry_indices"
+        or definition.source_id != "sqlite.industry_indices"
+        for definition in normalized
+    ):
+        return None
+    kind = _industry_index_kind(
+        definition.feature_id for definition in normalized
+    )
+    if kind is None:
+        return None
+    # 現有 producer（TWSE MI_INDEX）與 feature registry 只證明 TWSE
+    # 產業收盤指數。industry_indices 沒有 exchange 欄位不能推導 TPEx；
+    # 若日後需要 TPEx，必須新增帶有明確市場語意的 feature contract。
+    return kind, "TWSE"
+
+
+def _industry_entity_candidates(
+    sector_id: str,
+    *,
+    index_kind: str | None,
+) -> tuple[str, ...]:
+    """把官方兩碼產業代碼映射到明確的 price-index entity identity。
+
+    這是 current-day 的 deterministic code-to-index normalization；它只
+    使用 feature registry 已定義的收盤指數語意，不會把報酬指數當成
+    收盤指數，也不推導歷史成分或改寫 machine publication 原始代碼。
+    """
+
+    if index_kind != "price_index":
+        return ()
+    raw = sector_id.strip()
+    values: list[str] = []
+
+    def append(value: str) -> None:
+        value = value.strip()
+        if value and value not in values:
+            values.append(value)
+
+    category = INDUSTRY_CODE_TO_CATEGORY.get(raw)
+    if category is None:
+        return tuple(values)
+    bases = [category]
+    for suffix in ("工業", "產業", "業"):
+        if category.endswith(suffix) and len(category) > len(suffix):
+            bases.append(category[: -len(suffix)])
+    for base in bases:
+        append(f"{base}類指數")
+    return tuple(values)
 
 
 def _require_t_minus_one_ohlc(
@@ -1169,11 +1439,21 @@ def _normalize_missing_t_minus_one_events(
                 )
             normalized.append(feature)
             continue
+        preserved_reason = (
+            feature.revision_id.removeprefix("missing:")
+            if feature.revision_id.startswith("missing:")
+            else ""
+        )
+        missing_reason = (
+            preserved_reason
+            if preserved_reason.startswith("industry_scope_mismatch:")
+            else "strict_t_minus_one_not_observed"
+        )
         normalized.append(
             replace(
                 feature,
                 event_at=expected_price_date.isoformat(),
-                revision_id="missing:strict_t_minus_one_not_observed",
+                revision_id=f"missing:{missing_reason}",
                 content_hash=_sha256_json(
                     {
                         "feature_id": feature.feature_id,
@@ -1181,7 +1461,7 @@ def _normalize_missing_t_minus_one_events(
                         "expected_price_date": (
                             expected_price_date.isoformat()
                         ),
-                        "reason": "strict_t_minus_one_not_observed",
+                        "reason": missing_reason,
                     }
                 ),
             )
@@ -1413,6 +1693,27 @@ def _decision_datetime(value: str) -> datetime:
         or parsed.tzinfo != _TAIPEI
     ):
         raise ValueError("decision_at must be 08:30 Asia/Taipei")
+    return parsed
+
+
+def _requested_decision_datetime(
+    value: str,
+    *,
+    machine_operational_path: Path | None,
+) -> datetime:
+    """解析 shadow 決策時間，僅 machine 證據允許已發生的盤後時間。"""
+
+    if machine_operational_path is None:
+        return _decision_datetime(value)
+    if len(value.strip()) == 10:
+        raise ValueError(
+            "machine post-freeze shadow decision_at requires a timestamp"
+        )
+    parsed = _available_datetime(value, field_name="decision_at")
+    if parsed > datetime.now(timezone.utc).astimezone(_TAIPEI):
+        raise ValueError(
+            "machine post-freeze shadow decision_at cannot be future-dated"
+        )
     return parsed
 
 

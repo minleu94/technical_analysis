@@ -21,6 +21,16 @@ if str(ROOT) not in sys.path:
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
 from data_module import portfolio_ml_out_of_core_store as store_module
+from data_module.ml_storage_capacity import (  # noqa: E402
+    authorize_heavy_chain_reservation_handoff_child,
+    HEAVY_CHAIN_RESERVATION_HELD_ENV,
+    MLStorageChainReservationHandoff,
+    StorageCapacityError,
+    heavy_chain_lock_path,
+    resolve_heavy_chain_lock_path,
+    forward_heavy_chain_reservation_handoff_environment,
+    validate_heavy_chain_reservation_handoff,
+)
 
 
 _DIRECT_HEARTBEAT_SCHEMA_VERSION = "portfolio-ml-direct-heartbeat.v1"
@@ -63,6 +73,11 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--store-output-dir", type=Path, required=True)
     parser.add_argument("--training-output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        help="shared release root used to verify the heavy-chain handoff",
+    )
     parser.add_argument("--batch-size", type=int, default=8_192)
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--memory-budget-mb", type=int, default=4_096)
@@ -88,6 +103,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     status_path = args.training_output_dir.resolve() / "continuation_status.json"
     store_output_dir = args.store_output_dir.resolve()
     training_output_dir = args.training_output_dir.resolve()
+    output_root = (
+        args.output_root.resolve()
+        if args.output_root is not None
+        else training_output_dir.parent.resolve()
+    )
+    handoff: MLStorageChainReservationHandoff | None = None
+    handoff_lock_path = resolve_heavy_chain_lock_path(output_root)
+    if handoff_lock_path is None:
+        handoff_lock_path = heavy_chain_lock_path(output_root)
+    try:
+        handoff = validate_heavy_chain_reservation_handoff(handoff_lock_path)
+    except (StorageCapacityError, TypeError, ValueError) as exc:
+        _atomic_write_json(
+            status_path,
+            {
+                "status": "blocked",
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "formal_oos_allowed": False,
+                "production_alpha_bp": 0,
+                "broker_order_allowed": False,
+            },
+        )
+        print(
+            json.dumps(_read_json(status_path), ensure_ascii=False, sort_keys=True),
+            file=sys.stderr,
+        )
+        return 2
     # Publish a live, fail-closed state before waiting.  Without this write, a
     # previous run's terminal ``blocked`` payload can look current while the
     # helper is still legitimately waiting for the direct store process.
@@ -287,6 +330,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    finally:
+        if handoff is not None:
+            handoff.close()
 
 
 def _run_training_with_heartbeat(
@@ -301,15 +347,33 @@ def _run_training_with_heartbeat(
     """Run OOC training while publishing live process custody.
 
     The release supervisor intentionally waits for this helper to exit before
-    consuming the continuation status.  A long-running ``subprocess.run``
-    therefore used to leave the status file at ``starting`` for the entire
-    training window, which made an otherwise healthy run look stale to
-    operators and recovery logic.  Keep the immutable training artifacts
-    untouched and publish only process/lineage metadata until training exits.
+    consuming the continuation status.  Polling a long-running child keeps the
+    status file current for operators and recovery logic while preserving the
+    immutable training artifacts; only process/lineage metadata is published
+    until training exits.
     """
     if poll_seconds <= 0:
         raise ValueError("poll_seconds must be positive")
-    process = subprocess.Popen(command, cwd=ROOT)
+    environment = forward_heavy_chain_reservation_handoff_environment(
+        environment=os.environ
+    )
+    process = subprocess.Popen(command, cwd=ROOT, env=environment)
+    if os.environ.get(HEAVY_CHAIN_RESERVATION_HELD_ENV) is not None:
+        try:
+            authorize_heavy_chain_reservation_handoff_child(
+                process.pid,
+                environment=environment,
+            )
+        except Exception:
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            raise
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
         while True:
@@ -708,11 +772,31 @@ def _ensure_current_direct_schema(
             "broker_order_allowed": False,
         },
     )
-    completed = subprocess.run(command, cwd=ROOT, check=False)
-    if completed.returncode != 0:
+    child_environment = forward_heavy_chain_reservation_handoff_environment(
+        environment=os.environ
+    )
+    process = subprocess.Popen(command, cwd=ROOT, env=child_environment)
+    if os.environ.get(HEAVY_CHAIN_RESERVATION_HELD_ENV) is not None:
+        try:
+            authorize_heavy_chain_reservation_handoff_child(
+                process.pid,
+                environment=child_environment,
+            )
+        except Exception:
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+            raise
+    return_code = process.wait()
+    if return_code != 0:
         raise RuntimeError(
             "direct schema refresh command failed with exit code "
-            f"{completed.returncode}"
+            f"{return_code}"
         )
     return _validated_store_manifest(
         output_root,

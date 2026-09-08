@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 import hashlib
 import json
@@ -38,6 +38,9 @@ from data_module.ml_pit_year_shard_exporter import (  # noqa: E402
 )
 from data_module.official_trading_calendar import (  # noqa: E402
     OfficialTradingCalendar,
+)
+from data_module.ml_storage_capacity import (  # noqa: E402
+    MLStorageCapacityBudget,
 )
 from app_module.ml_allocation_inference_service import (  # noqa: E402
     _feature_snapshot_hash,
@@ -123,6 +126,13 @@ class RawPublication:
     dataset_manifest_file_hash: str
     row_count: int
     shard_count: int
+    # Optional defaults keep the immutable value object compatible with
+    # existing callers that construct a test/read-only publication before
+    # capacity telemetry is available.
+    capacity_preflight: Mapping[str, Any] = field(default_factory=dict)
+    temporary_peak_bytes_observed: int | None = None
+    capacity_checkpoint_count: int = 0
+    capacity_last_stage: str = "not_observed"
 
 
 @dataclass(frozen=True)
@@ -571,6 +581,7 @@ def _build_raw_publication(
     raw_lookback_days: int,
     batch_size: int,
     compression_level: int,
+    capacity_budget: MLStorageCapacityBudget | None = None,
 ) -> RawPublication:
     if (
         isinstance(raw_lookback_days, bool)
@@ -590,6 +601,21 @@ def _build_raw_publication(
             years=years,
             batch_size=batch_size,
             compression_level=compression_level,
+            temporary_storage_budget_bytes=(
+                capacity_budget.temporary_peak_bytes_budget
+                if capacity_budget is not None
+                else None
+            ),
+            persistent_new_bytes_budget=(
+                capacity_budget.persistent_new_bytes_budget
+                if capacity_budget is not None
+                else None
+            ),
+            safety_reserve_bytes=(
+                capacity_budget.safety_reserve_bytes
+                if capacity_budget is not None
+                else None
+            ),
         )
     )
     dataset_manifest_path = Path(
@@ -623,6 +649,10 @@ def _build_raw_publication(
         dataset_manifest_file_hash=_file_hash(dataset_manifest_path),
         row_count=publication.row_count,
         shard_count=publication.shard_count,
+        capacity_preflight=dict(publication.capacity_preflight),
+        temporary_peak_bytes_observed=publication.temporary_peak_bytes_observed,
+        capacity_checkpoint_count=publication.capacity_checkpoint_count,
+        capacity_last_stage=publication.capacity_last_stage,
     )
 
 
@@ -637,6 +667,7 @@ def _build_post_freeze_input(
     audit_output: Path,
     batch_size: int,
     compression_level: int,
+    pit_machine_operational_path: Path | None = None,
 ) -> Mapping[str, Any]:
     return _build_post_freeze_shadow_input(
         raw_dataset_manifest=raw.dataset_manifest_path,
@@ -650,6 +681,7 @@ def _build_post_freeze_input(
         ),
         decision_at=decision_at.isoformat(timespec="seconds"),
         expected_price_date=strict_t_minus_one.isoformat(),
+        pit_machine_operational_publication=pit_machine_operational_path,
         expected_symbol_count=len(symbols),
         post_freeze_shadow_input_output=input_output,
         audit_output=audit_output,
@@ -1062,6 +1094,8 @@ def run(
     raw_lookback_days: int = DEFAULT_RAW_LOOKBACK_DAYS,
     batch_size: int = 2_048,
     compression_level: int = 6,
+    capacity_budget: MLStorageCapacityBudget | None = None,
+    pit_machine_operational_path: Path | None = None,
     model_id: str = DEFAULT_MODEL_ID,
     universe_id: str = DEFAULT_UNIVERSE_ID,
     policy_id: str = DEFAULT_POLICY_ID,
@@ -1261,6 +1295,7 @@ def run(
             raw_lookback_days=raw_lookback_days,
             batch_size=batch_size,
             compression_level=compression_level,
+            capacity_budget=capacity_budget,
         )
         status["raw_publication_id"] = raw.publication_id
         status["raw_publication_manifest_hash"] = (
@@ -1298,6 +1333,12 @@ def run(
             "source_database_mode": "ro",
             "query_only": True,
             "immutable_publication": True,
+            "capacity_preflight": dict(raw.capacity_preflight),
+            "temporary_peak_bytes_observed": (
+                raw.temporary_peak_bytes_observed
+            ),
+            "capacity_checkpoint_count": raw.capacity_checkpoint_count,
+            "capacity_last_stage": raw.capacity_last_stage,
         }
         status["stage_results"] = stage_results
     except Exception as exc:  # noqa: BLE001
@@ -1307,6 +1348,34 @@ def run(
             stage="raw_pit_publication",
             exc=exc,
         )
+
+    pit_machine_publication_resolved: Path | None = None
+    pit_machine_publication_file_hash: str | None = None
+    if pit_machine_operational_path is not None:
+        pit_machine_publication_resolved = (
+            pit_machine_operational_path.expanduser().resolve()
+        )
+        if not pit_machine_publication_resolved.is_file():
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="post_freeze_input",
+                exc=FileNotFoundError(
+                    "pit machine operational publication is missing: "
+                    f"{pit_machine_publication_resolved}"
+                ),
+            )
+        try:
+            pit_machine_publication_file_hash = _file_hash(
+                pit_machine_publication_resolved
+            )
+        except OSError as exc:
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="post_freeze_input",
+                exc=exc,
+            )
 
     orchestration_run_hash = _payload_hash(
         {
@@ -1348,6 +1417,14 @@ def run(
                 if promotion_reference is not None
                 else None
             ),
+            "pit_machine_operational_publication": (
+                None
+                if pit_machine_publication_resolved is None
+                else str(pit_machine_publication_resolved)
+            ),
+            "pit_machine_operational_publication_file_hash": (
+                pit_machine_publication_file_hash
+            ),
         }
     )
     status["orchestration_run_hash"] = orchestration_run_hash
@@ -1376,6 +1453,7 @@ def run(
             audit_output=input_audit_output,
             batch_size=batch_size,
             compression_level=compression_level,
+            pit_machine_operational_path=pit_machine_operational_path,
         )
         _validate_stage_result(
             input_result,
@@ -1417,6 +1495,13 @@ def run(
                 "selected_symbol_count"
             ),
             "selected_row_count": input_result.get("selected_row_count"),
+            "pit_machine_operational_publication": input_result.get(
+                "pit_machine_operational_publication"
+            ),
+            "pit_machine_operational_publication_file_hash": (
+                pit_machine_publication_file_hash
+            ),
+            "feature_counts": input_result.get("feature_counts"),
         }
         status["stage_results"] = stage_results
     except Exception as exc:  # noqa: BLE001
@@ -1971,6 +2056,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--promotion-dataset-manifest", type=Path)
     parser.add_argument("--promotion-oof-bundle", type=Path)
     parser.add_argument("--promotion-shadow-evidence", type=Path)
+    parser.add_argument(
+        "--pit-machine-operational-publication",
+        type=Path,
+        help=(
+            "可選的受控 current-day PIT sector publication；只在本次 "
+            "decision_at 已達 available_at 後接入 shadow feature snapshot"
+        ),
+    )
     return parser
 
 
@@ -2020,6 +2113,9 @@ def main(argv: list[str] | None = None) -> int:
                 requested_decision_at=requested_decision_at,
                 decision_selection_reason=selection_reason,
                 decision_selection_attempts=selection_attempts,
+                pit_machine_operational_path=(
+                    args.pit_machine_operational_publication
+                ),
                 raw_lookback_days=args.raw_lookback_days,
                 batch_size=args.batch_size,
                 compression_level=args.compression_level,

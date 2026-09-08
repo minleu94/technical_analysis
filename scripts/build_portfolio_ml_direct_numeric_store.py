@@ -17,11 +17,32 @@ from data_module.portfolio_ml_direct_numeric_store import (  # noqa: E402
     PortfolioMLDirectNumericRequest,
     PortfolioMLDirectNumericStoreBuilder,
 )
+from data_module.ml_storage_capacity import (  # noqa: E402
+    BYTES_PER_GIB,
+    CANONICAL_HEAVY_CHAIN_SAFETY_RESERVE_BYTES,
+    MLStorageChainReservationHandoff,
+    StorageCapacityError,
+    acquire_heavy_chain_reservation,
+    heavy_chain_lock_path,
+    release_heavy_chain_reservation,
+    resolve_heavy_chain_lock_path,
+    validate_heavy_chain_reservation_handoff,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--shared-block-store",
+        type=Path,
+        help="shared immutable PIT block registry for a shared dataset view",
+    )
+    parser.add_argument(
+        "--shared-numeric-store",
+        type=Path,
+        help="shared immutable Direct numeric artifact registry",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--training-as-of", required=True)
     parser.add_argument("--benchmark-entity", required=True)
@@ -41,17 +62,25 @@ def _parser() -> argparse.ArgumentParser:
         "--temporary-peak-bytes-budget",
         dest="temporary_storage_budget_bytes",
         type=int,
+        default=BYTES_PER_GIB,
     )
     parser.add_argument(
         "--persistent-storage-budget-bytes",
         "--persistent-new-bytes-budget",
         dest="persistent_storage_budget_bytes",
         type=int,
+        default=BYTES_PER_GIB,
     )
     parser.add_argument(
         "--safety-reserve-bytes",
         dest="safety_reserve_bytes",
         type=int,
+        default=CANONICAL_HEAVY_CHAIN_SAFETY_RESERVE_BYTES,
+    )
+    parser.add_argument(
+        "--heavy-lock-path",
+        type=Path,
+        help="可選；正式 release_v4 output 必須與 canonical lock 相同",
     )
     parser.add_argument("--no-resume", action="store_true")
     return parser
@@ -60,10 +89,33 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     _configure_utf8_streams()
     args = _parser().parse_args(argv)
+    reservation = None
+    handoff: MLStorageChainReservationHandoff | None = None
     try:
+        lock_path = resolve_heavy_chain_lock_path(
+            args.output_dir,
+            explicit_path=args.heavy_lock_path,
+        )
+        if lock_path is None:
+            lock_path = heavy_chain_lock_path(args.output_dir)
+        handoff = validate_heavy_chain_reservation_handoff(
+            lock_path
+        )
+        if lock_path is not None and handoff is None:
+            reservation = acquire_heavy_chain_reservation(lock_path)
+            if reservation is None:
+                raise StorageCapacityError(
+                    "ML heavy-chain reservation is already held",
+                    preflight={
+                        "lock_path": str(lock_path),
+                        "blocker": "heavy_chain_reservation_unavailable",
+                    },
+                )
         publication = PortfolioMLDirectNumericStoreBuilder().build(
             PortfolioMLDirectNumericRequest(
                 raw_manifest_path=args.raw_manifest,
+                shared_block_store_root=args.shared_block_store,
+                shared_numeric_store_root=args.shared_numeric_store,
                 output_root=args.output_dir,
                 training_as_of=args.training_as_of,
                 benchmark_entity_id=args.benchmark_entity,
@@ -94,6 +146,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     except (
         OSError,
+        StorageCapacityError,
         TypeError,
         ValueError,
         KeyError,
@@ -116,6 +169,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    finally:
+        if handoff is not None:
+            handoff.close()
+        release_heavy_chain_reservation(reservation)
     print(
         json.dumps(
             {

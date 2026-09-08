@@ -7,7 +7,17 @@ from types import SimpleNamespace
 import pytest
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
+from data_module.ml_storage_capacity import (
+    SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+    SCHEDULED_REQUIRED_FREE_BYTES,
+    SCHEDULED_SAFETY_RESERVE_BYTES,
+    SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+    acquire_heavy_chain_reservation,
+    heavy_chain_lock_path,
+    release_heavy_chain_reservation,
+)
 from scripts.scheduled import run_ml_direct_chain_maintenance as runner
+from scripts.scheduled import run_ml_raw_pit_refresh as raw_runner
 
 
 def test_storage_preflight_is_read_only_and_reports_low_headroom(
@@ -43,7 +53,10 @@ def test_main_blocks_before_launch_when_storage_headroom_is_low(
     args = SimpleNamespace(
         poll_seconds=30,
         retry_delay_seconds=120,
-        minimum_free_space_bytes=20,
+        minimum_free_space_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
         status_path=status_path,
         data_root=tmp_path,
         output_root=tmp_path / "output",
@@ -95,11 +108,14 @@ def test_main_preflight_only_records_headroom_without_starting_chain(
     args = SimpleNamespace(
         poll_seconds=30,
         retry_delay_seconds=120,
-        minimum_free_space_bytes=20,
+        minimum_free_space_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
         preflight_only=True,
         status_path=status_path,
         data_root=tmp_path,
         output_root=tmp_path / "output",
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
     )
     monkeypatch.setattr(
         runner,
@@ -118,7 +134,7 @@ def test_main_preflight_only_records_headroom_without_starting_chain(
         runner,
         "_storage_preflight",
         lambda _path, minimum_free_space_bytes: {
-            "free_bytes": 100,
+            "free_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 100,
             "minimum_free_space_bytes": minimum_free_space_bytes,
             "within_minimum_free_space": True,
         },
@@ -140,6 +156,210 @@ def test_main_preflight_only_records_headroom_without_starting_chain(
     assert status["formal_oos_allowed"] is False
     assert status["broker_order_allowed"] is False
     assert status["storage_preflight"]["within_minimum_free_space"] is True
+
+
+def test_main_delegates_shared_reservation_to_maintainer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    status_path = tmp_path / "scheduled" / "latest_status.json"
+    training = tmp_path / "training"
+    training.mkdir()
+    args = SimpleNamespace(
+        poll_seconds=30,
+        retry_delay_seconds=120,
+        minimum_free_space_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        preflight_only=False,
+        status_path=status_path,
+        data_root=tmp_path,
+        output_root=tmp_path / "output",
+    )
+    usage = {
+        "total_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 1_000,
+        "used_bytes": 900,
+        "free_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 100,
+        "minimum_free_space_bytes": SCHEDULED_SAFETY_RESERVE_BYTES,
+        "within_minimum_free_space": True,
+    }
+    monkeypatch.setattr(
+        runner,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_resolve_inputs",
+        lambda _args: (
+            ["python.exe", "maintainer.py"],
+            {"training_output_dir": str(training), "database_mode": "ro"},
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_storage_preflight",
+        lambda _path, minimum_free_space_bytes: dict(usage),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_maintenance_lock_state",
+        lambda _path: ("missing_or_invalid", None),
+    )
+    observed: dict[str, object] = {}
+
+    def run_child(*_args: object, **kwargs: object) -> int:
+        observed.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(runner, "_run_maintainer_with_heartbeat", run_child)
+
+    assert runner.main([]) == 0
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "completed"
+    assert status["heavy_chain_reservation"]["state"] == (
+        "delegated_to_maintainer"
+    )
+    assert status["heavy_chain_reservation"]["lifetime"] == "child_process"
+    assert observed["running_status"]["heavy_chain_reservation"]["state"] == (
+        "delegated_to_maintainer"
+    )
+
+
+def test_main_skips_verified_owner_without_claiming_reservation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    status_path = tmp_path / "scheduled" / "latest_status.json"
+    training = tmp_path / "training"
+    training.mkdir()
+    args = SimpleNamespace(
+        poll_seconds=30,
+        retry_delay_seconds=120,
+        minimum_free_space_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        preflight_only=False,
+        status_path=status_path,
+        data_root=tmp_path,
+        output_root=tmp_path / "output",
+    )
+    usage = {
+        "total_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 1_000,
+        "used_bytes": 900,
+        "free_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 100,
+        "minimum_free_space_bytes": SCHEDULED_SAFETY_RESERVE_BYTES,
+        "within_minimum_free_space": True,
+    }
+    monkeypatch.setattr(
+        runner,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_resolve_inputs",
+        lambda _args: (
+            ["python.exe", "maintainer.py"],
+            {"training_output_dir": str(training), "database_mode": "ro"},
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_storage_preflight",
+        lambda _path, minimum_free_space_bytes: dict(usage),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_maintenance_lock_state",
+        lambda _path: ("verified", 2468),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_run_maintainer_with_heartbeat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("verified owner must not start a second child")
+        ),
+    )
+
+    assert runner.main([]) == 0
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "skipped_locked"
+    assert status["reason"] == "existing_direct_chain_owner_is_active"
+    assert status["heavy_chain_reservation"]["state"] == (
+        "owned_by_existing_maintainer"
+    )
+    recovered = acquire_heavy_chain_reservation(heavy_chain_lock_path(training.parent))
+    assert recovered is not None
+    release_heavy_chain_reservation(recovered)
+
+
+def test_main_records_child_reservation_competition_as_locked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    status_path = tmp_path / "scheduled" / "latest_status.json"
+    training = tmp_path / "training"
+    training.mkdir()
+    args = SimpleNamespace(
+        poll_seconds=30,
+        retry_delay_seconds=120,
+        minimum_free_space_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+        preflight_only=False,
+        status_path=status_path,
+        data_root=tmp_path,
+        output_root=tmp_path / "output",
+    )
+    usage = {
+        "total_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 1_000,
+        "used_bytes": 900,
+        "free_bytes": SCHEDULED_REQUIRED_FREE_BYTES + 100,
+        "minimum_free_space_bytes": SCHEDULED_SAFETY_RESERVE_BYTES,
+        "within_minimum_free_space": True,
+    }
+    monkeypatch.setattr(
+        runner,
+        "_parser",
+        lambda: SimpleNamespace(parse_args=lambda _argv: args),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_resolve_inputs",
+        lambda _args: (
+            ["python.exe", "maintainer.py"],
+            {"training_output_dir": str(training), "database_mode": "ro"},
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_storage_preflight",
+        lambda _path, minimum_free_space_bytes: dict(usage),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_maintenance_lock_state",
+        lambda _path: ("missing_or_invalid", None),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_run_maintainer_with_heartbeat",
+        lambda *_args, **_kwargs: (
+            runner.maintenance._HEAVY_CHAIN_RESERVATION_UNAVAILABLE_RETURN_CODE
+        ),
+    )
+
+    assert runner.main([]) == 0
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "skipped_locked"
+    assert status["execution_disposition"] == (
+        "heavy_chain_reservation_unavailable"
+    )
+    assert status["heavy_chain_reservation"]["state"] == "unavailable"
 
 
 def _write_publication(output_root: Path) -> Path:
@@ -246,6 +466,50 @@ def test_resolve_latest_raw_dataset_rejects_non_all_universe_scope(
         raise AssertionError("non-all-universe publication must be rejected")
 
 
+def test_raw_and_direct_callers_share_release_root_reservation_path(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "output"
+    release_root = output_root / "release_v4"
+    _write_publication(release_root)
+    raw_args = raw_runner._parser().parse_args(
+        [
+            "--data-root",
+            str(tmp_path),
+            "--output-root",
+            str(output_root),
+        ]
+    )
+    direct_args = SimpleNamespace(
+        data_root=tmp_path,
+        output_root=output_root,
+        database=tmp_path / "twstock.db",
+        benchmark_entity="TAIEX",
+        batch_size=8192,
+        workers=2,
+        memory_budget_mb=4096,
+        poll_seconds=30,
+        retry_delay_seconds=120,
+        persistent_storage_budget_bytes=SCHEDULED_PERSISTENT_NEW_BYTES_BUDGET,
+        temporary_storage_budget_bytes=SCHEDULED_TEMPORARY_PEAK_BYTES_BUDGET,
+        safety_reserve_bytes=SCHEDULED_SAFETY_RESERVE_BYTES,
+    )
+
+    _, metadata = runner._resolve_inputs(direct_args)
+    raw_release_root = (
+        raw_args.release_root
+        if raw_args.release_root is not None
+        else output_root / "release_v4"
+    )
+
+    assert Path(str(metadata["heavy_chain_lock_path"])) == heavy_chain_lock_path(
+        release_root
+    )
+    assert heavy_chain_lock_path(raw_release_root) == Path(
+        str(metadata["heavy_chain_lock_path"])
+    )
+
+
 def test_live_maintenance_owner_requires_matching_process_custody(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -253,7 +517,7 @@ def test_live_maintenance_owner_requires_matching_process_custody(
     training = tmp_path / "training"
     training.mkdir()
     (training / ".ml_direct_chain_maintenance.lock").write_text(
-        "2468\n", encoding="utf-8"
+        "2468\r\n", encoding="utf-8"
     )
 
     class _Process:
@@ -282,7 +546,7 @@ def test_maintenance_lock_state_marks_inaccessible_live_owner_unverifiable(
     training = tmp_path / "training"
     training.mkdir()
     (training / ".ml_direct_chain_maintenance.lock").write_text(
-        "2468\n", encoding="utf-8"
+        "2468\r\n", encoding="utf-8"
     )
 
     class _Process:

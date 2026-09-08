@@ -6,19 +6,41 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 import hashlib
 import json
 from types import MappingProxyType
-from typing import Literal, Mapping
+from typing import Iterator, Literal, Mapping
 from zoneinfo import ZoneInfo
 
 
 FeatureQuality = Literal["observed", "estimated", "degraded", "missing"]
 EventTimeSemantics = Literal["realized_observation", "announced_future_event"]
 _TAIPEI = ZoneInfo("Asia/Taipei")
+_POST_FREEZE_SHADOW_DECISION_SCOPE: ContextVar[bool] = ContextVar(
+    "post_freeze_shadow_decision_scope",
+    default=False,
+)
+
+
+@contextmanager
+def post_freeze_shadow_decision_scope() -> Iterator[None]:
+    """暫時允許研究用 post-freeze shadow 使用實際盤後決策時間。
+
+    正式資料集、target、proposal 與 inference 仍走固定的台北 08:30
+    契約。這個 scope 不會新增序列化欄位，只供 assembler 在已驗證的
+    target-free、machine shadow row 建立期間使用，離開區塊後立即恢復。
+    """
+
+    token = _POST_FREEZE_SHADOW_DECISION_SCOPE.set(True)
+    try:
+        yield
+    finally:
+        _POST_FREEZE_SHADOW_DECISION_SCOPE.reset(token)
 
 
 @dataclass(frozen=True)
@@ -270,7 +292,19 @@ class PortfolioMLDatasetRow:
 
     def __post_init__(self) -> None:
         _require_text(row_id=self.row_id, decision_at=self.decision_at, symbol=self.symbol)
-        decision_at = _decision_datetime(self.decision_at)
+        if (
+            _POST_FREEZE_SHADOW_DECISION_SCOPE.get()
+            and self.targets is None
+            and self.row_id.startswith("row:post-freeze-shadow:")
+        ):
+            # 只有 target-free shadow row 可使用實際盤後 timestamp；所有
+            # formal/training target row 維持既有 08:30 邊界。
+            decision_at = _available_datetime(
+                self.decision_at,
+                field_name="decision_at",
+            )
+        else:
+            decision_at = _decision_datetime(self.decision_at)
         if _parse_date(
             self.portfolio_state.as_of_date, field_name="portfolio_state.as_of_date"
         ) >= decision_at.date():

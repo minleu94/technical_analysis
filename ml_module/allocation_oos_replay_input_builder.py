@@ -18,7 +18,7 @@ import os
 from pathlib import Path
 import sqlite3
 import tempfile
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -65,6 +65,11 @@ class _Candidate:
     trade_restriction_status: str
     source_values_hash: str
     ml_target_weight_bp: int | None
+    # 研究比較的流動性池只可使用決策日前一交易日已發佈的收盤價；
+    # 正式 replay 不依賴這些可選欄位，缺值時仍維持 fail-closed。
+    t_minus_one_close_price: Decimal | None = None
+    t_minus_one_close_available_at: datetime | None = None
+    t_minus_one_close_source_values_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1497,7 +1502,17 @@ def _execute_day(
     candidates: Sequence[_Candidate],
     bars: Mapping[str, _Bar],
     requested: Mapping[str, int],
+    eligibility_fn: Callable[[_Candidate], bool] | None = None,
+    enforce_sector_cap: bool = True,
 ) -> tuple[dict[str, int], dict[str, object]]:
+    # Formal replay 維持原本 strict sector/PIT eligibility。研究比較若明確
+    # 選擇「不施加產業上限」情境，可傳入無 sector gate 的 callback；這不會
+    # 產生虛構 sector id，也不改變預設 formal 行為。
+    eligibility = (
+        _eligible_for_new_position
+        if eligibility_fn is None
+        else eligibility_fn
+    )
     candidate_by_symbol = {item.symbol: item for item in candidates}
     opening_cash = state.cash
     opening_shares = dict(state.shares)
@@ -1528,7 +1543,7 @@ def _execute_day(
         current = current_weights.get(symbol, 0)
         candidate = candidate_by_symbol.get(symbol)
         if target[symbol] > current and (
-            candidate is None or not _eligible_for_new_position(candidate)
+            candidate is None or not eligibility(candidate)
         ):
             target[symbol] = current
         if (
@@ -1536,7 +1551,13 @@ def _execute_day(
             and candidate.trade_restriction_status == "officially_blocked"
         ):
             target[symbol] = 0
-    _enforce_target_caps(target, state.sectors, candidate_by_symbol)
+    _enforce_target_caps(
+        target,
+        state.sectors,
+        candidate_by_symbol,
+        enforce_sector_cap=enforce_sector_cap,
+    )
+    no_trade_symbols: set[str] = set()
     week = decision_day.isocalendar()
     week_key = (week.year, week.week)
     used_turnover = state.weekly_turnover.get(week_key, 0)
@@ -1545,6 +1566,7 @@ def _execute_day(
         "maximum_weekly_turnover_bp"
     ]:
         target = dict(current_weights)
+        no_trade_symbols.update(symbols)
     for symbol in symbols:
         gap = target.get(symbol, 0) - current_weights.get(symbol, 0)
         if (
@@ -1554,10 +1576,17 @@ def _execute_day(
             < replay._REPLAY_POLICY["cooldown_trading_days"]
         ):
             target[symbol] = current_weights.get(symbol, 0)
+            # current weight 是 bp 的 floor 近似；把它重新轉回 shares 可能
+            # 少一張（例如 666bp 對應 999 股再 floor 成 0）。符合 band、
+            # min-trade 或 cooldown 的 symbol 必須保留原始股數，不得被
+            # 量化誤差製造賣出再買回的 round-trip。
+            no_trade_symbols.add(symbol)
     before_trade = dict(current_weights)
     costs = Decimal(0)
     lot = replay._REPLAY_POLICY["lot_size_shares"]
     for symbol in sorted(symbols):
+        if symbol in no_trade_symbols:
+            continue
         if symbol not in open_prices:
             continue
         current_shares = state.shares.get(symbol, 0)
@@ -1589,6 +1618,8 @@ def _execute_day(
             item,
         ),
     ):
+        if symbol in no_trade_symbols:
+            continue
         if symbol not in open_prices:
             continue
         current_shares = state.shares.get(symbol, 0)
@@ -1604,7 +1635,7 @@ def _execute_day(
         if desired <= current_shares:
             continue
         candidate = candidate_by_symbol.get(symbol)
-        if candidate is None or not _eligible_for_new_position(candidate):
+        if candidate is None or not eligibility(candidate):
             continue
         volume_cap = (
             int(candidate.median_volume_20d_shares or 0)
@@ -1719,6 +1750,7 @@ def _execute_day(
         after_weights,
         sectors=state.sectors,
         weekly_turnover=state.weekly_turnover[week_key],
+        enforce_sector_cap=enforce_sector_cap,
     )
     metrics = {
         "after_cost_return_bp": return_bp,
@@ -1782,6 +1814,8 @@ def _enforce_target_caps(
     target: dict[str, int],
     prior_sectors: Mapping[str, str | None],
     candidates: Mapping[str, _Candidate],
+    *,
+    enforce_sector_cap: bool = True,
 ) -> None:
     cap = replay._REPLAY_POLICY["maximum_symbol_weight_bp"]
     for symbol in target:
@@ -1801,8 +1835,10 @@ def _enforce_target_caps(
             if symbol in candidates
             else prior_sectors.get(symbol)
         )
-        if sector is None:
+        if sector is None and enforce_sector_cap:
             target[symbol] = 0
+            continue
+        if sector is None:
             continue
         by_sector.setdefault(sector, []).append(symbol)
     for names in by_sector.values():
@@ -1858,6 +1894,7 @@ def _constraint_violations(
     *,
     sectors: Mapping[str, str | None],
     weekly_turnover: int,
+    enforce_sector_cap: bool = True,
 ) -> tuple[str, ...]:
     positions = {
         key: value for key, value in weights.items() if key != _CASH and value
@@ -1873,17 +1910,18 @@ def _constraint_violations(
     ):
         violations.append("symbol_cap")
     sector_weights: dict[str, int] = {}
-    for symbol, value in positions.items():
-        sector = sectors.get(symbol)
-        if sector is None:
-            violations.append("sector_unknown")
-            continue
-        sector_weights[sector] = sector_weights.get(sector, 0) + value
-    if any(
-        value > replay._REPLAY_POLICY["maximum_sector_weight_bp"]
-        for value in sector_weights.values()
-    ):
-        violations.append("sector_cap")
+    if enforce_sector_cap:
+        for symbol, value in positions.items():
+            sector = sectors.get(symbol)
+            if sector is None:
+                violations.append("sector_unknown")
+                continue
+            sector_weights[sector] = sector_weights.get(sector, 0) + value
+        if any(
+            value > replay._REPLAY_POLICY["maximum_sector_weight_bp"]
+            for value in sector_weights.values()
+        ):
+            violations.append("sector_cap")
     if weekly_turnover > replay._REPLAY_POLICY["maximum_weekly_turnover_bp"]:
         violations.append("weekly_turnover")
     return tuple(sorted(set(violations)))
