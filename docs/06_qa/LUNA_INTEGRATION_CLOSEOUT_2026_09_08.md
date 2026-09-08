@@ -59,5 +59,6 @@
 ## Git 收尾
 
 - `query_current_repo_context` 的獨有 commit 數為 0；最後再次確認乾淨、無 untracked／ignored 檔後，已移除舊 worktree 與該分支。完整 refs／Git bundle 已保存並驗證。
-- A／B 與前次整併的未提交內容，連同 C 原提交及本次回歸修補，將以保留歷史的 fast-forward 同步 main／dev。推送前 origin/main、origin/dev 均為目前 HEAD 的祖先；不使用 force push。
-- 最終 commit／推送與僅保留 main／dev 的結果由完成後 Git 查核補記。
+- A／B 與前次整併的未提交內容已完整提交為 `bfa6a0f0a696d26df480b18c58e8e84cffac2bf0`（82 檔、2,766 行新增／1,704 行刪除，包含新增文件與搬移支援模組）；C 原提交保留在其歷史中。main／dev 已以 fast-forward 同步，`codex/luna-c-uiux` 已用 `git branch -d` 移除。
+- `git push --atomic origin main dev` 成功；獨立 `git ls-remote --heads origin` 讀回只有 main／dev，兩者均為上述整合提交。沒有 force push、reset 或清除其他 refs／tags。
+- 本機 `git branch` 只有 main／dev，`git worktree list` 只有 `C:/Projects/PythonProjects/technical_analysis` 主 checkout，停留在 dev；整合推送後 `git status --short` 為空。本紀錄的後續純文件提交沿用同一程式驗證基線，並同步推送兩個保留分支。
