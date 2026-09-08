@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import csv
+from hashlib import sha256
 import re
 import time
 from dataclasses import dataclass
@@ -108,7 +109,6 @@ def build_mops_monthly_revenue_snapshot(
     fetched_periods: set[str] = set()
     diagnostics: list[FactorDiagnostic] = []
     fetched_at = _utc_now_text()
-    source_version = f"mops-static-{fetch_date.isoformat()}"
 
     request_pairs = [(market, period) for period in requested_periods for market in markets]
     for index, (market, period) in enumerate(request_pairs):
@@ -130,6 +130,11 @@ def build_mops_monthly_revenue_snapshot(
                     html,
                     encoding="utf-8-sig",
                 )
+            source_version = _snapshot_source_version(
+                market=market,
+                period=period,
+                html=html,
+            )
             parsed_rows, parse_diagnostics = parse_mops_monthly_revenue_snapshot_html(
                 html,
                 market=market,
@@ -253,6 +258,12 @@ def _has_required_headers(headers: list[str]) -> bool:
         "去年累計營收",
     }
     return required.issubset(set(headers))
+
+
+def _snapshot_source_version(*, market: str, period: str, html: str) -> str:
+    """以市場、實際期別與回應內容雜湊建立可重現的來源版本。"""
+    digest = sha256(html.encode("utf-8")).hexdigest()
+    return f"mops-static-{market}-{period}-sha256-{digest}"
 
 
 def _lookup(row: dict[str, str], names: tuple[str, ...]) -> str:

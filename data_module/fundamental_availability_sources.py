@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Mapping
@@ -101,10 +101,22 @@ class FundamentalAvailabilityOverride:
 class FundamentalAvailabilityOverrideLoadResult:
     overrides: dict[AvailabilityKey, FundamentalAvailabilityOverride]
     diagnostics: tuple[FactorDiagnostic, ...] = ()
+    revision_history: Mapping[
+        AvailabilityKey,
+        tuple[FundamentalAvailabilityOverride, ...],
+    ] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "overrides", dict(self.overrides))
         object.__setattr__(self, "diagnostics", tuple(self.diagnostics))
+        object.__setattr__(
+            self,
+            "revision_history",
+            {
+                key: tuple(values)
+                for key, values in self.revision_history.items()
+            },
+        )
 
 
 def load_monthly_revenue_availability_overrides(
@@ -113,6 +125,10 @@ def load_monthly_revenue_availability_overrides(
     """讀取 mapping，且在 loader 層就阻擋 first-seen 繞過 backfill gate。"""
 
     overrides: dict[AvailabilityKey, FundamentalAvailabilityOverride] = {}
+    revision_history: dict[
+        AvailabilityKey,
+        tuple[FundamentalAvailabilityOverride, ...],
+    ] = {}
     formal_candidates: dict[AvailabilityKey, list[FundamentalAvailabilityOverride]] = {}
     diagnostics: list[FactorDiagnostic] = []
 
@@ -221,6 +237,7 @@ def load_monthly_revenue_availability_overrides(
         key = (stock_code, period)
         if provenance_mode == "retroactive_baseline":
             overrides[key] = override
+            revision_history[key] = (override,)
         else:
             formal_candidates.setdefault(key, []).append(override)
 
@@ -232,10 +249,14 @@ def load_monthly_revenue_availability_overrides(
         )
         if latest is not None:
             overrides[key] = latest
+            revision_history[key] = tuple(
+                sorted(candidates, key=lambda item: item.revision)
+            )
 
     return FundamentalAvailabilityOverrideLoadResult(
         overrides=overrides,
         diagnostics=tuple(diagnostics),
+        revision_history=revision_history,
     )
 
 

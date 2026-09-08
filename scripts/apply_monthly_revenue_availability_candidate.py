@@ -45,7 +45,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     config = TWStockConfig()
     target = args.target or config.monthly_revenue_availability_file
-    backup_dir = args.backup_dir or target.parent / "backup"
+    backup_dir = (
+        args.backup_dir
+        or target.parent / "backup" / "monthly_revenue_recovery"
+    )
 
     if args.apply and args.confirm != "apply-monthly-revenue-availability":
         print(

@@ -35,6 +35,22 @@ class StatementItemRecord:
     source: str
     source_version: str
     quality: FactorQuality
+    # 研究財報 sidecar 會提供個別／合併範圍；正式舊表沒有此欄時維持合併相容預設。
+    report_basis: str = "consolidated"
+    # factor 語意 adapter 不覆寫官方 row code；以下欄位保留原始碼及其證據。
+    raw_item_code: str | None = None
+    item_code_source: str | None = None
+    item_code_lineage_sha256: str | None = None
+    official_item_name: str | None = None
+    xbrl_concept: str | None = None
+    candidate_source_version: str | None = None
+    industry_category: str | None = None
+    semantic_mapping_source: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+    period_basis: str | None = None
+    value_unit: str | None = None
+    value_scale: int | None = None
 
 
 @dataclass(frozen=True)

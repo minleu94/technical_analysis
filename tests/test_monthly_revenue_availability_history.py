@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import date
+import json
+
+import pytest
 
 from data_module import monthly_revenue_availability_history as history
 from data_module.monthly_revenue_availability_history import (
@@ -128,6 +131,114 @@ def test_parse_announcement_date_accepts_roc_and_western_formats() -> None:
     assert parse_announcement_date("2026/06/15") == date(2026, 6, 15)
 
 
+def test_snapshot_capture_uses_next_taipei_day_and_requires_timezone() -> None:
+    session_date = getattr(history, "_snapshot_session_available_date")
+
+    assert session_date("2026-09-07T07:17:53Z") == date(2026, 9, 8)
+    assert session_date("2026-09-07T08:00:00Z") == date(2026, 9, 8)
+    assert session_date("2026-09-07T15:59:59Z") == date(2026, 9, 8)
+    with pytest.raises(ValueError, match="timezone"):
+        session_date("2026-09-07T16:00:00")
+
+
+def test_extract_mops_static_path_accepts_current_redirect_window_open_shape() -> None:
+    extract = getattr(history, "_extract_mops_static_path")
+    html = "<form onSubmit=\"window.open('/nas/t21/sii/t21sc03_115_7_0.html','');return false;\">"
+
+    assert extract(html) == "/nas/t21/sii/t21sc03_115_7_0.html"
+    assert (
+        extract('window.open("/nas/t21/sii/t21sc03_115_7_0.html", "")')
+        == "/nas/t21/sii/t21sc03_115_7_0.html"
+    )
+
+
+def test_extract_mops_static_path_rejects_non_official_targets() -> None:
+    extract = getattr(history, "_extract_mops_static_path")
+
+    assert extract("window.open('https://example.test/report.html','')") is None
+    assert extract("window.open('/mops/web/report.html','')") is None
+    assert extract("window.open('/nas/t21/../secret.html','')") is None
+
+
+def test_validate_mops_static_report_rejects_wrong_market_or_period() -> None:
+    validate = getattr(history, "_validate_mops_static_report")
+    html = "<html><title>上市公司115年7月份營業收入統計表</title></html>"
+
+    validate(
+        html,
+        market="twse",
+        period="2026-07",
+        static_path="/nas/t21/sii/t21sc03_115_7_0.html",
+    )
+    with pytest.raises(ValueError, match="market"):
+        validate(
+            html,
+            market="twse",
+            period="2026-07",
+            static_path="/nas/t21/otc/t21sc03_115_7_0.html",
+        )
+    with pytest.raises(ValueError, match="body"):
+        validate(
+            "<html><title>上櫃公司115年7月份營業收入統計表</title></html>",
+            market="twse",
+            period="2026-07",
+            static_path="/nas/t21/sii/t21sc03_115_7_0.html",
+        )
+    with pytest.raises(ValueError, match="period"):
+        validate(
+            html,
+            market="twse",
+            period="2026-08",
+            static_path="/nas/t21/sii/t21sc03_115_7_0.html",
+        )
+
+
+def test_fetch_mops_static_report_follows_redirect_and_checks_response_identity(monkeypatch) -> None:
+    responses = {
+        "https://mops.twse.com.tw/mops/api/redirectToOld": json.dumps(
+            {
+                "result": {
+                    "url": "https://mopsov.twse.com.tw/mops/web/redirect-token"
+                }
+            }
+        ).encode("utf-8"),
+        "https://mopsov.twse.com.tw/mops/web/redirect-token": (
+            "window.open(\"/nas/t21/sii/t21sc03_115_7_0.html\", \"\");"
+        ).encode("utf-8"),
+        "https://mopsov.twse.com.tw/nas/t21/sii/t21sc03_115_7_0.html": (
+            "<html><title>上市公司115年7月份營業收入統計表</title></html>"
+        ).encode("big5"),
+    }
+    calls: list[str] = []
+
+    class _Response:
+        def __init__(self, payload: bytes) -> None:
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self) -> bytes:
+            return self.payload
+
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        return _Response(responses[request.full_url])
+
+    monkeypatch.setattr(history, "urlopen", fake_urlopen)
+
+    result = history._fetch_mops_static_monthly_revenue_html(
+        market="twse",
+        period="2026-07",
+    )
+
+    assert "上市公司115年7月份" in result
+    assert calls == list(responses)
+
+
 def test_build_history_rows_requires_announcement_date() -> None:
     result = build_historical_monthly_revenue_availability(
         official_rows_by_market={
@@ -211,6 +322,26 @@ def test_build_history_rows_keeps_twse_and_tpex_sources_distinct() -> None:
     assert result.matched_raw_monthly_revenue_rows == 2
     assert result.missing_availability_count == 0
     assert result.duplicate_mapping_rows == 0
+
+
+def test_build_history_uses_conservative_snapshot_session_available_date() -> None:
+    result = build_historical_monthly_revenue_availability(
+        official_rows_by_market={
+            "twse": [
+                {"資料年月": "11507", "公司代號": "2330", "出表日期": "1150810"},
+            ],
+        },
+        raw_periods={("2330", "2026-07")},
+        start_period="2026-07",
+        end_period="2026-07",
+        markets=("twse",),
+        fetch_date=date(2026, 9, 7),
+        snapshot_captured_at="2026-09-07T07:17:53Z",
+    )
+
+    assert result.diagnostics == ()
+    assert result.rows[0]["announced_date"] == "2026-08-10"
+    assert result.rows[0]["available_date"] == "2026-09-08"
 
 
 def test_build_history_rows_rejects_unreasonably_late_availability() -> None:

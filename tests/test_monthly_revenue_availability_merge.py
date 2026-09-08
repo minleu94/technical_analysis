@@ -7,6 +7,10 @@ import sys
 import pytest
 
 from scripts.apply_monthly_revenue_availability_candidate import main
+from data_module.monthly_revenue_availability_merge import (
+    apply_monthly_revenue_availability_merge,
+    plan_monthly_revenue_availability_merge,
+)
 
 
 _HEADER = (
@@ -23,11 +27,13 @@ def _formal_row(
     available_date: str = "2026-08-18",
     source_version: str = "twse-openapi-t187ap05-l-2026-08-28",
     source_hash: str = "sha256:" + "a" * 64,
+    revision: str = "1",
+    parent_revision: str = "",
 ) -> str:
     return (
         f"{stock_code},{period},{period}-31,{announced_date},{available_date},"
         f"twse.monthly_revenue_announcement,{source_version},formal-availability.v2,"
-        f"official_announcement,{source_hash},1,\n"
+        f"official_announcement,{source_hash},{revision},{parent_revision}\n"
     )
 
 
@@ -147,6 +153,80 @@ def test_repeating_same_candidate_is_idempotent_and_does_not_create_backup(tmp_p
     assert "added_count: `0`" in output
     assert "unchanged_count: `1`" in output
     assert list(backup_dir.glob("*.csv")) == backups_after_first
+
+
+def test_revision_candidate_is_appended_without_replacing_prior_mapping_revision(
+    tmp_path,
+    capsys,
+):
+    target = tmp_path / "monthly_revenue_availability.csv"
+    _write(target, _formal_row())
+    candidate = tmp_path / "candidate.csv"
+    _write(
+        candidate,
+        _formal_row()
+        + _formal_row(
+            announced_date="2026-08-01",
+            available_date="2026-08-02",
+            source_version="twse-openapi-t187ap05-l-2026-09-07",
+            source_hash="sha256:" + "b" * 64,
+            revision="2",
+            parent_revision="1",
+        ),
+    )
+    backup_dir = tmp_path / "backup"
+
+    assert (
+        main(
+            [
+                "--candidate",
+                str(candidate),
+                "--target",
+                str(target),
+                "--backup-dir",
+                str(backup_dir),
+                "--apply",
+                "--confirm",
+                "apply-monthly-revenue-availability",
+            ]
+        )
+        == 0
+    )
+
+    output = capsys.readouterr().out
+    assert "added_count: `1`" in output
+    assert "unchanged_count: `1`" in output
+    merged = target.read_text(encoding="utf-8-sig")
+    assert ",1,\n" in merged
+    assert ",2,1\n" in merged
+    assert len(list(backup_dir.glob("*.csv"))) == 1
+
+
+def test_apply_rejects_mapping_changed_after_plan_without_overwriting_writer(
+    tmp_path,
+):
+    target = tmp_path / "monthly_revenue_availability.csv"
+    _write(target, _legacy_row())
+    candidate = tmp_path / "candidate.csv"
+    _write(candidate, _formal_row())
+    plan = plan_monthly_revenue_availability_merge(
+        candidate_file=candidate,
+        target_file=target,
+    )
+    concurrent_row = _formal_row(
+        stock_code="2317",
+        source_version="concurrent-writer-v1",
+        source_hash="sha256:" + "d" * 64,
+    )
+    target.write_text(_HEADER + concurrent_row, encoding="utf-8-sig")
+
+    with pytest.raises(RuntimeError, match="target changed after planning"):
+        apply_monthly_revenue_availability_merge(
+            plan=plan,
+            backup_dir=tmp_path / "backup",
+        )
+
+    assert "2317,2026-07" in target.read_text(encoding="utf-8-sig")
 
 
 def test_cli_help_reconfigures_windows_console_before_argparse(

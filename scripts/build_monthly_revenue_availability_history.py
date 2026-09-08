@@ -46,6 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pit-source-version", default="")
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--fetch-date", default=date.today().isoformat())
+    parser.add_argument(
+        "--snapshot-captured-at",
+        default=None,
+        help="MOPS snapshot 的實際 ISO-8601 抓取時間；會依台北盤後規則設定保守可用日",
+    )
     args = parser.parse_args(argv)
 
     markets = tuple(item.strip() for item in args.markets.split(",") if item.strip())
@@ -90,6 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         markets=build_markets,
         stock_code=args.stock_code,
         fetch_date=date.fromisoformat(args.fetch_date),
+        snapshot_captured_at=args.snapshot_captured_at,
     )
     if fetch_diagnostics:
         result = _with_fetch_diagnostics(result, fetch_diagnostics)

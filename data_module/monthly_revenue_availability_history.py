@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Mapping
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
 
@@ -40,6 +42,7 @@ TWSE_HISTORY_SOURCE_VERSION_PREFIX = "twse-openapi-t187ap05-l"
 TPEX_HISTORY_SOURCE_VERSION_PREFIX = "tpex-openapi-mopsfin-t187ap05-o"
 MOPS_HISTORY_SOURCE_VERSION_PREFIX = "mops-t05st10-ifrs"
 MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS = 45
+_TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 OFFICIAL_OPENAPI_URLS = {
     "twse": "https://openapi.twse.com.tw/v1/opendata/t187ap05_L",
@@ -49,6 +52,10 @@ MOPS_REDIRECT_API_URL = "https://mops.twse.com.tw/mops/api/redirectToOld"
 MOPS_STATIC_TYPEK = {
     "twse": "sii0",
     "tpex": "otc0",
+}
+MOPS_STATIC_MARKET_PATH = {
+    "twse": "sii",
+    "tpex": "otc",
 }
 
 _MARKET_SOURCES = {
@@ -247,12 +254,18 @@ def build_historical_monthly_revenue_availability(
     end_period: str,
     markets: tuple[str, ...],
     fetch_date: date,
+    snapshot_captured_at: str | None = None,
     stock_code: str | None = None,
     available_lag_days: int = 1,
     max_available_lag_days: int = MONTHLY_REVENUE_MAX_AVAILABLE_LAG_DAYS,
 ) -> MonthlyRevenueAvailabilityHistoryResult:
     requested_periods = tuple(_iter_periods(start_period, end_period))
     requested_period_set = set(requested_periods)
+    snapshot_available_date = (
+        _snapshot_session_available_date(snapshot_captured_at)
+        if snapshot_captured_at
+        else None
+    )
     rows: list[MonthlyRevenueAvailabilityRow] = []
     diagnostics: list[FactorDiagnostic] = []
     diagnostics_by_source: dict[str, int] = {}
@@ -333,6 +346,10 @@ def build_historical_monthly_revenue_availability(
                 continue
             as_of_date = _period_end(period)
             available_date = announced_date + timedelta(days=available_lag_days)
+            if snapshot_available_date is not None:
+                # MOPS static 可能在原公告後被修訂；沒有修訂時間線時，
+                # 值至少只能從本次台北盤後 session 可用。
+                available_date = max(available_date, snapshot_available_date)
             if available_date > as_of_date + timedelta(days=max_available_lag_days):
                 diagnostics.append(
                     _diagnostic(
@@ -724,11 +741,34 @@ def _fetch_mops_static_monthly_revenue_html(*, market: str, period: str) -> str:
     report_url = str(redirect_response.get("result", {}).get("url", ""))
     if not report_url:
         raise ValueError("MOPS redirect response has no report URL")
+    parsed_report_url = urlparse(report_url)
+    if (
+        parsed_report_url.scheme != "https"
+        or parsed_report_url.hostname != "mopsov.twse.com.tw"
+    ):
+        raise ValueError("MOPS redirect report URL is not the official mopsov HTTPS host")
     popup_html = _fetch_text(report_url, encoding="utf-8")
     static_path = _extract_mops_static_path(popup_html)
     if static_path is None:
         raise ValueError("MOPS redirect report has no static nas path")
-    return _fetch_text(f"https://mopsov.twse.com.tw{static_path}", encoding="big5")
+    expected_market_path = MOPS_STATIC_MARKET_PATH.get(market)
+    if expected_market_path is None:
+        raise ValueError(f"unsupported MOPS market: {market}")
+    if not static_path.startswith(f"/nas/t21/{expected_market_path}/"):
+        raise ValueError(
+            "MOPS redirect report path does not match the requested official market"
+        )
+    static_html = _fetch_text(
+        f"https://mopsov.twse.com.tw{static_path}",
+        encoding="big5",
+    )
+    _validate_mops_static_report(
+        static_html,
+        market=market,
+        period=period,
+        static_path=static_path,
+    )
+    return static_html
 
 
 def _fetch_text(url: str, *, encoding: str) -> str:
@@ -744,10 +784,75 @@ def _fetch_text(url: str, *, encoding: str) -> str:
 
 
 def _extract_mops_static_path(html: str) -> str | None:
-    match = re.search(r"window\.open\('([^']+)'", html)
+    # 現行 redirect 回應使用 ``window.open('/nas/...','')``，也有雙引號變體。
+    # 只擷取相對路徑並嚴格限制在官方 /nas/t21/ 報表檔，避免外部或穿越路徑
+    # 被拼接成下載網址。
+    match = re.search(
+        r"window\.open\(\s*(?P<quote>['\"])(?P<path>[^'\"]+)(?P=quote)",
+        html,
+    )
     if match is None:
         return None
-    return match.group(1)
+    path = match.group("path").strip()
+    if not re.fullmatch(
+        r"/nas/t21/[A-Za-z0-9_-]+/[A-Za-z0-9_.-]+\.html",
+        path,
+    ):
+        return None
+    return path
+
+
+def _validate_mops_static_report(
+    html: str,
+    *,
+    market: str,
+    period: str,
+    static_path: str,
+) -> None:
+    """確認 redirect 實際回傳的市場與期別仍符合請求。"""
+    expected_market_path = MOPS_STATIC_MARKET_PATH.get(market)
+    if expected_market_path is None:
+        raise ValueError(f"unsupported MOPS market: {market}")
+    path_match = re.fullmatch(
+        rf"/nas/t21/{re.escape(expected_market_path)}/t21sc03_(\d{{3}})_(\d{{1,2}})_0\.html",
+        static_path,
+    )
+    if path_match is None:
+        raise ValueError("MOPS static report path has an unexpected market or filename")
+    try:
+        requested_year, requested_month = (int(part) for part in period.split("-", 1))
+    except (TypeError, ValueError):
+        raise ValueError("MOPS static report request period is invalid") from None
+    response_year = int(path_match.group(1)) + 1911
+    response_month = int(path_match.group(2))
+    if (response_year, response_month) != (requested_year, requested_month):
+        raise ValueError(
+            "MOPS static report path period does not match the requested period"
+        )
+    market_title = "上市" if market == "twse" else "上櫃"
+    title_pattern = rf"{market_title}公司{response_year - 1911:03d}年{response_month}月份"
+    if re.search(title_pattern, html) is None:
+        raise ValueError(
+            "MOPS static report body period does not match the requested period"
+        )
+
+
+def _snapshot_session_available_date(fetched_at: str) -> date:
+    """將帶時區的抓取時間轉成 date-only 的保守可用日。
+
+    date-only consumer 會把整個 ``available_date`` 當成可用，因此不能在
+    抓取當日盤後就讓早盤查詢看見資料；若需要同日使用，必須另以完整
+    timestamp 做明確比較。這裡使用下一個台北曆日，未宣稱交易所假日後
+    的實際 next session。
+    """
+    try:
+        parsed = datetime.fromisoformat(fetched_at.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("fetched_at must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("fetched_at must include a timezone")
+    local = parsed.astimezone(_TAIPEI_TZ)
+    return local.date() + timedelta(days=1)
 
 
 def _find_mops_announcement_date(text: str) -> str | None:

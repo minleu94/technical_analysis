@@ -71,11 +71,32 @@ class _TableRowParser(HTMLParser):
 
 def parse_ratio_rows(html_text: str) -> list[dict[str, Any]]:
     """Parse MOPS t163sb06 values using Decimal, never float."""
+    rows, _, _, _ = parse_ratio_rows_with_diagnostics(html_text)
+    return rows
+
+
+def parse_ratio_rows_with_diagnostics(
+    html_text: str,
+) -> tuple[list[dict[str, Any]], tuple[dict[str, str], ...], int, int]:
+    """Parse numeric rows and retain the company-row denominator diagnostics."""
     parser = _TableRowParser()
     parser.feed(html_text)
     rows: list[dict[str, Any]] = []
+    excluded_rows: list[dict[str, str]] = []
+    stock_row_count = 0
     for cells in parser.rows:
         if len(cells) != 7 or not _STOCK_CODE_RE.fullmatch(cells[0]):
+            continue
+        stock_row_count += 1
+        numeric_cells = tuple(cell.strip() for cell in cells[2:7])
+        if not any(numeric_cells):
+            excluded_rows.append(
+                {
+                    "stock_code": cells[0],
+                    "statement_type": "financial_ratio",
+                    "reason": "empty_numeric_cells",
+                }
+            )
             continue
         revenue = _scaled_integer(cells[2], scale=100_000_000, field="revenue_million_twd")
         gross_margin = _scaled_integer(cells[3], scale=100, field="gross_margin_pct")
@@ -106,7 +127,7 @@ def parse_ratio_rows(html_text: str) -> list[dict[str, Any]]:
         )
     if not rows:
         raise ValueError("MOPS t163sb06 response has no parseable numeric rows")
-    return rows
+    return rows, tuple(excluded_rows), stock_row_count, len(parser.rows)
 
 
 def parse_listing_event(listing_html: bytes, *, stock_code: str, roc_year: int, season: int) -> dict[str, str]:
@@ -201,7 +222,12 @@ def build_candidate(
         ratio_path.write_bytes(ratio_response)
         listing_path.write_bytes(listing_response)
 
-        numeric_rows = parse_ratio_rows(ratio_response.decode("utf-8", errors="strict"))
+        (
+            numeric_rows,
+            excluded_rows,
+            response_stock_row_count,
+            response_table_row_count,
+        ) = parse_ratio_rows_with_diagnostics(ratio_response.decode("utf-8", errors="strict"))
         numeric_row = next((row for row in numeric_rows if row["stock_code"] == stock_code), None)
         if numeric_row is None:
             raise ValueError("MOPS numeric ratio response does not contain the requested stock")
@@ -211,6 +237,12 @@ def build_candidate(
             roc_year=roc_year,
             season=season,
         )
+        expected_period = f"{roc_year + 1911:04d}-Q{season}"
+        if listing_event["period"] != expected_period:
+            raise ValueError(
+                "MOPS document listing period does not match the requested period; "
+                f"requested={expected_period}; actual={listing_event['period']}"
+            )
 
         numeric_source = {
             "schema_version": "mops-t163sb06-numeric-source.v1",
@@ -219,6 +251,10 @@ def build_candidate(
             "source_url": MOPS_RATIO_URL,
             "request": {"TYPEK": market, "year": str(roc_year), "season": str(season)},
             "captured_at": captured_at,
+            "response_table_row_count": response_table_row_count,
+            "response_stock_row_count": response_stock_row_count,
+            "accepted_numeric_row_count": len(numeric_rows),
+            "excluded_rows": list(excluded_rows),
             "raw_response": {
                 "basename": ratio_path.name,
                 "sha256": _file_sha256_reference(ratio_path),
@@ -262,6 +298,7 @@ def build_candidate(
         candidate_row = {
             "stock_code": stock_code,
             "symbol": stock_code,
+            "market": market,
             "statement_type": "financial_ratio",
             "statement_scope": "consolidated",
             "period": listing_event["period"],
@@ -294,6 +331,11 @@ def build_candidate(
             "rows": [candidate_row],
             "pit_coverage_summary": {
                 "numeric_pit_ratios_supplied": True,
+                "response_table_row_count": response_table_row_count,
+                "response_stock_row_count": response_stock_row_count,
+                "accepted_numeric_row_count": len(numeric_rows),
+                "excluded_row_count": len(excluded_rows),
+                "excluded_rows": list(excluded_rows),
                 **coverage,
                 "coverage_interpretation": "bounded single-stock historical candidate; not a full-universe feature materialization",
             },

@@ -88,6 +88,7 @@ class FundamentalFactorService:
                 statement_items,
                 stock_code=stock_code,
                 decision_period=decision_statement_period,
+                include_yoy=True,
             )
             records.extend(statement_result.records)
             diagnostics.extend(statement_result.diagnostics)

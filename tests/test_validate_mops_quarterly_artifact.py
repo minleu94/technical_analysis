@@ -14,6 +14,28 @@ def test_mops_artifact_requires_announcement_and_revision_parent() -> None:
     assert rows[0]["source_contract_mapping_version"] == "p0-candidate-source-alignment.v1"
 
 
+def test_individual_artifact_must_declare_matching_report_scope() -> None:
+    payload = {
+        "source_id": "mops.statement.publication",
+        "source_version": "mops-t164-individual-v1",
+        "captured_at": "2026-09-07T16:10:55Z",
+        "report_basis": "individual",
+        "rows": [{
+            "stock_code": "1777",
+            "statement_type": "income_statement",
+            "statement_scope": "individual",
+            "report_basis": "individual",
+            "period": "2026-Q2",
+            "period_end": "2026-06-30",
+            "announcement_date": "2026-08-06",
+            "available_date": "2026-09-09",
+            "revision": 1,
+            "content_hash": "a" * 64,
+        }],
+    }
+    assert validate_artifact(payload)[0]["report_basis"] == "individual"
+
+
 def test_numeric_pit_claim_requires_separate_raw_and_availability_lineage() -> None:
     payload = {
         "source_id": "mops.statement.publication",

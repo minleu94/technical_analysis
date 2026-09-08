@@ -1,4 +1,7 @@
+import pytest
+
 from scripts.build_mops_numeric_pit_candidate import parse_listing_event, parse_ratio_rows
+from scripts.build_mops_numeric_pit_candidate import parse_ratio_rows_with_diagnostics
 
 
 def test_parse_ratio_rows_uses_integer_units_without_float() -> None:
@@ -19,6 +22,33 @@ def test_parse_ratio_rows_uses_integer_units_without_float() -> None:
             "net_margin_bp": 3875,
         },
     }]
+
+
+def test_parse_ratio_rows_keeps_empty_company_rows_out_of_numeric_acceptance() -> None:
+    rows, excluded, stock_row_count, table_row_count = parse_ratio_rows_with_diagnostics(
+        "<table>"
+        "<tr><td>2816</td><td>旺旺保</td><td></td><td></td><td></td><td></td><td></td></tr>"
+        "<tr><td>2330</td><td>台積電</td><td>592,640.25</td>"
+        "<td>53.20</td><td>42.10</td><td>40.00</td><td>38.75</td></tr>"
+        "</table>"
+    )
+
+    assert [row["stock_code"] for row in rows] == ["2330"]
+    assert excluded == ({
+        "stock_code": "2816",
+        "statement_type": "financial_ratio",
+        "reason": "empty_numeric_cells",
+    },)
+    assert stock_row_count == 2
+    assert table_row_count == 2
+
+
+def test_parse_ratio_rows_rejects_partially_missing_company_row() -> None:
+    with pytest.raises(ValueError, match="not a decimal value"):
+        parse_ratio_rows(
+            "<table><tr><td>2330</td><td>台積電</td><td>592,640.25</td>"
+            "<td></td><td>42.10</td><td>40.00</td><td>38.75</td></tr></table>"
+        )
 
 
 def test_parse_listing_event_preserves_publication_and_no_correction() -> None:

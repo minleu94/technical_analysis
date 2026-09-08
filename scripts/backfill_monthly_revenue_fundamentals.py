@@ -25,6 +25,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db-file", type=Path, default=None)
     parser.add_argument("--raw-dir", type=Path, default=None)
     parser.add_argument("--mops-snapshot-file", type=Path, default=None)
+    parser.add_argument("--scope-manifest", type=Path, default=None)
     parser.add_argument("--availability-file", type=Path, default=None)
     parser.add_argument("--backup-dir", type=Path, default=None)
     parser.add_argument("--source-version", default=f"financial-data-csv-monthly-revenue-{date.today().isoformat()}")
@@ -40,9 +41,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.backup_dir is not None:
         backup_dir = args.backup_dir
     elif args.db_file is not None:
-        backup_dir = args.db_file.parent / "backup"
+        backup_dir = args.db_file.parent / "backup" / "monthly_revenue_recovery"
     else:
-        backup_dir = config.backup_dir
+        backup_dir = config.backup_dir / "monthly_revenue_recovery"
 
     if args.apply:
         if args.confirm != "apply-monthly-revenue-backfill":
@@ -58,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
                 snapshot_file=args.mops_snapshot_file,
                 availability_file=availability_file,
                 source_version=args.source_version,
+                scope_manifest_file=args.scope_manifest,
             )
         else:
             result = apply_monthly_revenue_backfill(
@@ -80,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             snapshot_file=args.mops_snapshot_file,
             availability_file=availability_file,
             source_version=args.source_version,
+            scope_manifest_file=args.scope_manifest,
         )
     else:
         plan = plan_monthly_revenue_backfill(

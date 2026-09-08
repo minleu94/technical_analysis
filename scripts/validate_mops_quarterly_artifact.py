@@ -22,6 +22,7 @@ REQUIRED_ROW_FIELDS = {
     "stock_code", "statement_type", "statement_scope", "period", "period_end",
     "announcement_date", "available_date", "revision", "content_hash",
 }
+_REPORT_BASES = frozenset({"consolidated", "individual"})
 SHA256_REFERENCE_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 NUMERIC_LINEAGE_FIELDS = {
     "numeric_statement_source",
@@ -121,12 +122,17 @@ def validate_artifact(payload: object) -> list[dict[str, object]]:
     rows = payload["rows"]
     if not isinstance(rows, list):
         raise ValueError("mops artifact rows must be a list")
+    report_basis = payload.get("report_basis", "consolidated")
+    if report_basis not in _REPORT_BASES:
+        raise ValueError("mops artifact report_basis is unsupported")
 
     numeric_src_id = "mops.t163sb06.financial_ratio"
     avail_src_id = "mops.document_listing.statement_publication"
     lineage = payload.get("lineage")
     if isinstance(lineage, Mapping) and isinstance(lineage.get("numeric_statement_source"), Mapping):
         numeric_src_id = str(lineage["numeric_statement_source"].get("source_id") or numeric_src_id)
+    if isinstance(lineage, Mapping) and isinstance(lineage.get("availability_source"), Mapping):
+        avail_src_id = str(lineage["availability_source"].get("source_id") or avail_src_id)
 
     mapping = resolve_mops_numeric_pit_source_mapping(
         artifact_source_id=str(payload["source_id"]),
@@ -144,6 +150,11 @@ def validate_artifact(payload: object) -> list[dict[str, object]]:
     for row in rows:
         if not isinstance(row, dict) or not REQUIRED_ROW_FIELDS.issubset(row):
             raise ValueError("mops artifact row missing PIT fields")
+        row_basis = row.get("report_basis", report_basis)
+        if row_basis != report_basis or row.get("statement_scope") != report_basis:
+            raise ValueError("mops artifact report basis and statement scope do not match")
+        if report_basis == "individual" and "report_basis" not in row:
+            raise ValueError("individual MOPS artifact row must declare report_basis")
         revision = int(str(row["revision"]))
         if revision < 1 or (revision > 1 and not str(row.get("parent_revision") or "").strip()):
             raise ValueError("mops artifact revision chain invalid")

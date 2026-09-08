@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from hashlib import sha256
 
 from data_module.monthly_revenue_snapshot_harvester import (
     build_mops_monthly_revenue_snapshot,
@@ -127,3 +128,10 @@ def test_build_mops_snapshot_fetches_markets_and_periods_with_summary() -> None:
     assert result.requested_periods == ("2026-03", "2026-04")
     assert result.fetched_periods == ("2026-03", "2026-04")
     assert "parsed_rows: 2" in result.to_markdown()
+    expected_digest = sha256(MOPS_SAMPLE_HTML.encode("utf-8")).hexdigest()
+    assert result.rows[0]["source_version"] == (
+        f"mops-static-twse-2026-03-sha256-{expected_digest}"
+    )
+    assert result.rows[1]["source_version"] == (
+        f"mops-static-twse-2026-04-sha256-{expected_digest}"
+    )

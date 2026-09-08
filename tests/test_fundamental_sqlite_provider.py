@@ -103,6 +103,256 @@ def test_sqlite_provider_loads_monthly_revenue_records_available_by_decision_dat
     assert record.quality == FactorQuality.OBSERVED
 
 
+def test_sqlite_provider_blocks_ambiguous_same_day_versions_regardless_of_insert_order(
+    tmp_path,
+):
+    rows = [
+        (
+            "2330",
+            "2026-05",
+            "2026-05-31",
+            "2026-06-10",
+            "2026-06-11",
+            "100",
+            "mops.monthly_revenue_static_snapshot",
+            "capture-2026-06-11-v1",
+            "observed",
+        ),
+        (
+            "2330",
+            "2026-05",
+            "2026-05-31",
+            "2026-06-10",
+            "2026-06-11",
+            "200",
+            "mops.monthly_revenue_static_snapshot",
+            "capture-2026-06-11-v2",
+            "observed",
+        ),
+    ]
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    _write_formal_mapping(
+        mapping_file,
+        [
+            (
+                "2330",
+                "2026-05",
+                "2026-05-31",
+                "2026-06-10",
+                "2026-06-11",
+                "twse.monthly_revenue_announcement",
+                "test-formal-v2",
+                "formal-availability.v2",
+                "official_announcement",
+                "a" * 64,
+                "1",
+                "",
+            ),
+        ],
+    )
+
+    results = []
+    for name, insert_rows in (("forward", rows), ("reverse", list(reversed(rows)))):
+        db_file = tmp_path / f"{name}.db"
+        with sqlite3.connect(db_file) as conn:
+            apply_fundamental_schema(conn)
+            conn.executemany(
+                """
+                INSERT INTO fundamental_monthly_revenues(
+                    stock_code, period, as_of_date, announced_date, available_date,
+                    revenue, source, source_version, quality
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                insert_rows,
+            )
+        results.append(
+            FundamentalSQLiteProvider(
+                db_file,
+                monthly_revenue_availability_file=mapping_file,
+            ).load_monthly_revenues(
+                stock_code="2330",
+                decision_date=date(2026, 6, 30),
+            )
+        )
+
+    assert results == [(), ()]
+
+
+def test_sqlite_provider_deduplicates_same_day_identical_content_versions(
+    tmp_path,
+):
+    db_file = tmp_path / "twstock.db"
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    rows = [
+        (
+            "2330",
+            "2026-05",
+            "2026-05-31",
+            "2026-06-10",
+            "2026-06-11",
+            "100",
+            "mops.monthly_revenue_static_snapshot",
+            "capture-z",
+            "observed",
+        ),
+        (
+            "2330",
+            "2026-05",
+            "2026-05-31",
+            "2026-06-10",
+            "2026-06-11",
+            "100",
+            "mops.monthly_revenue_static_snapshot",
+            "capture-a",
+            "observed",
+        ),
+    ]
+    with sqlite3.connect(db_file) as conn:
+        apply_fundamental_schema(conn)
+        conn.executemany(
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            list(reversed(rows)),
+        )
+
+    _write_formal_mapping(
+        mapping_file,
+        [
+            (
+                "2330",
+                "2026-05",
+                "2026-05-31",
+                "2026-06-10",
+                "2026-06-11",
+                "twse.monthly_revenue_announcement",
+                "test-formal-v2",
+                "formal-availability.v2",
+                "official_announcement",
+                "a" * 64,
+                "1",
+                "",
+            ),
+        ],
+    )
+
+    records = FundamentalSQLiteProvider(
+        db_file,
+        monthly_revenue_availability_file=mapping_file,
+    ).load_monthly_revenues(
+        stock_code="2330",
+        decision_date=date(2026, 6, 30),
+    )
+
+    assert len(records) == 1
+    assert records[0].revenue == Decimal("100")
+    assert records[0].source_version == "capture-a"
+
+
+def test_sqlite_provider_preserves_historical_decision_after_mapping_revision_append(
+    tmp_path,
+):
+    db_file = tmp_path / "twstock.db"
+    mapping_file = tmp_path / "monthly_revenue_availability.csv"
+    old_row = (
+        "2330",
+        "2026-05",
+        "2026-05-31",
+        "2026-06-10",
+        "2026-06-11",
+        "100",
+        "mops.monthly_revenue_static_snapshot",
+        "snapshot-old",
+        "observed",
+    )
+    revised_row = (
+        "2330",
+        "2026-05",
+        "2026-05-31",
+        "2026-08-01",
+        "2026-08-02",
+        "120",
+        "mops.monthly_revenue_static_snapshot",
+        "snapshot-revised",
+        "observed",
+    )
+    with sqlite3.connect(db_file) as conn:
+        apply_fundamental_schema(conn)
+        conn.executemany(
+            """
+            INSERT INTO fundamental_monthly_revenues(
+                stock_code, period, as_of_date, announced_date, available_date,
+                revenue, source, source_version, quality
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [old_row, revised_row],
+        )
+
+    revision_one = (
+        "2330",
+        "2026-05",
+        "2026-05-31",
+        "2026-06-10",
+        "2026-06-11",
+        "twse.monthly_revenue_announcement",
+        "announcement-v1",
+        "formal-availability.v2",
+        "official_announcement",
+        "a" * 64,
+        "1",
+        "",
+    )
+    revision_two = (
+        "2330",
+        "2026-05",
+        "2026-05-31",
+        "2026-08-01",
+        "2026-08-02",
+        "twse.monthly_revenue_announcement",
+        "announcement-v2",
+        "formal-availability.v2",
+        "official_announcement",
+        "b" * 64,
+        "2",
+        "1",
+    )
+    _write_formal_mapping(mapping_file, [revision_one])
+    provider = FundamentalSQLiteProvider(
+        db_file,
+        monthly_revenue_availability_file=mapping_file,
+    )
+
+    before_append = provider.load_monthly_revenues(
+        stock_code="2330",
+        decision_date=date(2026, 7, 31),
+    )
+    assert len(before_append) == 1
+    assert before_append[0].revenue == Decimal("100")
+    assert before_append[0].available_date == date(2026, 6, 11)
+
+    _write_formal_mapping(mapping_file, [revision_one, revision_two])
+
+    after_append_same_decision = provider.load_monthly_revenues(
+        stock_code="2330",
+        decision_date=date(2026, 7, 31),
+    )
+    assert after_append_same_decision == before_append
+
+    after_revision_available = provider.load_monthly_revenues(
+        stock_code="2330",
+        decision_date=date(2026, 8, 2),
+    )
+    assert len(after_revision_available) == 1
+    assert after_revision_available[0].revenue == Decimal("120")
+    assert after_revision_available[0].available_date == date(2026, 8, 2)
+
+
 def test_sqlite_provider_blocks_unmapped_snapshot_and_keeps_legacy_official_mapping(
     tmp_path,
 ):
