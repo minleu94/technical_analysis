@@ -70,6 +70,9 @@ _FRESHNESS_SOURCE_ALIASES = {
     "sqlite.broker_flows": "sqlite.broker_flows",
     "sqlite.fundamental_monthly_revenues": "fundamental.monthly_revenues",
     "sqlite.fundamental_statement_items": "fundamental.quarterly_statements",
+    "sqlite.institutional_flows": "institutional_flows",
+    "sqlite.credit_transactions": "credit_transactions",
+    "sqlite.tdcc_shareholding": "tdcc_shareholding",
 }
 _FRESHNESS_STATUS_VALUES = {
     "current",
@@ -129,6 +132,8 @@ class StockResearchReportReadService:
         """讀取一份完整投影；每一個資料區塊都有限制筆數且可被取消。"""
 
         code = _normalize_stock_code(stock_code)
+        # 更新器可能剛建立現況表／observed_at 欄；重新載入報告應立即看見。
+        self._column_cache.clear()
         cutoff = _coerce_date(as_of_date) or self.clock().date()
         cutoff_text = cutoff.isoformat()
         self._freshness_statuses.set(self._load_freshness_statuses(cutoff))
@@ -200,7 +205,9 @@ class StockResearchReportReadService:
         fundamental_sources: tuple[StockReportSourceDTO, ...] = ()
         try:
             self._check_cancel(cancel_callback)
-            fundamentals, fundamental_sources, discovered_industry = self._read_fundamentals(code, cutoff)
+            fundamentals, fundamental_sources, discovered_industry = self._read_fundamentals(
+                code, cutoff, include_current=as_of_date is None,
+            )
             industry = discovered_industry
         except StockResearchReportCancelled:
             raise
@@ -253,7 +260,9 @@ class StockResearchReportReadService:
         market_sources: tuple[StockReportSourceDTO, ...] = ()
         try:
             self._check_cancel(cancel_callback)
-            institutional, credit, shareholding, market_sources = self._read_market_ownership(code, cutoff)
+            institutional, credit, shareholding, market_sources = self._read_market_ownership(
+                code, cutoff, include_current=as_of_date is None,
+            )
         except StockResearchReportCancelled:
             raise
         except Exception as exc:
@@ -598,6 +607,8 @@ class StockResearchReportReadService:
         self,
         code: str,
         cutoff: date,
+        *,
+        include_current: bool = False,
     ) -> tuple[
         tuple[StockFundamentalObservationDTO, ...],
         tuple[StockReportSourceDTO, ...],
@@ -718,6 +729,10 @@ class StockResearchReportReadService:
                 available_at = _iso_date(row["available_at"])
                 data_as_of = _iso_date(row["as_of_date"]) or _iso_date(row["period"])
                 quality = _quality(row["quality"])
+                value = _decimal(row["value"])
+                if kind == "monthly_revenue" and str(row["source"]) == "mops.monthly_revenue_static_snapshot" and value is not None:
+                    # 舊 MOPS backfill 保存原始千元；報告 DTO 明定 TWD。
+                    value *= Decimal(1000)
                 observations.append(
                     StockFundamentalObservationDTO(
                         kind=kind,
@@ -726,7 +741,7 @@ class StockResearchReportReadService:
                         as_of_date=data_as_of,
                         announced_date=_iso_date(row["announced_date"]),
                         available_at=available_at,
-                        value=_decimal(row["value"]),
+                        value=value,
                         value_text="" if _decimal(row["value"]) is not None else str(row["value"] or ""),
                         unit="TWD" if kind == "monthly_revenue" else "",
                         source_id=source_id,
@@ -750,6 +765,44 @@ class StockResearchReportReadService:
                 limitations=("只接受 available_date 不晚於查詢日的 row。",),
             )
             sources.append(source)
+        # 即時研究使用已實際觀測的官方快照；它沒有歷史公告日，不能回流 PIT。
+        # 只有當下日期可讀此路徑，且逐列檢查完整 timestamp，歷史查詢仍使用上方契約。
+        now = self.clock()
+        current_table = "fundamental_current_observations"
+        if include_current and cutoff == now.date() and self._columns(current_table):
+            current_rows = self._query(
+                f"""SELECT * FROM {self._table(current_table)}
+                WHERE stock_code = ? AND julianday(observed_at) <= julianday(?)
+                  AND as_of_date <= ?
+                ORDER BY period DESC, observed_at DESC LIMIT 500""",
+                (code, now.isoformat(), cutoff.isoformat()),
+            )
+            seen: set[tuple[str, str, str]] = set()
+            fresh: list[StockFundamentalObservationDTO] = []
+            for row in current_rows:
+                key = (str(row["kind"]), str(row["period"]), str(row["item_code"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                fresh.append(StockFundamentalObservationDTO(
+                    kind=key[0], label=str(row["item_name"]), period=key[1],
+                    as_of_date=str(row["as_of_date"]), announced_date="",
+                    available_at=str(row["observed_at"]), value=_decimal(row["value"]),
+                    unit=str(row["unit"]), source_id=f"sqlite.{current_table}",
+                    source_version=str(row["source_version"]), quality=ReportQuality.OBSERVED.value,
+                ))
+            if fresh:
+                covered = {(r.kind, r.period, r.label) for r in fresh}
+                observations = fresh + [r for r in observations if (r.kind, r.period, r.label) not in covered]
+                sources.append(self._source(
+                    f"sqlite.{current_table}", "官方基本面現況快照（非歷史公告證據）",
+                    row_count=len(fresh), data_as_of=max(r.as_of_date for r in fresh),
+                    available_at=max(r.available_at for r in fresh),
+                    quality=ReportQuality.OBSERVED.value, cutoff=cutoff,
+                    limitations=("依實際觀測時間供目前研究；沒有原公告日，不供歷史回測或 ML PIT 訓練。",),
+                ))
+        observations.sort(key=lambda item: item.period, reverse=True)
+        observations.sort(key=lambda item: {"monthly_revenue": 0, "statement_item": 1, "valuation": 2}.get(item.kind, 3))
         return tuple(observations), tuple(sources), industry
 
     def _read_flows(
@@ -827,6 +880,8 @@ class StockResearchReportReadService:
         self,
         code: str,
         cutoff: date,
+        *,
+        include_current: bool = False,
     ) -> tuple[
         tuple[StockMetricDTO, ...],
         tuple[StockMetricDTO, ...],
@@ -896,7 +951,11 @@ class StockResearchReportReadService:
                 f"{_date_key_expr(decision_col)} <= ?",
             ]
             params_list: list[Any] = [code, _date_key(cutoff)]
-            if available_col:
+            observed_col = _pick(columns, "observed_at")
+            if include_current and observed_col:
+                filters.append(f"julianday({_quote(observed_col)}) <= julianday(?)")
+                params_list.append(self.clock().isoformat())
+            elif available_col:
                 filters.extend(
                     (
                         f"{_non_empty_expr(available_col)}",
@@ -906,7 +965,7 @@ class StockResearchReportReadService:
                 params_list.append(_date_key(cutoff))
             select = [
                 _select_column(columns, ("decision_date", "日期"), "data_as_of"),
-                _select_column(columns, ("available_date", "available_at"), "available_at"),
+                _select_column(columns, ("observed_at", "available_date", "available_at") if include_current else ("available_date", "available_at"), "available_at"),
                 _select_column(columns, ("source_version",), "source_version"),
                 _select_column(columns, ("quality",), "quality"),
             ]
@@ -923,7 +982,7 @@ class StockResearchReportReadService:
             if rows:
                 row = rows[0]
                 data_as_of = _iso_date(row["data_as_of"])
-                available_at = _iso_date(row["available_at"])
+                available_at = str(row["available_at"] or "") if include_current and observed_col else _iso_date(row["available_at"])
                 quality = _quality(row["quality"])
                 for key, field_label in fields:
                     raw = row[key]
@@ -937,7 +996,7 @@ class StockResearchReportReadService:
                             label=field_label,
                             value=number,
                             value_text=text_value,
-                            unit="bp" if key.endswith("_bp") else "",
+                            unit=("bp" if key.endswith("_bp") else "股" if result_key == "institutional" else "交易單位" if result_key == "credit" else ""),
                             data_as_of=data_as_of,
                             available_at=available_at,
                             source_id=f"sqlite.{table}",
@@ -951,7 +1010,7 @@ class StockResearchReportReadService:
                     label,
                     row_count=len(metrics),
                     data_as_of=_iso_date(rows[0]["data_as_of"]) if rows else "",
-                    available_at=_iso_date(rows[0]["available_at"]) if rows else "",
+                    available_at=(str(rows[0]["available_at"] or "") if include_current and observed_col else _iso_date(rows[0]["available_at"])) if rows else "",
                     version=str(rows[0]["source_version"] or "") if rows else "",
                     quality=_quality(rows[0]["quality"]) if rows else ReportQuality.MISSING.value,
                     cutoff=cutoff,

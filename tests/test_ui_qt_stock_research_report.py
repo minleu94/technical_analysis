@@ -86,10 +86,12 @@ def test_report_view_reads_real_service_and_renders_missing_ml(tmp_path: Path) -
     assert view.return_button.accessibleName() == "返回原持倉或觀察清單"
     assert view._summary_values["risk"].wordWrap() is True
     view.tabs.setCurrentIndex(1)
+    app.processEvents()
     chart = view.findChild(StockPriceChartWidget)
     assert chart is not None
     assert chart.accessibleName() == "個股收盤價走勢圖"
     assert "2026-09-08" in chart.toolTip()
+    assert chart.grab().isNull() is False
     view.tabs.setCurrentIndex(0)
     screenshot_path = os.environ.get("STOCK_RESEARCH_SCREENSHOT_PATH", "").strip()
     if screenshot_path:

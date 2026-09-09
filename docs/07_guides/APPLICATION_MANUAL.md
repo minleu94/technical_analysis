@@ -1,5 +1,19 @@
 # baldr 完整操作手冊
 
+## 2026-09-09 官方基本面現況資料
+
+持倉／觀察清單開啟「個股研究報告」，基本面頁會列出已實際取得的最新月營收；來源標示「官方基本面現況快照（非歷史公告證據）」。金額為 TWD 元，MOPS 千元在讀取／匯入邊界轉換。新月份還在公告時，不同股票最新月份可能不同，不能以其他股票已有公告推定本股缺漏。
+
+更新頁另保留歷史 PIT 最新期別。現況快照已入庫不代表取得原始公告歷程；明確指定歷史 as-of 日期時不讀取現況快照。沒有公司公告日期時不猜日期、不填零，也不拿此快照回補 ML 歷史特徵。
+
+月營收維護入口：先用 `scripts/fetch_mops_monthly_revenue_snapshot.py --start-period YYYY-MM --end-period YYYY-MM --output-dir <任務輸出>` 取得官方 CSV，再用 `scripts/apply_current_monthly_snapshot.py --snapshot <CSV> --db-file <TWStockConfig.db_file> --backup-dir <C槽備份目錄> --lock-path <OUTPUT_ROOT>/release_v4/.ml_heavy_chain.lock --evidence-file <驗收JSON>` 預覽。加入 `--apply` 才會備份並增量寫入；D 槽須保留 200 GiB，鎖忙或備份驗證失敗會停止。不要手動刪除鎖或改用另一個資料根目錄繞過。
+
+資料已入庫但畫面仍舊時，重新整理更新頁並重新開啟個股報告；確認使用的 `DATA_ROOT` 與匯入的 SQLite 相同。公告日期、可得日期與報告期別是不同欄位。
+
+本次其他資料的維護工具：法人／信用為 `scripts/complete_institutional_credit_flows.py capture` 與受控 `apply`；集保為 `scripts/capture_tdcc_shareholding_candidate.py` 和 `scripts/apply_tdcc_shareholding_candidate.py`；季報為 `scripts/build_current_statement_snapshot_candidate.py` 和 `scripts/apply_current_statement_snapshot.py`。每次使用新的任務輸出子目錄保存來源與驗收，不覆蓋已採用的manifest。所有正式套用前須取得共用更新鎖、核對容量並建立SQLite線上備份；不要只複製DB主檔而遺漏WAL。
+
+原有UI「候選更新」按鈕仍操作Phase3C隔離候選庫，**不會自動套用上述新來源到正式庫**；每日quick排程也尚未接入。這次實際補齊已由受控CLI完成，不能把下次按候選更新誤認為正式資料已刷新。集保正式表的 `observed_at` 等價保存本次來源 `first_observed_at`／`available_at`，完整17級仍在 `shareholding_tiers`。
+
 ## 2026-09-07 月營收恢復與衍生 ML 操作入口
 
 - 季報隔離讀回使用 `scripts/materialize_mops_statement_candidates.py --candidate <財報候選JSON> --db-path <新隔離SQLite> --decision-date YYYY-MM-DD --evidence-output <新證據JSON>`；`--candidate` 與 `--decision-date` 可重複指定，以比較多家公司及可得日前後。資料庫限 TEMP 或專案 `output`，拒絕正式 DATA_ROOT、其別名及沒有 research-only 標記的既有DB；證據檔不得與輸入、DB、標記檔重疊，且必須使用新檔名。成功時核對主表／sidecar筆數與各決策日讀回筆數；同批重跑使用原隔離DB及新的證據檔，應新增0筆。EPS保留元／股、損益單季與現金流累計期間另存sidecar；不要只讀數值而忽略單位與期間。此入口不接受未驗證科目代碼或不完整可得時間，也不會更新正式資料；路徑衝突時更換研究輸出位置，不移除來源或DB標記來繞過檢查。

@@ -863,6 +863,33 @@ def _build_operational_source_statuses(
         )
     )
 
+    if _table_exists(conn, "fundamental_current_observations"):
+        for kind, identifier, expected in (
+            ("monthly_revenue", "fundamental.current_monthly_observations", revenue_expected),
+            ("statement_item", "fundamental.current_statement_observations", statement_expected),
+        ):
+            grouped = conn.execute(
+                "SELECT period, market, COUNT(DISTINCT stock_code), MAX(observed_at) "
+                "FROM fundamental_current_observations WHERE kind=? AND julianday(observed_at)<=julianday(?) "
+                "GROUP BY period, market ORDER BY period, market", (kind, run_now.isoformat()),
+            ).fetchall()
+            if not grouped:
+                continue
+            latest = max(str(row[0]) for row in grouped)
+            source_statuses.append(_source_status(
+                source_id=identifier, authority="official observed snapshot; no original announcement claim",
+                frequency="monthly" if kind == "monthly_revenue" else "quarterly",
+                actual_period=latest, published_at=None, available_at=max(str(row[3]) for row in grouped),
+                expected_period=expected,
+                coverage={"companies_by_period_market": {f"{r[0]}/{r[1]}": int(r[2]) for r in grouped}},
+                missing_periods=[expected] if latest < expected else [], duplicate_key_count=0,
+                freshness_status="partial" if latest >= expected else "stale",
+                reason="current observations ingested; publication coverage is partial/unverified; historical PIT is separate",
+                update_entry="official current snapshot fetch and backed-up incremental apply",
+                scheduled_task="manual source refresh", owner="Data Engineering",
+                downstream=["current stock research report"], candidate_only=False,
+            ))
+
     checks["expected_official_session"] = expected_key
     checks["expected_official_session_window"] = expected_keys
     legacy_key = _date_key(checks.get("daily_prices_latest_date")) or expected_key
@@ -889,6 +916,7 @@ def _candidate_and_static_statuses(
     *,
     conn: sqlite3.Connection,
     data_root: Path,
+    expected_session: str | None = None,
 ) -> list[dict[str, Any]]:
     statuses: list[dict[str, Any]] = []
     table_specs = (
@@ -899,25 +927,33 @@ def _candidate_and_static_statuses(
     for source_id, table, authority, reason in table_specs:
         exists = _table_exists(conn, table)
         count = int(conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]) if exists else 0
+        latest = _latest_date(conn, table) if exists else None
+        status = "stale" if not count else "unknown"
+        if count and expected_session and source_id != "tdcc_shareholding":
+            status = "partial" if latest == expected_session else "stale"
+        if count:
+            reason = "official rows ingested; per-market coverage and availability must be checked before declaring complete"
+        else:
+            reason = "production table has no observations; data acquisition is required"
         statuses.append(
             _source_status(
                 source_id=source_id,
                 authority=authority,
                 frequency="daily / weekly candidate source",
-                actual_period=_latest_date(conn, table) if exists else None,
+                actual_period=latest,
                 published_at=None,
                 available_at=None,
-                expected_period=None,
+                expected_period=expected_session if source_id != "tdcc_shareholding" else None,
                 coverage={"table_exists": exists, "db_row_count": count},
                 missing_periods=[],
                 duplicate_key_count=None,
-                freshness_status="not_applicable",
+                freshness_status=status,
                 reason=reason,
-                update_entry="P0 candidate acquisition routes",
+                update_entry="official source snapshot ingestion",
                 scheduled_task="not scheduled for production ingestion",
                 owner="Data Engineering + P0 source owners",
                 downstream=[],
-                candidate_only=True,
+                candidate_only=False,
             )
         )
 
@@ -1128,7 +1164,7 @@ def main(argv: list[str] | None = None) -> int:
                         )
                     )
                 source_statuses.extend(
-                    _candidate_and_static_statuses(conn=conn, data_root=data_root)
+                    _candidate_and_static_statuses(conn=conn, data_root=data_root, expected_session=checks.get("expected_official_session"))
                 )
         except Exception as exc:  # noqa: BLE001 - read failure must be visible
             errors.append("sqlite_read_failed")

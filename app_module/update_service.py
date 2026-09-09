@@ -2629,6 +2629,25 @@ class UpdateService :
                 payload['warnings'] = list(
                     dict.fromkeys(str(item) for item in warnings if str(item).strip())
                 )
+            from contextlib import closing
+            import sqlite3
+            formal_path = getattr(self.config, "db_file", None)
+            if formal_path and Path(formal_path).is_file():
+                with closing(sqlite3.connect(Path(formal_path).resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE name='fundamental_current_observations'").fetchone()
+                    if exists:
+                        current = conn.execute("SELECT MAX(period), MAX(as_of_date), COUNT(*), MAX(observed_at) FROM fundamental_current_observations WHERE kind='monthly_revenue' AND julianday(observed_at)<=julianday('now')").fetchone()
+                        if current and current[0]:
+                            payload.update(
+                                pit_latest_period=payload.get('latest_period'),
+                                current_observed_period=current[0], latest_period=current[0], latest_date=current[1],
+                                current_observed_records=int(current[2]), current_observed_at=current[3],
+                                status='partial',
+                            )
+                            payload['warnings'] = [
+                                f"目前可查月營收已到 {current[0]}；此期公告中／覆蓋待核對，沒有公告的公司不補零。",
+                                f"歷史 PIT 證據仍到 {payload['pit_latest_period']}；現況快照不冒充歷史公告。",
+                            ]
             return self._annotate_sqlite_read_mode(payload, db)
         except Exception as e :
             import logging
@@ -4985,7 +5004,7 @@ class UpdateService :
             }
 
     def check_decision_data_status(self) -> Dict[str, Any]:
-        """讀取明確設定的 candidate DB 狀態；不將正式 DB 偽裝為候選資料。"""
+        """分開列出正式入庫與隔離候選資料，不能把正式筆數固定顯示為零。"""
         candidate_db = configured_candidate_db_path()
         formal_reference_date: str | None = None
         if getattr(self.config, "use_sqlite", False):
@@ -5073,6 +5092,7 @@ class UpdateService :
                 "disclaimer": "候選研究資料，不參與評分或投資決策",
                 "formal_records": 0,
                 "candidate_records": info["total_records"],
+                "candidate_latest_date": info["latest_date"],
             }
             if formal_reference_date:
                 result[key]["freshness_reference_date"] = formal_reference_date
@@ -5088,4 +5108,31 @@ class UpdateService :
                             f"日價 {formal_reference_date}"
                         )
                     ]
+        formal_db = getattr(self.config, "db_file", None)
+        if formal_db and Path(formal_db).is_file():
+            import sqlite3
+            from contextlib import closing
+            try:
+                with closing(sqlite3.connect(Path(formal_db).resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+                    for key, (table_name, _) in tables.items():
+                        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table_name,)).fetchone()
+                        if not exists:
+                            continue
+                        row = conn.execute(f"SELECT COUNT(*), MIN(decision_date), MAX(decision_date), COUNT(DISTINCT decision_date) FROM {table_name}").fetchone()
+                        result[key]["formal_records"] = int(row[0])
+                        if row[0]:
+                            result[key].update(
+                                total_records=int(row[0]), earliest_date=row[1], latest_date=row[2],
+                                distinct_dates=int(row[3]), status="FORMAL_AVAILABLE",
+                                quality_pit_status="OBSERVED_SOURCE", formal_db_path=str(formal_db),
+                                disclaimer="官方來源已入庫；歷史可得時間與研究資格須另行驗證",
+                                coverage_pct="見來源日期與逐日覆蓋報告",
+                            )
+                            result[key]["freshness_status"] = (
+                                "lagging" if formal_reference_date and str(row[2]) < str(formal_reference_date) else "unknown"
+                            )
+                            result[key]["warnings"] = ["已入庫不代表逐市場完整覆蓋，請查看來源驗收。"]
+            except sqlite3.Error as exc:
+                for info in result.values():
+                    info["formal_read_error"] = str(exc)
         return result

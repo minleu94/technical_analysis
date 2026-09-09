@@ -4044,6 +4044,14 @@ class UpdateView(QWidget):
                 f"已匯入期別：{latest_period}",
                 f"目前可用期別：{latest_available_period}",
             ]
+            if value.get("current_observed_period"):
+                lines = [
+                    f"目前查閱期別：{value['current_observed_period']}（已公告公司）",
+                    f"現況觀測時間：{value.get('current_observed_at', '未知')}",
+                    f"現況快照筆數：{value.get('current_observed_records', 0):,}",
+                    f"歷史 PIT 可用期別：{latest_available_period}",
+                    "公告覆蓋未齊；現況資料不授予歷史 PIT 資格。",
+                ]
             lines.extend(format_monthly_revenue_candidate_lines(value))
             freshness_gap = format_monthly_revenue_freshness_gap(value)
             if freshness_gap:

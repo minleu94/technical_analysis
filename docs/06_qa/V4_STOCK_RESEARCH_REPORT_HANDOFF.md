@@ -157,7 +157,7 @@ Root 整合 read-back（2026-09-08）另回報最新全域驗收 `777/777`；其
 畫面驗證項目：
 
 - 375px 寬度仍可建立 view，搜尋／載入／返回 controls 有 accessible name 與 tooltip。
-- 表格 cell 提供完整 tooltip，長限制文字可選取，圖表有文字替代與價格表。
+- 表格 cell 提供完整 tooltip，長限制文字可選取，圖表有文字替代與價格表；價格圖的 Qt painter 已使用明確 `QColor`／畫筆寬度並在 `finally` 結束，且測試實際觸發 `grab()` 重繪驗證。
 - freshness／quality 同時用文字與狀態色呈現，不依賴顏色單獨傳意。
 - 報告視窗最小寬度 360px；view `minimumSizeHint()` 為 320px，DPI／小視窗不要求載入完整歷史。
 

@@ -6,6 +6,10 @@ from pathlib import Path
 # This registry serves as a guardrail to ensure that only allowed tests are bridged.
 
 TEST_INVENTORY: dict[str, str] = {
+    "tests/test_current_fundamental_snapshots.py": "service-oracle-data-market",
+    "tests/test_build_current_statement_snapshot_candidate.py": "service-oracle-data-market",
+    "tests/test_institutional_credit_flows_service.py": "service-oracle-data-market",
+    "tests/test_tdcc_shareholding_candidate.py": "service-oracle-data-market",
     "tests/test_task_loop_01_contract.py": "service-oracle-data-market",
     "tests/test_task_loop_02_contract.py": "service-oracle-data-market",
     "tests/test_task_loop_03_contract.py": "service-oracle-recommendation",
@@ -64,6 +68,10 @@ TEST_INVENTORY: dict[str, str] = {
     "tests/test_ml_direct_chain_maintenance.py": "governance-doc-tooling",
     "tests/test_phase3c_backfill_runner.py": "service-oracle-data-market",
     "tests/test_tdcc_shareholding_historical_boundary.py": "service-oracle-data-market",
+    "tests/test_tdcc_shareholding_candidate.py": "service-oracle-data-market",
+    "tests/test_apply_tdcc_shareholding_candidate.py": "write-risk-dry-run-required",
+    "tests/test_current_fundamental_snapshots.py": "service-oracle-data-market",
+    "tests/test_institutional_credit_flows_service.py": "service-oracle-data-market",
     "tests/test_ui_update_view_candidate_status.py": "ui-healthcheck-candidate-bridge",
     "tests/test_fubon_shadow_candidate_repository.py": "service-oracle-data-market",
     "tests/test_audit_test_inventory.py": "governance-doc-tooling",

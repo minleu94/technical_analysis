@@ -95,6 +95,7 @@ def format_status_token(status: Any) -> str:
         "stale": "待更新",
         "summary": "已讀取摘要",
         "candidate_available": "候選可用",
+        "formal_available": "正式可用",
         "ready": "已讀取",
         "ready_for_merge": "可併入候選",
         "already_merged": "已併入",
@@ -620,6 +621,14 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
             f"已匯入期別：{latest_period}",
             f"目前可用期別：{latest_available_period}",
         ]
+        if detail.get("current_observed_period"):
+            lines = [
+                f"目前查閱期別：{detail['current_observed_period']}（已公告公司）",
+                f"現況觀測時間：{detail.get('current_observed_at', '未知')}",
+                f"現況快照筆數：{detail.get('current_observed_records', 0):,}",
+                f"歷史 PIT 可用期別：{latest_available_period}",
+                "公告覆蓋未齊；現況資料不授予歷史 PIT 資格。",
+            ]
         lines.extend(format_monthly_revenue_candidate_lines(detail))
         if monthly_freshness_gap:
             lines.append(monthly_freshness_gap)
@@ -640,9 +649,9 @@ def format_source_detail_summary(source: str, detail: Mapping[str, Any]) -> str:
         coverage = str(detail.get("coverage_pct") or "無 checkpoint")
         lines = [
             f"最新日期：{latest_candidate}",
-            f"候選筆數：{total_records:,}",
+            f"正式入庫筆數：{total_records:,}" if detail.get("formal_records") else f"候選筆數：{total_records:,}",
             f"區間：{earliest} ~ {latest_candidate}",
-            f"checkpoint 覆蓋率：{coverage}",
+            f"覆蓋說明：{coverage}" if detail.get("formal_records") else f"checkpoint 覆蓋率：{coverage}",
             f"狀態：{format_status_token(detail.get('status'))}",
         ]
         freshness_status = str(detail.get("freshness_status") or "").strip().lower()

@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPoint, QSize, Qt, Signal
-from PySide6.QtGui import QFont, QPainter, QPen, QBrush
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QBrush
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -123,52 +123,68 @@ class StockPriceChartWidget(QWidget):
     def paintEvent(self, event: Any) -> None:  # noqa: N802 - Qt override
         del event
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.fillRect(self.rect(), QBrush(MIDNIGHT_ANALYST.surface_1))
-        points = tuple(point for point in self._points if point.close_price is not None)
-        if not points:
-            painter.setPen(QPen(MIDNIGHT_ANALYST.text_muted))
-            painter.drawText(self.rect(), Qt.AlignCenter, "無價格資料")
-            return
-
-        left = 58
-        right = max(left + 40, self.width() - 18)
-        top = 25
-        bottom = max(top + 50, self.height() - 32)
-        values = tuple(point.close_price for point in points if point.close_price is not None)
-        low = min(values)
-        high = max(values)
-        span = high - low
-        if span == 0:
-            span = Decimal("1")
-
-        painter.setPen(QPen(MIDNIGHT_ANALYST.border))
-        painter.drawLine(left, bottom, right, bottom)
-        painter.drawLine(left, top, left, bottom)
-        painter.setPen(QPen(MIDNIGHT_ANALYST.text_secondary))
-        painter.drawText(6, top + 4, "收盤價")
-        painter.drawText(6, bottom, "TWD")
-        painter.drawText(left, self.height() - 8, points[0].data_date)
-        last_date = points[-1].data_date
-        painter.drawText(max(left, right - 88), self.height() - 8, last_date)
-        painter.drawText(6, top + 22, _decimal_text(high))
-        painter.drawText(6, bottom - 5, _decimal_text(low))
-
-        path_points: list[QPoint] = []
-        denominator = max(1, len(points) - 1)
-        for index, point in enumerate(points):
-            assert point.close_price is not None
-            x = left + int(Decimal(right - left) * Decimal(index) / Decimal(denominator))
-            y = bottom - int(
-                Decimal(bottom - top) * (point.close_price - low) / span
+        try:
+            painter.setRenderHint(QPainter.Antialiasing, True)
+            painter.fillRect(
+                self.rect(), QBrush(QColor(MIDNIGHT_ANALYST.surface_1))
             )
-            path_points.append(QPoint(x, y))
-        painter.setPen(QPen(MIDNIGHT_ANALYST.accent, 2))
-        for first, second in zip(path_points, path_points[1:]):
-            painter.drawLine(first, second)
-        painter.setBrush(QBrush(MIDNIGHT_ANALYST.accent))
-        painter.setPen(QPen(MIDNIGHT_ANALYST.accent))
-        painter.drawEllipse(path_points[-1], 3, 3)
+            points = tuple(
+                point for point in self._points if point.close_price is not None
+            )
+            if not points:
+                painter.setPen(QPen(QColor(MIDNIGHT_ANALYST.text_muted)))
+                painter.drawText(self.rect(), Qt.AlignCenter, "無價格資料")
+                return
+
+            left = 58
+            right = max(left + 40, self.width() - 18)
+            top = 25
+            bottom = max(top + 50, self.height() - 32)
+            values = tuple(
+                point.close_price
+                for point in points
+                if point.close_price is not None
+            )
+            low = min(values)
+            high = max(values)
+            span = high - low
+            if span == 0:
+                span = Decimal("1")
+
+            painter.setPen(QPen(QColor(MIDNIGHT_ANALYST.border)))
+            painter.drawLine(left, bottom, right, bottom)
+            painter.drawLine(left, top, left, bottom)
+            painter.setPen(QPen(QColor(MIDNIGHT_ANALYST.text_secondary)))
+            painter.drawText(6, top + 4, "收盤價")
+            painter.drawText(6, bottom, "TWD")
+            painter.drawText(left, self.height() - 8, points[0].data_date)
+            last_date = points[-1].data_date
+            painter.drawText(max(left, right - 88), self.height() - 8, last_date)
+            painter.drawText(6, top + 22, _decimal_text(high))
+            painter.drawText(6, bottom - 5, _decimal_text(low))
+
+            path_points: list[QPoint] = []
+            denominator = max(1, len(points) - 1)
+            for index, point in enumerate(points):
+                assert point.close_price is not None
+                x = left + int(
+                    Decimal(right - left) * Decimal(index) / Decimal(denominator)
+                )
+                y = bottom - int(
+                    Decimal(bottom - top) * (point.close_price - low) / span
+                )
+                path_points.append(QPoint(x, y))
+            line_pen = QPen(QColor(MIDNIGHT_ANALYST.accent))
+            line_pen.setWidth(2)
+            painter.setPen(line_pen)
+            for first, second in zip(path_points, path_points[1:]):
+                painter.drawLine(first, second)
+            painter.setBrush(QBrush(QColor(MIDNIGHT_ANALYST.accent)))
+            painter.setPen(QPen(QColor(MIDNIGHT_ANALYST.accent)))
+            painter.drawEllipse(path_points[-1], 3, 3)
+        finally:
+            if painter.isActive():
+                painter.end()
 
 
 class StockResearchReportView(QWidget):
@@ -618,7 +634,7 @@ class StockResearchReportView(QWidget):
             return
         rows = tuple(
             (
-                item.kind,
+                {"monthly_revenue": "月營收", "statement_item": "財報項目", "valuation": "估值"}.get(item.kind, item.kind),
                 item.label,
                 item.period or "—",
                 item.as_of_date or "—",
@@ -638,7 +654,8 @@ class StockResearchReportView(QWidget):
         )
         layout.addWidget(
             self._wrapped_label(
-                "基本面只採用 available_date 不晚於報告 as_of 的 row；各項資料日期可能不同。"
+                "目前查閱含已實際觀測的官方快照；歷史日期查詢只使用符合可得日限制的資料。"
+                "現況快照沒有原公告日，不作歷史回測證據；各項資料日期可能不同。"
             )
         )
         layout.addStretch()

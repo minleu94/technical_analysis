@@ -22,6 +22,9 @@ _FRESHNESS_SOURCE_TO_STATUS = {
     "sqlite.technical_indicators": "technical_indicators",
     "fundamental.monthly_revenues": "monthly_revenue",
     "fundamental.quarterly_statements": "quarterly_statements",
+    "institutional_flows": "institutional_flow",
+    "credit_transactions": "credit_transaction",
+    "tdcc_shareholding": "tdcc_shareholding",
 }
 
 _FRESHNESS_SEVERITY = {
