@@ -40,6 +40,7 @@ from ui_qt.workers.task_worker import TaskWorker
 from app_module.strategy_version_service import StrategyVersionService
 from app_module.portfolio_chip_service import PortfolioChipService
 from app_module.portfolio_feedback_service import PortfolioFeedbackService
+from app_module.research_session import ResearchStockContextDTO
 from app_module.portfolio_stress_lab_service import (
     PortfolioStressLabService,
 )
@@ -361,6 +362,7 @@ class PortfolioView(QWidget):
 
     # 信號：當持倉數據或交易更新時發出
     portfolioUpdated = Signal()
+    stockResearchRequested = Signal(object)
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
         """允許持倉頁在主視窗 viewport 內縮放，表格承接額外內容。"""
@@ -534,6 +536,7 @@ class PortfolioView(QWidget):
 
         # 監聽持倉選擇事件，用以更新右側明細與日記
         self.positions_table.clicked.connect(self._on_position_selected)
+        self.positions_table.doubleClicked.connect(self._open_selected_stock_research)
 
         # 右鍵選單
         self.positions_table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -548,6 +551,16 @@ class PortfolioView(QWidget):
         self.btn_record_trade.setProperty("variant", "primary")
         self.btn_record_trade.clicked.connect(self._show_record_trade_dialog)
         btn_layout.addWidget(self.btn_record_trade)
+
+        self.btn_stock_research = QPushButton("查看個股研究報告")
+        self.btn_stock_research.setProperty("variant", "primary")
+        self.btn_stock_research.setAccessibleName("查看選中持倉的個股研究報告")
+        self.btn_stock_research.setToolTip(
+            "選取一檔持倉後開啟與觀察清單共用的個股研究報告；也可雙擊持倉列。"
+        )
+        self.btn_stock_research.setEnabled(False)
+        self.btn_stock_research.clicked.connect(self._open_selected_stock_research)
+        btn_layout.addWidget(self.btn_stock_research)
 
         self.btn_import_trades = QPushButton("匯入交易 CSV")
         self.btn_import_trades.setProperty("variant", "secondary")
@@ -1987,6 +2000,7 @@ class PortfolioView(QWidget):
     def _on_position_selected(self, index):
         """當使用者選中某個持倉部位時，連動右側明細"""
         if not self.positions_model:
+            self.btn_stock_research.setEnabled(False)
             return
 
         df = self.positions_model.getDataFrame()
@@ -1997,12 +2011,63 @@ class PortfolioView(QWidget):
             if code == "-":
                 self.selected_stock_code = ""
             else:
-                self.selected_stock_code = code
+                self.selected_stock_code = str(code).strip()
 
             logger.info("Selected position stock: %s", self.selected_stock_code)
+            self.btn_stock_research.setEnabled(bool(self.selected_stock_code))
             self._load_trades_history()
             self._load_journal_entries()
             self._update_monitoring_tab()
+
+    def _selected_position_name(self) -> str:
+        """從目前顯示的持倉 model 取得名稱，不重新查詢或重算。"""
+
+        if not self.positions_model or not self.selected_stock_code:
+            return ""
+        frame = self.positions_model.getDataFrame()
+        if "證券代號" not in frame.columns:
+            return ""
+        for row_number, value in enumerate(frame["證券代號"]):
+            if str(value).strip() == self.selected_stock_code:
+                return str(frame.iloc[row_number].get("證券名稱", "") or "").strip()
+        return ""
+
+    def _open_selected_stock_research(self, index=None) -> None:
+        """持倉雙擊／明確按鈕共用的個股研究報告入口。"""
+
+        if index is not None and getattr(index, "isValid", lambda: False)():
+            self._on_position_selected(index)
+        code = str(self.selected_stock_code or "").strip()
+        if not code:
+            self.portfolio_refresh_status_label.setText("請先選取一檔持倉，再查看個股研究報告。")
+            self.btn_stock_research.setEnabled(False)
+            return
+        self.stockResearchRequested.emit(
+            ResearchStockContextDTO(
+                stock_code=code,
+                stock_name=self._selected_position_name(),
+                source_label="持倉管理",
+                source_kind="portfolio",
+                source_workspace="portfolio",
+            )
+        )
+
+    def select_stock(self, stock_code: str, result_id: str | None = None) -> bool:
+        """返回持倉頁時定位既有列，保留交易歷史篩選狀態。"""
+
+        del result_id
+        if not self.positions_model:
+            return False
+        code = str(stock_code).strip()
+        frame = self.positions_model.getDataFrame()
+        if "證券代號" not in frame.columns:
+            return False
+        for row_number, value in enumerate(frame["證券代號"]):
+            if str(value).strip() == code:
+                self.positions_table.selectRow(row_number)
+                self._on_position_selected(self.positions_model.index(row_number, 0))
+                return True
+        return False
 
     def _show_position_context_menu(self, pos):
         """右鍵選單操作"""
@@ -2021,11 +2086,16 @@ class PortfolioView(QWidget):
         menu = QMenu(self)
 
         action_journal = menu.addAction("為此部位寫日記...")
+        action_research = menu.addAction("查看個股研究報告")
         action_history = menu.addAction("只查看此股交易歷史")
         action_clear_filter = menu.addAction("顯示全部交易歷史")
 
         action = menu.exec(self.positions_table.viewport().mapToGlobal(pos))
-        if action == action_journal:
+        if action == action_research:
+            self.selected_stock_code = str(stock_code).strip()
+            self.btn_stock_research.setEnabled(True)
+            self._open_selected_stock_research()
+        elif action == action_journal:
             self._show_add_journal_dialog(stock_code)
         elif action == action_history:
             self.selected_stock_code = stock_code

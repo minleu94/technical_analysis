@@ -150,8 +150,14 @@ class WatchlistView(QWidget):
         
         work_area_layout.addWidget(self.stocks_table, stretch=1)
         self.stocks_table.doubleClicked.connect(self._open_stock_analysis)
-        self.stock_analysis_btn = QPushButton("查看選中個股分析／主力流向")
-        self.stock_analysis_btn.setToolTip("選取一檔股票後開啟個股資金與分點分析；也可雙擊股票。")
+        self.stock_analysis_btn = QPushButton("查看選中個股研究報告")
+        self.stock_analysis_btn.setAccessibleName("查看選中個股研究報告")
+        self.stock_analysis_btn.setToolTip(
+            "選取一檔股票後開啟同一份個股研究報告；也可雙擊或從右鍵選單開啟。"
+        )
+        # 舊的 stockAnalysisRequested signal 保留給獨立嵌入頁與既有測試；
+        # MainWindow 以 stockResearchRequested 作為唯一正式報告入口。
+        self.stock_research_btn = self.stock_analysis_btn
         self.stock_analysis_btn.clicked.connect(self._open_stock_analysis)
         work_area_layout.addWidget(self.stock_analysis_btn)
         self.analysis_text = QTextEdit()
@@ -678,7 +684,7 @@ class WatchlistView(QWidget):
         selection = self.stocks_table.selectionModel()
         rows = selection.selectedRows() if selection else []
         if self.stocks_model is None or len(rows) != 1:
-            self._set_status_label("請選取一檔股票查看個股分析", level="info")
+            self._set_status_label("請選取一檔股票查看個股研究報告", level="info")
             return
         frame = self.stocks_model.getDataFrame()
         row = frame.iloc[rows[0].row()]
@@ -772,7 +778,7 @@ class WatchlistView(QWidget):
             return
         
         menu = QMenu(self)
-        analysis_action = QAction("查看個股分析／主力流向", self)
+        analysis_action = QAction("查看個股研究報告", self)
         analysis_action.triggered.connect(self._open_stock_analysis)
         menu.addAction(analysis_action)
         

@@ -84,6 +84,7 @@ from app_module.research_session import (
     ResearchSessionSnapshotDTO,
     ResearchStockContextDTO,
 )
+from app_module.stock_research_report_service import StockResearchReportReadService
 
 # 導入策略模組以觸發註冊
 import app_module.strategies
@@ -96,6 +97,7 @@ from ui_qt.views.recommendation_view import RecommendationView
 from ui_qt.views.update_view import UpdateView
 from ui_qt.views.backtest_view import BacktestView
 from ui_qt.views.watchlist_view import WatchlistView
+from ui_qt.views.stock_research_report_view import StockResearchReportDialog
 from ui_qt.widgets.session_context_strip import SessionContextStrip
 from ui_qt.views.smart_money.smart_money_flow_view import SmartMoneyFlowView
 from app_module.broker_flow_service import BrokerFlowService
@@ -255,6 +257,16 @@ class MainWindow(QMainWindow):
                 logger.error(f"初始化選股清單服務失敗: {e}")
                 self.universe_service = None
                 print(f"警告：選股清單服務初始化失敗: {e}")
+
+            # 個股研究報告只組合既有 read contract；不在 MainWindow
+            # 重算推薦，也不把 Health／Exit／ML owner 實作搬進 UI。
+            self.stock_research_report_service = StockResearchReportReadService(
+                self.config,
+                portfolio_service=self.portfolio_service,
+                condition_monitor=PortfolioConditionMonitor(),
+                freshness_status_path=self._data_freshness_status_path(),
+            )
+            self._stock_research_report_dialog: StockResearchReportDialog | None = None
 
             # 設置 UI
             self._setup_ui()
@@ -702,6 +714,10 @@ class MainWindow(QMainWindow):
                     parent=self,
                 )
                 self.portfolio_view = portfolio_view
+                if hasattr(portfolio_view, "stockResearchRequested"):
+                    portfolio_view.stockResearchRequested.connect(
+                        self._open_stock_research_context
+                    )
                 portfolio_widget = portfolio_view
                 print("[MainWindow] 持倉管理視圖創建成功")
             except Exception as pe:
@@ -937,8 +953,83 @@ class MainWindow(QMainWindow):
                             source="stock_drilldown",
                         )
                     )
-        # 個股頁沿用既有主力流向入口；分析資料由該頁自己的唯讀 snapshot 提供。
-        self.show_smart_money_flow_for_stock(context.stock_code)
+        report_service = getattr(self, "stock_research_report_service", None)
+        if report_service is None:
+            # 與舊 host／最小測試替身相容；正式 MainWindow 會走共用報告入口。
+            legacy_route = getattr(self, "show_smart_money_flow_for_stock", None)
+            if callable(legacy_route):
+                legacy_route(context.stock_code)
+            return
+
+        dialog = getattr(self, "_stock_research_report_dialog", None)
+        if isinstance(dialog, StockResearchReportDialog):
+            try:
+                dialog.set_context(
+                    context,
+                    stock_codes=self._stock_codes_for_research_context(context),
+                )
+            except RuntimeError:
+                # Qt 已開始銷毀舊視窗時，交由下面的建立路徑重建。
+                dialog = None
+                self._stock_research_report_dialog = None
+
+        if dialog is None:
+            dialog = StockResearchReportDialog(
+                report_service,
+                context,
+                stock_codes=self._stock_codes_for_research_context(context),
+                parent=self,
+            )
+            self._stock_research_report_dialog = dialog
+            dialog.report_view.returnRequested.connect(
+                self._return_from_stock_research_report
+            )
+            dialog.finished.connect(
+                lambda _result, current=dialog: self._clear_stock_research_dialog(current)
+            )
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _stock_codes_for_research_context(
+        self,
+        context: ResearchStockContextDTO,
+    ) -> tuple[str, ...]:
+        """只從來源頁現有 model 取代碼，供報告視窗上一檔／下一檔。"""
+
+        if context.source_workspace == "watchlist":
+            view = getattr(self, "watchlist_view", None)
+            model = getattr(view, "stocks_model", None)
+        elif context.source_workspace == "portfolio":
+            view = getattr(self, "portfolio_view", None)
+            model = getattr(view, "positions_model", None)
+        else:
+            model = None
+        getter = getattr(model, "getDataFrame", None)
+        if not callable(getter):
+            return ()
+        try:
+            frame = getter()
+            values = frame.get("證券代號", ())
+            return tuple(
+                dict.fromkeys(
+                    str(value).strip()
+                    for value in values
+                    if str(value).strip() and str(value).strip() != "-"
+                )
+            )
+        except Exception:
+            return ()
+
+    def _clear_stock_research_dialog(self, dialog: StockResearchReportDialog) -> None:
+        if getattr(self, "_stock_research_report_dialog", None) is dialog:
+            self._stock_research_report_dialog = None
+
+    def _return_from_stock_research_report(self) -> None:
+        store = getattr(self, "research_session_store", None)
+        snapshot = getattr(store, "get_snapshot", lambda: None)()
+        if snapshot is not None:
+            self._return_to_research_source(snapshot)
 
     def _return_to_research_source(self, value: object) -> None:
         """由 status strip 返回建立目前上下文的頁面並定位原股票。"""
@@ -955,6 +1046,8 @@ class MainWindow(QMainWindow):
             view = getattr(self, "recommendation_view", None)
         elif context.source_workspace == "watchlist":
             view = getattr(self, "watchlist_view", None)
+        elif context.source_workspace == "portfolio":
+            view = getattr(self, "portfolio_view", None)
         else:
             view = None
         selector = getattr(view, "select_stock", None)
@@ -963,6 +1056,11 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """只在所有受管背景工作安全結束後才允許關閉。"""
+        report_dialog = getattr(self, "_stock_research_report_dialog", None)
+        report_view = getattr(report_dialog, "report_view", None)
+        request_report_close = getattr(report_view, "request_close", None)
+        if callable(request_report_close):
+            request_report_close()
         # MainWindow 的 closeEvent 不會可靠地逐一傳遞到子 QWidget。Portfolio
         # 頁有自己的 pending generation；先撤銷它，避免全域 worker coordinator
         # 取消目前一輪後，子頁又把排隊中的下一輪重新啟動。
