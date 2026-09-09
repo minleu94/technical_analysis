@@ -1,7 +1,14 @@
 ﻿# 系統架構
 
-> **最後更新：2026-09-07｜目前程式結構；不代替運行狀態。**
+> **最後更新：2026-09-08｜目前程式結構；不代替運行狀態。**
 > `release_v4` 是 storage／engineering namespace，不等同正式 V4.0。配置 ML、Rule／ML bp 混合、風險投影、Decision／Evidence 與 Paper ledger 的責任邊界如下。Formal input 計數、ledger 是否已產生、scheduler 是否啟用、D 剩餘容量均是可變運行事實，須讀 Snapshot 與當次具 hash／時間的驗收產物；不再以本架構檔的舊值作現況。Live broker execution 不在此系統範圍。
+
+## 個股研究、資料新鮮度與持倉證據邊界
+
+- 持倉與觀察清單透過共同 `stockResearchRequested` 導向 `StockResearchReportDialog`。`StockResearchReportReadService` 組合既有SQLite、保存推薦與持倉服務，再交 `StockResearchReportDTO`／Qt view呈現；不在UI新增第二套股票評分或交易引擎。
+- 個股報告使用有限唯讀查詢、可取消worker與request identity，區分股票資料期間、來源可得時間與報告cutoff；來源新鮮度應消費既有probe契約，不將月／季資料一律當每日資料。來源不足時維持可用區塊，並明示缺失。
+- `ForwardMachinePolicyProducer`、候選binding、持倉行情來源producer與transition evaluator串接為提案流程；不自動核准或修改正式倉位。`ExitEffectivenessProducer` 以transition與Paper ledger讀取結果，分開實際平倉與假設提案成效；沒有可得時間、執行或成熟證據時不得納入成熟成效。
+- 日常caller、實際產物及驗收限制見 [本輪整合驗收](../06_qa/V4_LUNA_REVIEW_AND_WORKSPACE_CLOSEOUT_2026_09_08.md)，模組存在不代表自然閉環已完成。
 
 ## 訊號分析共用與歷史相容邊界
 
@@ -180,7 +187,7 @@ Daily Decision Desk 後續應以 application service / DTO 聚合既有市場、
 
 Portfolio 的目前價格投影同樣屬於 application read path：`PortfolioService.get_current_price()` 先以 `ReadOnlySQLiteManager` 對既有 `daily_prices` 執行 `mode=ro`／`PRAGMA query_only=ON`，SQLite 不存在或不可讀時才降級讀取既有 CSV。打開持倉頁、計算未實現損益或查詢單一價格不得建立空 `twstock.db`、初始化 schema 或切換 WAL；這條邊界與 SQLite Inspector、UpdateService 的狀態查詢一致。
 
-Paper Trade Ledger 與手動 Portfolio 是兩條不同的資料流：`PaperTradeLedgerRepository` 只保存明確的研究用 fill event，要求數量狀態、Decimal 成本、turnover、execution gap 與 source event；`PaperPortfolioReadinessService` 只用 query-only 連線驗證 schema、安全旗標與欄位完整性。它以台北交易日邊界檢查 snapshot／daily status 的 future date，保留 raw row 供診斷但只把最後一筆不超過 today 的 snapshot 投影為 current NAV／持倉；遇到 future row 時 readiness 降級且 weekly status 不可計算。`PaperPortfolioWeeklyEvidenceService` 再以同一條 query-only 邊界把期間內的 snapshot、frozen Equal Weight observations 與 cost records hydrate 成 `PaperPortfolioWeeklyReport`，明確要求期間首尾存在、`source_type` 必須是 `paper_` provenance，且缺 turnover／execution gap 或 future period 時不補 0。`build_paper_equal_weight_benchmark.py` 是另一個受控 producer，從已保存 baseline、paper snapshot 日期與 T-1 市場價格建立 frozen-constituent benchmark preview／新 ledger；若 snapshot 含 future date 會在 preview／apply 前拒絕，且不能覆寫既有 ledger。UI 或 readiness 不得呼叫 writer repository，也不得把手動 `TradeDTO`、virtual execution trace 或 snapshot mark 直接冒充成本後 paper evidence。
+Paper Trade Ledger 與手動 Portfolio 是兩條不同的資料流：`PaperTradeLedgerRepository` 只保存明確的研究用 fill event，要求數量狀態、Decimal 成本、turnover、execution gap 與 source event；`source_event_id` 的冪等 identity scope 是 `(portfolio_id, source_event_id)`，因為來源事件 ID 可在不同 portfolio 的 namespace 合法重用，而 `fill_id` 仍是 ledger-wide primary key；Formal 單一 portfolio consumer 另行拒絕其來源內的重複事件。`PaperPortfolioReadinessService` 只用 query-only 連線驗證 schema、安全旗標與欄位完整性。它以台北交易日邊界檢查 snapshot／daily status 的 future date，保留 raw row 供診斷但只把最後一筆不超過 today 的 snapshot 投影為 current NAV／持倉；遇到 future row 時 readiness 降級且 weekly status 不可計算。`PaperPortfolioWeeklyEvidenceService` 再以同一條 query-only 邊界把期間內的 snapshot、frozen Equal Weight observations 與 cost records hydrate 成 `PaperPortfolioWeeklyReport`，明確要求期間首尾存在、`source_type` 必須是 `paper_` provenance，且缺 turnover／execution gap 或 future period 時不補 0。`build_paper_equal_weight_benchmark.py` 是另一個受控 producer，從已保存 baseline、paper snapshot 日期與 T-1 市場價格建立 frozen-constituent benchmark preview／新 ledger；若 snapshot 含 future date 會在 preview／apply 前拒絕，且不能覆寫既有 ledger。UI 或 readiness 不得呼叫 writer repository，也不得把手動 `TradeDTO`、virtual execution trace 或 snapshot mark 直接冒充成本後 paper evidence。
 
 Healthcheck Batch 2 新增 `DecisionDeskDashboardComposer` 與 `SmartMoneySemanticService`。`DecisionDeskDashboardComposer` 只組合既有 section DTO 與可選 Smart Money summary，產生 action summary、sector focus 與 stock focus；它不重新計算 ranking、scoring 或 portfolio logic。`SmartMoneySemanticService` 位於 app layer，從 `BrokerFlowService.get_events()` 的唯讀事件快照與可選 `SQLiteSmartMoneyPriceProvider` 產生 5 / 20 / 60 日語意診斷、quantity-based 集中度、價格位置風險與資料品質 counts；Qt UI 只讀 DTO 欄位與 tooltip，不直接查 SQLite 或重算籌碼語意。
 

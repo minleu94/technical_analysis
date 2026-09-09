@@ -4,25 +4,27 @@
 
 ## 2026-09-08 machine refresh
 
-Current filesystem Python files: `743`
+Current filesystem Python files: `777`
 
 | 分類 | 數量 |
 |---|---:|
-| `general-unit-keep-in-pytest` | 147 |
-| `governance-doc-tooling` | 138 |
+| `general-unit-keep-in-pytest` | 148 |
+| `governance-doc-tooling` | 147 |
 | `healthcheck-runner-owned` | 29 |
 | `legacy-or-low-priority` | 3 |
 | `manual-only` | 14 |
-| `service-oracle-data-market` | 110 |
-| `service-oracle-portfolio-decision-runtime` | 106 |
+| `service-oracle-data-market` | 114 |
+| `service-oracle-portfolio-decision-runtime` | 118 |
 | `service-oracle-recommendation` | 20 |
-| `service-oracle-research-backtest` | 71 |
+| `service-oracle-research-backtest` | 72 |
 | `slow-e2e-or-environment` | 3 |
-| `ui-healthcheck-candidate-bridge` | 26 |
+| `ui-healthcheck-candidate-bridge` | 28 |
 | `ui-healthcheck-direct-bridge` | 12 |
-| `write-risk-dry-run-required` | 64 |
+| `write-risk-dry-run-required` | 69 |
 
-- 預設收集檔案：716；support：4；不收集：23。
+- 預設收集檔案：750；support：4；不收集：23。
+- 歷史對照：本段更新前的機器摘要曾記錄總數 `743`、general `147`、governance `138`、data `110`、portfolio-runtime `106`、research-backtest `71`、UI candidate `26`、write-risk `64`；以上數字保留作舊 QA 快照，不代表目前清冊。
+- 本次 machine refresh 以實際 `tests/` 目錄取得 31 份新增測試並依責任分類登錄；`run_test_inventory_audit()` 的 missing/stale 均為零。新增測試不因此進入 direct bridge。
 - 本輪清理前實測為 748 個 Python 檔、4639 測項；舊 679 檔／4005 測項是較早檢查點。
 - 本輪補登 69 個檔案（含既有 ml_teacher_fixture 支援檔），刪除七份一次性診斷，兩份欄位測試合為參數化雙入口測試。
 - 2026-09-08 最終 collection 為 4,655；全量 pytest 為 4,652 passed、3 skipped；missing／stale／count drift 為零。見 [LUNA 三線整合驗收](LUNA_INTEGRATION_CLOSEOUT_2026_09_08.md)；[前次查核](PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md) 保留為歷史。

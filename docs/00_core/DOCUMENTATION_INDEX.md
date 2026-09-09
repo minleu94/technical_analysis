@@ -1,15 +1,19 @@
 # 文檔索引
 
+> 本輪入口：[Luna 交付複核與工作區收尾](../06_qa/V4_LUNA_REVIEW_AND_WORKSPACE_CLOSEOUT_2026_09_08.md)。目前狀態以 [PROJECT_SNAPSHOT](PROJECT_SNAPSHOT.md) 為準；下方較早日期的交付連結只供歷史追溯。
+
+> Snapshot目前狀態與歷史已分開：[Snapshot歷史封存2026-09-08](../09_archive/PROJECT_SNAPSHOT_HISTORY_2026_09_08.md)保留完整舊紀錄，現況仍以PROJECT_SNAPSHOT為準。
+
 > 2026-07-13 system integration：A～F 的 committed handoff、跨流 contracts、唯讀 smoke 與 latency 工程 Gate 已驗證；forward evidence、source acceptance、formal ML OOS／promotion 與 production automation 仍由 External Validation Register / Control Center 管理。
 >
-> Current engineering closeout：[V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；外部狀態仍由 External Validation Register / Control Center 管理。
+> 歷史 engineering closeout：[V3.3 Engineering Closeout](../06_qa/V3_3_ENGINEERING_CLOSEOUT_2026_07_12.md)；外部狀態仍由 External Validation Register / Control Center 管理。
 
 > Evidence rehearsal closeout：[Evidence Rehearsal Engineering Closeout](../06_qa/EVIDENCE_REHEARSAL_ENGINEERING_CLOSEOUT_2026_07_14.md)（`engineering_rehearsal_complete`；不是 external completion）。
 
 > **最後整理**：2026-09-08
 > **判讀規則**：本索引用於導航，不作為狀態或架構事實來源。Scoped SSOT：目前狀態看 `PROJECT_SNAPSHOT.md`，產品方向看 `PRODUCT_ROADMAP_POST_REFACTOR.md`，未來 6 個月工程看 `ROADMAP_6M_ENGINEERING.md`，North Star / Evidence 看 `system_vision_specification.md`，目前／目標架構分別看 `system_architecture.md` / `target_system_architecture.md`。
 >
-> **Current audit entry**：[Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)
+> **2026-08-29 audit entry（歷史）**：[Program Status Rebaseline](../06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md)
 > 統一 P0／Evidence／Paper／Formal／Runtime／Update／Performance 判讀；
 > [ML Release v4 Storage Retention Cleanup](../06_qa/ML_RELEASE_V4_STORAGE_RETENTION_CLEANUP_2026_08_29.md)
 > 保存本次 owner-authorized cleanup 的 exact scope、before／after、retained chain、pointer 與 tombstone。
@@ -28,12 +32,17 @@
 
 ## 2026-09-08 整併與下一輪工作
 
+- [本輪交付複核](../06_qa/V4_LUNA_REVIEW_AND_WORKSPACE_CLOSEOUT_2026_09_08.md)、[檔案清理結果](../06_qa/V4_WORKSPACE_CLEANUP_CLOSEOUT.md)。
+- [資料更新](../06_qa/V4_DATA_FRESHNESS_HANDOFF.md)、[Direct資料鏈](../06_qa/V4_DIRECT_RELEASE_HANDOFF.md)、[個股研究報告](../06_qa/V4_STOCK_RESEARCH_REPORT_HANDOFF.md)。
+- [工作區檔案說明](../07_guides/WORKSPACE_FILES_AND_CLEANUP.md)、[三線接手Prompt](../07_guides/V4_THREE_LUNA_HANDOFF_PROMPTS_2026_09_08.md)。
+
 - [LUNA 三線整合驗收](../06_qa/LUNA_INTEGRATION_CLOSEOUT_2026_09_08.md)：三線判定、整合缺陷修補、全域驗證、正式 ML 限制與 Git 收尾。
 
 - [專案整併查核](../06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)：實際整理結果、驗證限制、邏輯衝突與重大改動判斷。
 - [LUNA 三線執行 companion](../07_guides/LUNA_PARALLEL_PLAN_2026_09_07.md)：共同基線、資源預算、A／B／C Prompt 與整合驗收。
 - [LUNA B 開發環境與依賴基線](../07_guides/LUNA_B_ENVIRONMENT_2026_09_07.md)：runtime／dev requirements、Windows／Python／TA-Lib／PySide6 邊界與已驗證版本限制。
 - [LUNA B 架構與 QA handoff](../06_qa/LUNA_B_HANDOFF_2026_09_07.md)：repo map、測試隔離、分析整併、依賴驗證、完整 suite 結果與 A／C 整合步驟。
+- [V4 Next Formal／Paper handoff](../06_qa/V4_NEXT_FORMAL_HANDOFF_2026_09_08.md)：實際受控 environment attestation、Paper legacy retry／跨日策略、三路 source→fill→ledger→Formal 執行順序與 atomic path update rollback；不把 candidate 直接升格為正式輸入。
 
 ## 0. 核心入口
 
@@ -606,7 +615,6 @@
 - 2026-07-08：新增 V3 Score Effectiveness / ML Readiness design + plan 索引，將 TotalScore 分組、fixed threshold robustness、component ablation 放在 ML 前置 gate，ML 僅作 shadow-only 第二層。
 - 2026-07-08：新增 V3.0 engineering candidate manual validation report 索引，標示 V3 effectiveness read model / gap classifier / review scaffold / readiness inspector 已具工程候選驗證入口，但人工驗證仍為 `PENDING_MANUAL_VALIDATION`，不啟用 scheduler、不宣稱投資有效性。
 - 2026-07-12：新增 V2.1 engineering readiness 與 formal closeout approval record 索引；`592d3db` safeguards、focused suite 與 rollback 已記錄，但 release owner 的 owner / timestamp / decision 尚未提供，因此狀態為 `awaiting_release_owner_confirmation`，不宣稱正式 closeout、投資有效性或 broker execution。
-
 
 
 

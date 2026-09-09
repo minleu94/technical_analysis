@@ -38,7 +38,34 @@
 
 V4 的有效性證據不足時保持目標 active，不重新定義為「工程版 V4」結案，也不強迫沒有增益的模型取得非零權重。
 
+### 自然累積的既有最低門檻（2026-09-08 root 程式核對）
+
+`data_module/prospective_shadow_maturity.py` 現行定義為20個shadow days，5／10／20／60交易日各至少20筆成熟觀測。`ml_module/natural_shadow_pruning_evidence.py` 使用同一組常數，另要求每個horizon具有實際downside兩種類別、完整pruning metrics，以及一致model／dataset／policy身分；replay、backfill及合成outcome不得計入。這是既有審查入口最低門檻，不是V4八項成熟度已足夠的統計保證，也不更改原實驗設計。
+
+因此不能排程20天後就自動宣告完成：60交易日結果須先自然成熟，再取得足夠不同決策日的成熟觀測。每日工作必須保存固定版本觀測、以官方交易日更新既有outcome，週期審查讀取同一sidecar；新版模型或政策不得與舊版混合湊數。各V4 Gate尚需逐項對應實際producer、consumer及事前門檻，缺失者先完成設計凍結，不以觀察到的績效反推門檻。
+
 ## 第一輪分工
+
+### 2026-09-08 接續 ownership 更正（優先於舊交接）
+
+**新持倉研究政策 root 審查決議**：已審核 `V4_FORWARD_MACHINE_POLICY_CANDIDATE_2026_09_08.md`，接受 macd_hist<=0／rsi<=30／adx<15 各產生reduce提案、20交易日觀察窗及5交易日自動review evidence cadence，僅為未驗證的前瞻研究假設，不授予投資有效性或自動交易信用。20日不是從Rule歷史窗口推導；macd_hist<=0只表示當下值，不證明穿越事件。Ops須先完成真policy producer→binder→Health evaluator隔離正負驗收，再依本次machine root授權保存實際可得時間、下一官方交易日生效的immutable policy及caller binding；舊entry不回填。移除固定人工review／未定義expiry的手動續期阻塞，保留可選人工覆核與明確supersede／retire；資料或日曆失效仍須經可驗證renewal恢復。尚未取得activation receipt，不能宣稱已啟用。
+
+**Formal 跨月持續性（缺口與最新工程驗收）**：root讀回active binding 的 `FORMAL_DAILY_ROLLING_CALENDAR_BUNDLE` 固定archive只涵蓋2026-09-09至2026-09-30。後續已新增以原anchor雜湊串接不可覆寫successor的renewal，保留固定portfolio clock與環境anchor。root重跑 `test_formal_runtime_roll_forward.py`／`test_paper_execution_retry_runner.py` 共25 passed（2.12秒）；其中真capture fixture CLI→persist子程序→正式validator→TEMP移除後durable讀回正例獨立1 passed（1.31秒），其餘包含跨日、休市與link重用。測試HTTP來源為fixture，尚未有自然跨月成果；最終型態／文件／caller收尾由Formal owner交付，不能把25項隔離通過解讀為自然10月排程已成功。
+
+**Exit 自然累積接續缺口（root程式核對）**：`ExitEffectivenessReadModel`／`ExitEffectivenessObservation` 的 repository 引用目前僅有模組及單元測試，尚無日常 producer／caller。隔離輸入一筆ready proposal（post-exit -800 bp）及一筆ready closed（+500 bp），現行report合併為ready_count=2、avoided_loss_count=1；這證明action_stage未分層，不代表正式歷史成果曾被污染。Ops在新持倉policy交付後，須接持久化proposal／實際退出lineage、官方交易日及當時可得價格的outcome producer，將提案反事實與實際退出成效分開，並接既有每日caller。只有提案存在，不構成Exit自然成效累積完成。
+
+- Formal／Paper：負責 `paper_daily_execution_producer.py` 與測試、`run_paper_execution_daily_isolated.py`、capture scheduled script／CMD／註冊計畫，以及 `run_ml_allocation_copilot.cmd` 的canonical state預設切換。必須完成真caller接線，bridge CLI或契約不單獨構成交付。
+- ML：負責Direct計算版本guard、續跑／替代資料建構計畫及ML前瞻；不再持有Paper writer。
+- Ops：負責Health binding每日生產、consumer與Health CMD，不代持Formal capture入口。
+- root：審核來源、測試及live註冊／部署讀回；不因舊ownership文字讓實作停在交接契約。
+
+### 2026-09-08 每日帳本切換待驗收差異
+
+**最新驗收更正**：下方為發現缺口時的紀錄。現行 Copilot CMD 已保留 D `OUTPUT_ROOT` 並將預設 Paper state 指向 repo canonical，EOD writer → durable capture → Formal consumer 隔離正例已通過；root 最新五套相關回歸為47 passed、1 skipped（3.73秒）。尚待自然日推薦／成交／隔日持倉承接，不再把預設路徑修改列為未實作。Formal owner 接續確認首次啟用日後的 roll-forward、週末與下一交易日，不以固定9/9測試代替長期日常運作。
+
+root 重新讀取實際 CMD：`run_ml_allocation_copilot.cmd` 未指定覆蓋值時，仍讀取 `%OUTPUT_ROOT%/paper_portfolio/paper_portfolio.sqlite`，而 OUTPUT_ROOT 預設位於 D 槽。`run_paper_portfolio_daily.cmd` 的後續 writer 則使用 repo `output/paper_execution_eod_replay/paper_portfolio/paper_portfolio.sqlite`。因此目前不是同一帳本閉環，不能以 portfolio_id 相同視為已整合。
+
+Formal owner 完成來源資格修補後，須將未來每日推薦的預設 state 接向上述 repo canonical state，保留 D 歷史來源唯讀及明確覆蓋參數；同時驗證推薦決策當下只能選到當時可得的 snapshot。部署前交付 CMD 差異與隔離 caller 測試，部署後核對 fresh-process 路徑、snapshot hash、推薦 receipt 與翌日成交承接。不要複製合併兩庫的歷史紀錄，也不要把新帳本回填成過去推薦依據。此項仍待實作，並非本節已完成切換。
 
 1. `data_recovery`：定位並修復基本面取得；有界官方請求保存小型證據；先隔離測試。
 2. `automatic_gate_review`：選一條具客觀輸入的人工 Gate，完成自動審核 producer／consumer 與負向測試。
@@ -217,3 +244,167 @@ Root 直接檢視 `data_module/portfolio_ml_target_diagnostics.py` 的 `_validat
   `output/scheduler_backups/baldr-paper-portfolio-daily_20260907_160825_comparison.json`。
   Last Run／Last Result 仍是既有觀測；尚未宣稱本次自然排程已成功執行或已形成正式
   Paper／Formal credit。
+
+## 2026-09-08 持續目標啟動：自然累積與工程並行
+
+使用者要求排妥真實累積的排程，工程持續迭代至 V4；root 只負責規劃與獨立審核，大量實作交給 Luna MAX。延續原完成條件，不改成工程版 V4 結案。本輪起點 `cc8dc787`、dev 乾淨；維持 main／dev，不新增 branch 或 worktree。
+
+### 本輪分工與驗收責任
+
+| Owner | 範圍 | 必須交付的實證 |
+|---|---|---|
+| v4_schedule_ops | 現有排程、自然窗口、重試與 weekly／shadow／Exit 累積入口 | live query、變更前後 XML、明確時區、輸入／輸出／逾時／回復契約、下一執行時間及實際產物讀回；不能只驗註冊成功 |
+| v4_formal_paper | Formal 三來源 consumer、Paper 成交／對帳／跨日承接 | 真實發布路徑與受控設定一致；現金／股數／費稅守恆、冪等、crash retry、決策當時可得性；不能造出非現金交易或回填歷史 |
+| v4_ml_evidence | teacher／來源內容綁定、實驗凍結、有效性、drift／回退 | 最高優先工程缺陷修補、獨立 oracle；先凍結後評估；沒有增益時限制模型，不強制非零權重 |
+| root | 中央規劃、Scoped SSOT、跨 owner 接口與獨立驗收 | 逐項讀回 source／consumer／時鐘／SHA；將工程通過、自然等待、資料缺失、失敗與完成分開 |
+
+### 即時觀測與下一動作
+
+- 本輪首次正式 readiness 於 `2026-09-08T09:29:59Z` 驗證為 `0/3`；三個受控 path 都指向 `clock-20260819` 且 `prospective_output_not_published`。HMAC 與 store identity 已配置，沒有輸出秘密。證據：`output/v4_next_root/formal_readiness_baseline.json`。
+- 第二次自然流程稽核讀到 19 份 Paper receipts，仍缺 terminal receipt；formal ledger／Paper fill source 缺檔，PIT 缺正式 sidecar／history 起點且同日多份 distinct capture。根稽核尚未提供 scheduler query，該條不得誤當排程未註冊；須由 ops 的即時查詢補足。證據：`output/v4_next_root/operational_baseline.json`。
+- 已將上述實際缺口交給相應 owner；先查活躍程序與當日產物，避免重複啟動。新 clock／正式派生產物／受控設定須有明確發布計畫與回滾；原始 D 資料不修改。
+- D 可用 `333659115520` bytes 為當下觀測；200 GiB reserve、既有持久新增／暫存預算與單一 heavy owner 維持。大訓練前由 root 驗收輸入充分性與預先凍結的實驗，不以容量足夠取代資料 Gate。
+- fold-005 已在本文件前節記錄曝光，任何其他文件的「尚未讀取」皆不能用作新盲測依據；fold-006+ 讀取前須先確立新的凍結範圍與授權。不得重跑已曝光區間挑結果。
+
+### 持續完成判準
+
+自然時間工作必須留下實際交易日／週期、producer 與 consumer 收據，不把補跑或 historical replay 算成 elapsed credit。所有可客觀驗證的缺件都轉成有 owner 的修復／生產步驟；缺憑證、自然時間或正式來源時精確揭露並繼續其他獨立工程。最終仍逐條驗證版本路線圖第 6 節八項成熟度，未取得充分證據即維持目標 active。
+
+### 本輪根代理審核追加
+
+- root 於 `2026-09-08T09:35:11Z` 獨立 elevated query 確認 17／17 Windows 任務存在且 action 正確；Paper EOD 00:05 Pacific 早於行情更新 04:20 Pacific，對應目前台北 15:05／19:20，今天的缺源退出不能當成行情更新失敗。已交 ops 改為更新後處理、同日依賴驗證與有界冪等重試，保留 principal 與變更前 XML；06:00 Pacific 在目前時差是台北同日 21:00，部署後需驗 live NextRun 與 DST 邊界，不提前宣告成功。
+- Formal owner 即時唯讀回報 `twstock.db` 最新行情為 20260907、20260908 尚無資料；Paper 為 27 snapshots／81 positions 且正式 trade ledger 尚缺。先查官方當日資料是否已可取得，不將自訂排程時間當成官方發布限制，也不造出缺源成交。
+- teacher v2 source manifest 漏驗 schema／storage_mode 的修補方向已接受；root 獨立重跑 `tests/test_teacher_input_source_producer.py` 為 4 passed（`output/v4_next_root/teacher_review_1.log`）。此為契約修補，不代表正式來源已達 3/3。ML owner 下一步轉自然 shadow 特徵缺口、成熟結果消費及有效性／回退接線。
+
+### 2026-09-08 Root 接續驗收與工作區異常
+
+- Root 以實際當下 UTC 時鐘獨立執行 Paper legacy queue 完整 resolver，`output/v4_next_root/paper_queue_actual_now_review.json` 為 exit 0：選回 `scheduled_rec_20260907_051003`、reason=`pending_execution_retry`，19 份來源收據 hash 不變。跨日情境明確回報 `pending_execution_session_missed:2026-09-08`。此為佇列讀回，不是成交或自然期間信用。
+- Scheduler retry reviewer 發現 any-marker 判斷可能讓缺源與 identity/schema 混合錯誤被重試；另 receipt 日期只驗不早於 target，尚缺未來時間拒絕。已要求 owner 補 terminal 優先、精確日期與負例；尚未准許據此部署。
+- 本輪 live status 發現 21 個根目錄 tracked 檔案實際消失，包括 `.gitignore`、`AGENTS.md`、requirements 與測試設定。原因尚未確認，已通知全部 owner 暫停相關清理、提交及部署；不得把缺檔當成授權清理或順手 stage。先保全現況並查明來源，再依已知基線與 owner 回報決定精確恢復。未修改 D 原始資料。
+
+- 接續 root 審核 `formal_controlled_handoff.py` 發現總 blockers 包含 current_readback_blockers；即使 proposed consumer/custody 完整，舊設定缺檔仍可能阻止 ready_for_root_review。已交 Formal owner 分離 current 診斷與新來源切換條件，補舊 0/3、新 3/3 正例及新缺件負例；此為靜態程式發現，尚待測試證實及修補驗收。
+- 根檔恢復方案已授權 ML owner：限定 21 檔，HEAD 固定 cc8dc787，先備份 bytes/SHA，再確認 index 等於 HEAD、resolved parent 為 repo root 且目標不存在，以 exclusive-create 恢復。仍待執行結果與 root 獨立讀回，不以授權方案當成恢復完成。
+
+### 2026-09-08 Root 恢復讀回及定向驗證
+
+- 21 個根檔已實際恢復；root 逐檔確認 worktree bytes = HEAD blob = 任務備份 bytes，21/21 相符。獨立報告：`output/v4_next_root/root_files_restore_readback.json`。原因仍未查明，不覆蓋其他 dirty files，不把 Git stat/換行差異當成需重寫檔案的理由。
+- root 對 retry runner、dependency gate、scheduler health CLI 三檔重跑：12 passed（1.54 秒）。Formal handoff、Paper ledger 與 append CLI 三檔：13 passed（0.93 秒）。前者仍缺來源 CSV→DB 同一性與完整時間拒絕驗收；後者 handoff 正例 mock consumer，只證明分類修復，不是正式 3/3。
+- ML wrapper 已出現 PIT operational path 參數接線，尚待語意整合測試與真實有界 consumer 讀回。盤後05:20 Pacific排程不能冒充台北08:30前瞻決策，已要求跨 owner 分開盤前準備與決策捕捉，檢查實際完成時間。
+
+- Root 真實唯讀 2026-09-07 source→SQLite helper 讀回：TWSE、TPEx 各 256/256 開盤價吻合，無解析錯誤；`output/v4_next_root/source_db_readback_20260907.json`。此為前 256 筆抽樣，不能推廣為待成交股票全部已驗或今日行情就緒，已交 ops 改覆蓋實際執行範圍。
+- Formal handoff 新 consumer 缺件負例已加入；root 三項 tests 通過（0.54 秒）。實際新 plan 尚未提供 proposed paths/clock/identity，只是現況診斷；已要求 owner 交合法 producer 建立順序與精確輸出/命令，不能反覆產出空計畫代替來源生產。
+- Root 確认既有 allocation 排程 caller 為 `run_daily_ml_allocation_orchestration.py --auto-catch-up`，不是 derived-shadow wrapper。已要求 ops/ML 對齊新 release、PIT 參數與 forward consumer；單純調整05:20 trigger不足以證明新推論接通。
+
+- Ops 全檔 source→DB 修補經 root 真實唯讀重驗：2026-09-07 TWSE 1,095/1,095、TPEx 875/875 開盤價一致，無解析/讀回錯誤；`output/v4_next_root/source_db_full_readback_20260907.json`。這是昨日資料一致性，不是今日排程成功。Root 三檔 gate/retry/health CLI 再跑14 passed（1.47秒）。
+- 已明確核准 ops 執行既存 Paper EOD task 的06:00 trigger及受測wrapper action限定修改，保留principal/settings並交XML與NextRun讀回。先前『已部署』回報已釐清為待執行，沒有以措辭代替部署證據。9/8 bounded quick updater 的執行計畫改由現有ops owner負責，不再交給不存在的data owner。
+
+- Root elevated live `schtasks /Query` 已確認 Paper EOD Enabled/Ready、NextRun=2026-09-08 06:00 Pacific、正確 isolated cmd action；Interactive only、電池限制與1h timeout保留。LastResult=2仍是00:05舊執行，不能算新排程結果。
+- Root 真實 loader `load_verified_rule_champion_snapshot_history` 以當下 cutoff讀取 `output/formal_daily_publications/rule_history/2026-09-08/manifest.json` 成功；SHA=f71a3e40a138570d25ed51bcf0f14cd57d21322acb1ae30afed6498128ac8f49。這是明確候選路徑的正式custody驗證，未更新受控三路徑、未取得3/3。
+- ML wrapper 新fixture第一次root重跑為4pass1fail（缺output mkdir）；修正後root完整重跑derived shadow、daily orchestration、PIT publisher三檔26 passed（1.27秒）。真consumer在合成資料驗證available_at/effective_from及candidate權限，尚不代表自然forward已累積。
+
+- Root 七個受影響來源檔的 explicit-package-bases mypy 发现11 errors：ops dependency/retry共10項object狹化、變數型別衝突；ML wrapper1項Path optional assignment。已交owner修補，未以pytest通過替代型態驗證。
+- Root 檢查quick updater確認單日start/end不涵蓋技術計算範圍：technical caller仍start_date=None、120日lookback、全市場，另含broker/market/industry更新。已要求ops具體列範圍與容量，或交prices-only受測方案且標明partial scope，不直接假設单日參數即可安全執行整鏈。
+
+- Root 同日未來收據隔離重現：observed=2026-09-08T13:00Z，quick checked_at=2026-09-08T23:59+08，gate仍ready=true、blockers=[]。`output/v4_next_root/future_receipt_probe.json`。已要求完整aware timestamp<=observed而非僅日期相等，未來/naive/malformed收據為terminal；不能以同日日期修補當時間安全已完成。
+- Root 七檔mypy重驗：ML optional Path問題消除，目前排程兩檔仍10 errors，保持待驗收。根檔目前無deleted；三位代理持續處理中，不因單次等待timeout重啟。
+
+- Root 釐清跨owner執行責任：Formal owner新增非scheduled PIT capture/publication、formal producer與identity/設定handoff範圍，ops持有scheduler與quick updater。不得將所有source生產推給ops或不存在的data owner。Root仍先審核具體有界命令再執行。
+- ML owner實際TEMP舊PIT候選讀回回報publisher code hash mismatch，且capture晚於當日08:30。此尚為owner回報，不冒充root獨立驗證；已要求Formal以current code建立新真實來源，保留舊immutable artifact。優先準備下一合法決策日的available_at/effective_from，不能回填當日盤前信用。
+
+- Root未來收據修補重驗：同樣23:59收據在21:00檢查已ready=false且含quick_update_receipt_checked_at_after_observed，保存`output/v4_next_root/future_receipt_fixed_readback.json`。真實D quick/freshness收據皆有aware checked_at，尚待fixture/整組驗收。
+- Root最新mypy僅剩retry runner兩項list(object)狹化；另health CLI發現只改DATA_ROOT時output fallback仍固定D，已要求沿TWStockConfig語意推導resolved_data_root/output並補單一覆寫測試。
+
+- Root跨三線13檔整合pytest為101 passed（5.21秒），七個受影響來源檔explicit-package-bases mypy全部通過；本輪已清除前述11項型態回歸。這是所列範圍驗證，不代表完整repository全測。
+- Root已直接核准Formal執行現有capture CLI的具體步驟：全新系統TEMP目錄、--live --confirm-live-readonly、每官方endpoint最多4MiB、timeout30秒，兩個既有官方endpoint、實際時鐘、完整current scope，不寫D。不再等待重複空plan；取得publication/receipt/raw後先獨立讀回再接持久archive與下一合法日consumer。
+
+- Root最新health CLI/gate/retry三檔18 passed（1.57秒）；已要求ops同步Manual排程段，保留Interactive only與電池條件的實際限制。
+- ML owner釐清前一日盤後PIT捕捉可供下一日08:30，effective_from保留真實capture日，無需每日強迫同日capture；已轉Formal建立current-code publication/receipt/operational。現consumer只接受TEMP路徑，存在長期累積持久性缺口；已要求ML重用受控archive設計持久consumer並保持custody/時間驗證，不能任意放寬路徑或改寫舊artifact。
+
+- Root elevated Win32_Process唯讀query未找到capture_pit_sector_membership_machine.py程序，已建立的v4_pit_current TEMP目錄仍空；已要求Formal讀回原exec結果，不能以agent running當capture仍在跑或以空目錄當成功。
+- Root找到既有formal_daily_input_producer的archive/readback機制並交ML重用；同日盤前reuse入口的日期政策不可直接套用前日可見ML consumer，須保留明確manifest與decision cutoff。
+
+- Ops bounded updater plan 已由root讀取：未批准額外手動full quick chain，因market/industry canonical與120日技術範圍尚無對應backup/容量驗收；引用ML raw配額不能代表此CLI已具備同等執行中guard。既存04:20task維持，避免重複；ops改做官方availability唯讀探測及自然run後驗證，失敗再按step修復。
+- Root核准ML受控archive adapter，要求明確manifest＋受控root containment、兩來源branch互斥、archived_at<=decision與hashfreeze。拒絕把archive自述producer_code傳回expected hash來接受所有舊code的設計；未知code保持fail closed。先驗current-code新產物的持久讀回，未宣稱5份舊archive可用。
+
+### 2026-09-08 官方 PIT 新捕捉 root 獨立驗收
+
+- Root讀回Formal原命令結果：首輪WinError10013，下一輪TPEx回應不是UTF-8 JSON；後續新批次成功。舊空TEMP目錄不代表後續批次仍失敗，已校正觀測對象。
+- 成功目錄為系統TEMP `v4_pit_current_20260908_102736862`；root實際重跑publication validator、receipt validator、operational consumer皆通過，1,984 rows，available_at=2026-09-08T10:28:09.898861Z、effective_from=2026-09-08，五檔SHA保存於`output/v4_next_root/pit_current_capture_readback.json`。
+- current候選仍candidate_only=true、formal_oos_allowed=false、production_action_allowed=false；不能回填今日08:30信用。已交Formal持久archive、ML以此新產物驗consumer，避免重抓或修改舊raw/hash。
+
+- Root持久PIT archive獨立讀回成功：`pit_candidate_archive/2026-09-08/85f71a355f707404-284d54b9ccedbfea/archive_manifest.json`，fileSHA=c2b838d9d79b794bc13b934c83f5f36f18c1b5828dead20ded9112de6745178f，1,984 rows，archived_at=2026-09-08T10:34:49.359908Z。報告`output/v4_next_root/pit_durable_archive_readback.json`。
+- Root進一步用唯讀隔離probe阻止原capture TEMP的read_bytes：archive readback仍成功、原TEMP存取嘗試0、未移動刪除原檔。證據`output/v4_next_root/pit_archive_original_temp_unavailable.json`。此驗證Formal持久reader不依賴原TEMP，ML新adapter仍待TOCTOU/clock與公開接線驗收。
+
+- Root 重新 live query 確認 Paper Portfolio 已改為 Pacific 16:15、Ready／Enabled；既有 action、Interactive only、電池條件與 72 小時 timeout 保留。獨立重跑 scheduler／registration／task names 共 24 passed；LastResult=0 屬舊 16:30 執行，不授予新排程成功信用。
+- Root 實際呼叫新版 ML archive consumer，於 2026-09-08T10:49:34Z 讀回 1,984 rows，current-code／source custody／raw rebuild 通過，報告 output/v4_next_root/ml_archive_actual_readback.json；adapter 與 clock planner 的 mypy 2 files 通過。此為盤後 candidate 驗證，公開 forward caller 接線及 TOCTOU 負例仍待驗收，不計正式前瞻信用。
+
+- Root 官方 calendar 新候選驗收：從 exact TWSE／TPEx response.bin 與 metadata 重建 2026-09-09 至 09-30 全部 22 日，days／source_responses 與 bundle 完全相等，bundle、manifest、兩份 raw 與 metadata 雜湊通過。9/9 兩市場均交易日。報告 output/v4_next_root/calendar_raw_rebuild_20260908.json；持久 clock 接線待續，不授予 formal credit。
+- Root 重跑 official calendar 與 ML archive consumer 共 12 passed；已檢視 archive 驗證後替換 rows 的實際負例，以及刪除 fixture 原 TEMP 後成功讀取的正例。TOCTOU 修補在此範圍驗收通過，公開 forward 流程仍需整合驗收。
+
+- Root 公開 ML wrapper 審查發現前瞻完成時間仍待補：目前 decision_clock 使用開始 capture_at，daily orchestration 可在耗時推論後先寫 shadow observation。已要求 owner 在實際 observation emission 邊界驗證 08:35 deadline，逾時保留 research 但不可取得 natural forward credit；不能只改 wrapper 最終 status。Ops 可準備 caller，待此驗收再部署。
+- Root 最新 derived wrapper／orchestration／archive 三檔測試為 29 passed、1 failed：新增 archived-after-decision 負例因 Windows write_text CRLF 先觸發 noncanonical JSON，尚未驗到目標時間條件。已交 owner 修正 fixture canonical bytes 與時間次序，不放寬錯誤比對掩蓋問題。
+
+- Root 已驗收 calendar durable archive 的 6 files hash／size 與 archive content／file hash；阻止原 TEMP read_bytes 後 custody inspector 仍 verified，原 TEMP 存取 0。證據 output/v4_next_root/calendar_durable_temp_unavailable.json。Formal 可繼續 clock／identity 準備。
+- Ops 已獲 root 核准實作未註冊的 forward scheduler 準備件：Pacific 16:15 喚醒、真實台北 08:30 等待、明確 frozen config、TEMP operational 與 durable archive 來源互斥、逾時不補 forward。部署仍待 ML emission deadline 與 exact configuration 整合驗收；既有 05:20 catch-up 不變。
+
+- Root 最新 ML shadow evidence／daily orchestration／derived wrapper／archive consumer 四個 suite 共 45 passed（2.28秒），四個來源檔 mypy 通過。前次 canonical fixture 失敗已修復。已確認慢 inference 在 collector 前阻擋，以及真 collector／repository post-INSERT 跨 deadline 引發 rollback、observations 為空。此完成時間防線在上述範圍驗收通過；Ops 可進入 frozen args 與 on-time 接線驗收，尚未授予自然 forward credit。
+- 9/9 v4 clock candidate actual loader 與 file SHA 通過，報告 output/v4_next_root/clock_candidate_v4_readback.json；模型／特徵／policy 來源映射仍待查核。舊 v3 manifest 路徑實為 planning report，不得交 clock loader 或當正式來源。
+
+- Root source mapping v2 已逐一核對八筆檔案引用全部匹配，證據 output/v4_next_root/clock_source_mapping_v2_readback.json。candidate_model／feature 原檔明確 disabled、training_performed=false、features=[]；9/9 clock 僅 Rule-only simulation，歷史 owner acceptance 不授予新 universe 或 ML 身分。
+- Root 前瞻排程真 parser 接線已通過；修正 nested completion 與保留 outer wrapper safety status 後，wrapper／derived／orchestration 最新 38 passed。daily source hash mismatch 實際比對拒絕，不以 inner completed 蓋過 outer blocked_capacity。
+- 每日 config producer 已在施工，尚待來源 age policy、已驗 hash 綁定、create-only 每日選擇與 actual frozen release／repo output 的整合驗收。首日 date-bound config 不代表長期累積已完成；新 forward task 尚未註冊。
+
+- Root 9/8 quick 更新讀回校正：SQLite 日期為 YYYYMMDD，先前用 ISO 日期查到零筆是查詢格式錯誤。實際 20260908 共 1,961 筆；Ops 全量來源對帳的 1,958 筆有效開盤價全部吻合，freshness 排程尚未到時。保存 `output/v4_next_root/quick_20260908_market_date_format_correction.json`，不將舊零筆觀察當成入庫失敗。
+- Root 已執行 forward Python wrapper `--preflight`：九項路徑存在、V2 release manifest SHA 符合固定 pin，沒有等待、建立日 config 或啟動 child。排程契約／wrapper／child 24 tests 通過；加入 preflight 後 wrapper／registration／feature diagnostic 另一組 24 tests 通過。批准 Ops 按 16:15 Pacific、InteractiveToken、IgnoreNew、PT2H 的已審 XML 新增 task，仍待 Windows 實際註冊讀回；不提前執行自然日前瞻推論。
+- Root 重現 feature-gap diagnostic 的 compact date 驗證漏洞：20261399 被解析為 2026-13-99，已退回 ML owner。市場兩日 close 的數值存在只證明可計算，尚需官方相鄰交易日與 available_at 證據才能進入前瞻特徵；技術方向欄不得以補零或修改既有 frozen release 處理。
+- Forward task 已於 9/8 11:43:54 UTC 建立，首次 XML encoding 不一致失敗後修正重試。Root 獨立 live XML 讀回確認 daily 16:15 Pacific、正確 repo action、原使用者 SID／InteractiveToken、PT2H、IgnoreNew 與電池限制；這是註冊驗收，不是自然執行成功。Root 另以真 CMD 注入錯誤模型 hash，JSON 正確 blocked 但 exit code 為 0，已要求修正括號內 ERRORLEVEL 提前展開及新增實際 CMD 負例。
+- 後續 root 真 CMD 負例已回傳 exit 2、blocked、child_started=false；XML UTF-16 測試改用 XML 語意解析後通過。Formal producer 原本將尚未閉合區間的尾端 fills 全部拒絕，現改保留完整 custody、只發布已閉合區間。root 已檢視多日正例：首日讀兩筆成交、使用一筆且保留一筆 pending；次日使用兩筆、發布兩個 transitions。Formal／Paper source chain／forward registration／wrapper 四組共 45 passed（2.96 秒），三個改動來源 mypy 通過。此為隔離跨日工程證據，未增加自然交易日或正式輸入信用；21:25 Rule／Formal 時窗保持不變。
+- ML compact date 修補已由 root 重驗：20261399、20260229 拒絕，20260908、20240229 正確解析，feature diagnostic 四項測試通過。後續仍需市場衍生值的官方相鄰日與可得時間接線。
+- Root 實際 Windows task action 查詢與 caller 程式審查確認：既有 Formal task 只消費／驗證 Rule bundle，尚未排入每日 Rule source producer。已交 Formal owner 優先串接合法時窗內的 producer→consumer，不以 candidate runtime config 檔案存在當成已接線。
+- Root 另發現每日 Rule clock 重置與帳本累積起點衝突：Rule producer 每日設定 activation_trading_day=target_day，ledger 卻要求 activation_day <= snapshot_day < observed_day；若直接採當日 clock，區間必然為空。已要求分離每日來源更新與固定 portfolio clock 起算日，補實際 scheduler resolver→producer→ledger 的跨日整合；不能只依固定 fixture 的 45 項測試宣稱日常累積成立。
+- 9/8 freshness 自然排程於 05:00:01 Pacific 通過，行情／技術日期均 20260908、errors／warnings 空。Root 05:01:48 重新執行唯讀 Paper dependency gate，ready=true、blockers=[]、exit 0，保存 `output/v4_next_root/paper_gate_after_freshness_root.json`；06:00 EOD 尚待自然執行，不能先計成交。
+- ML feature repair 新增雙年官方快取與讀取中 custody 變更保護，root 最新 10 tests 通過；實際 9/8→9/7 相鄰日再讀回使用官方快取、mid_read_revalidation=true、db_fallback_allowed=false，兩個快取檔案雜湊已綁定。此證明日曆來源接線，不代表當日前瞻輸入或新模型已發布。
+- 今日 05:05 Raw PIT 自然任務由 Running 轉 Ready／LastResult=1，root live task 與 PID 查詢确认已終止。當次 log 為 DailyPriceSourceQualityError、4,476,508 candidate rows、builder exit 2；不是先前 log 內的成功 publication。本輪沒有手動重跑。
+- Root 單日兩檔唯讀 probe（9/7、2330／6488）確認品質 guard 的兩個缺陷：all-universe caller 只傳 TWSE daily_price，6488 被判 canonical_daily_row_missing；改讀 daily_price_tpex 後，SQLite 990.0／1015.0／966.0／971.0 與 CSV 990.00／1015.00／966.00／971.00 被字串比較判為四欄不同，成交股數同為 8,393,000。程式第 454 行直接比較 payload 值，支持精度格式誤報根因。證據 `output/v4_next_root/raw_quality_market_route_probe.json`；已交 ML 修復市場路由與 Decimal 等值比較，Ops 補有界失敗分類摘要。此小樣本不能解釋全部 4,476,508 筆，仍須修後分類查核，不刪原始資料或 blanket 放行。
+
+### 2026-09-08 Root 雙市場品質修補驗收
+
+- Root 於 12:28 UTC 後獨立執行 quality／builder CLI／scheduled Raw／runtime config 四組測試：34 passed；quality、builder、scheduled Raw 三個來源檔 mypy 通過。這是定向驗證，不代表全域整合完成。
+- 真實 9/7 單日唯讀雙市場 consumer：2330／6488 均 source_quality_pass，路由分別為 daily_price／daily_price_tpex，小數表示法誤報已解除。證據 `output/v4_next_root/raw_quality_dual_market_readback.json`。
+- 擴大到同日全市場後，1,970 筆全部唯一匹配（TWSE 1,095、TPEx 875），missing／ambiguous／conflict 均 0；仍保留 1 筆 quarantine：6949 的 previous_close=1490.0、current_open=81.9，分類為單側尺度不連續，DB／canonical differing_fields 空。已交 ML owner 查核原始日期、市場及單位，不調低 guard 或推論全部歷史候選已修好。證據 `output/v4_next_root/raw_quality_dual_market_full_day.json`。未重跑 Raw builder、未寫 D 原始資料。
+- Root 接續重驗 Formal runtime wiring／Rule producer：15 passed；Rule producer、runtime config、scheduled Formal 三檔 mypy 通過。新測試證明 exact predecessor paths 接線與盤前首建／盤中重用，但價格 loader／ranker 仍使用替身，不能算真實完整來源鏈；固定 portfolio clock 跨日 identity 仍待驗。已要求 owner 補真 SQLite fixture consumer 與 receipt 同次 bytes 解析／hash，避免將路徑接通誤認為正式 3/3。
+- Root 查核長期排程依賴：forward config 的交易日／前一交易日判定均為 allow_online_probe=False；目前年度快取實際 captured_at_utc=2026-09-07T12:20:27.355937-07:00、expires_at_utc=2026-09-14T12:20:27.355937-07:00、max_age_seconds=604800。scripts/scheduled 尚無 capture_official_trading_calendar_cache／build_twse_calendar_cache／write_twse_calendar_cache 呼叫。已交 operations owner 核對及補有界日曆刷新前置流程，保持 immutable capture 與 expiry 拒絕，不以首日成功代表長期可運作。
+- Root 審查雙市場路由新增效能風險：每筆 SQLite row 都呼叫當日／前日 route helper，而 helper 每次重建完整市場 symbol 字典，CSV cache 僅省去檔案解析。隔離三筆跨日 probe 共呼叫六次，5/19 與5/20各重建兩次；已交 ML owner 改按日期重用完整路由且限制快取範圍，避免全歷史處理乘上市場股票數。證據 `output/v4_next_root/raw_route_rebuild_probe.json`。首輪 fixture 連線延後釋放造成 TEMP cleanup 失敗，釋放後重驗 exit0；不把它解讀為正式 DB 問題。
+- Root 更正前筆『未找到日曆刷新 caller』的範圍：搜尋漏掉 refresh_twse_calendar_cache；實際 Paper EOD isolated wrapper 在 scope preflight 後會呼叫 _refresh_calendar_cache，且使用同一 repo cache。仍有可重現時窗缺口：真實快取以假設 9/14 06:00 Pacific 讀取通過、同日16:15讀取因過期拒絕；既有refresh只在已過期時抓取，因此早上通過不能保障傍晚forward。唯讀 probe `output/v4_next_root/calendar_expiry_forward_gap_probe.json`，不算自然執行證據。已交 Ops 優先補涵蓋下次決策窗口的刷新或盤前前置，避免重複新增 task。
+- Raw 雙市場工程後續 root 驗收：quality／builder CLI／scheduled Raw 三套共32 passed（4.14秒）；正式 caller 已預設明示 daily_price 與 daily_price_tpex。路由結果採8日期滾動快取，CSV層同步淘汰；root獨立走12日期後route8／CSV16（兩市場），保存 `output/v4_next_root/raw_route_cache_bound_probe.json`。此範圍解除重複重建及無界快取缺口；未手動重跑全歷史Raw，6949與其他歷史候選仍待來源查核。
+- Formal 首建來源測試已進一步補齊：root 重跑 Rule source／runtime wiring／runtime config 三套22 passed（1.38秒）。新增案例使用真SQLite T-1 window與ranker，25個sessions／3個symbols，盤前首建與盤中重用重新驗consumer及source_window_hash；政策與日曆仍隔離注入。此取代前述價格loader替身缺口的現況，固定portfolio clock跨日identity及正式controlled handoff仍未驗收。
+- 6949來源調查：root逐檔讀回8/26與9/7官方CSV保存檔，SHA均匹配且各唯一1row；close1490→open81.9及名稱增加星號與owner evidence一致。證據 `output/v4_next_root/raw_6949_csv_evidence_readback.json`。此僅確認原始觀測，不證明公司行動或調整比率；已交ML owner取得有界官方公司行動／面額變更證據，再做隔離candidate驗證，保留真實available_at，不回填歷史PIT信用。
+- Root 最新controlled handoff／daily producer共27 passed（2.12秒），包含固定common clock與獨立daily lineage驗證。覆蓋限制：split lineage正例直接呼叫identity validator；data_module/scripts搜尋daily_rule_lineage目前僅handoff reader命中，尚無真producer manifest寫出證據。已交Formal owner優先接三项已驗receipt→固定common identity＋每日lineage→受控consumer，以及每日rolling config caller，不以手造identity測試當正式交付。
+- 新forward日曆刷新前置已有五項隔離tests通過，但root實際CLI --preflight遭blocked：capture_script被錯套repo output containment，實際scripts路徑必然拒絕。已交Ops修正程式／輸出路徑各自驗證，並補跨年previous-session年度cache及刷新後expires>forward horizon檢查；此片尚未驗收，五項fixture通過不代表真CLI可用。未發網路、未建立cache或改Windows task。
+- 日曆前置修補後root真CLI --preflight已ready、blockers空、writes=false、network_attempts=0，七項定向tests通過。程式檔錯套output containment已解除；新增按forward horizon選年度及新capture expiry覆蓋檢查。整體CMD／自然執行驗收尚待Ops交付，不能以preflight當成功刷新或forward信用。
+- Root 真run_ml_allocation_forward_daily.cmd preflight整鏈exit0，日曆前置與forward兩段均ready/blockers空；release manifest pin仍c306c1ea…，無wait/config/child/network或資料寫入。
+- Root品質全量digest probe通過：sample_limit=0與None的candidate_count/digest一致；未保存樣本的價格5→6改動會改變digest，count仍1、samples仍0。證據 `output/v4_next_root/raw_candidate_digest_probe.json`。最新quality／builder／scheduled Raw共33 passed（4.11秒）；正式exporter預設candidate sample上限64。已要求ML owner交具體有界全歷史唯讀分類執行，不觸發fit或Raw發布。
+- Root 對日曆刷新前置、品質guard、PIT exporter、builder CLI、scheduled Raw五個來源檔重跑explicit-package-bases mypy全部通過。三位owner仍active，接續等待真producer identity與全歷史分類交付；未因等待timeout重啟任何工作。
+- Root 獨立讀TWSE TWTB7U變更股票面額預告表，確認6949於115/08/27停止買賣、115/09/07恢復，變更前10.00、後0.50、換股率20.00000000；與ML candidate吻合。來源 https://www.twse.com.tw/exchangeReport/TWTB7U?date=undefined&response=html&selectType=undefined 。這是當下官方頁觀測，未證明9/7決策前可得；已要求ML保存原始bytes／metadata／hash與版本receipt，再做受影響symbol/window隔離及新來源契約，避免用價格比18.19當換股比或回填歷史PIT。
+- 全歷史品質分類已實際啟動：root elevated CIM確認PID56572／子33128存活，開始12:52:36UTC，命令audit_ml_daily_price_source_quality.py、2014-01-01至2026-09-07、雙source roots、ingest_guard、sample_limit64、repo output摘要；不跑Raw publication／fit。子程序當下working126,615,552、peak127,762,432、private603,070,464 bytes、CPU164.515625秒，屬觀測非硬上限。後續等待同process結果，不因timeout重啟。
+- 6949官方receipt持久證據root驗收：兩份HTTP response＋metadata共4個SHA皆匹配；直接解析TWTB7U換股率20＝10/0.5，MI_INDEX唯一6949開81.90／收67.10；receipt file SHA 0e8800dd…吻合。證據 `output/v4_next_root/raw_6949_official_receipt_readback.json`，不授予歷史availability。
+- 全歷史品質稽核已終止，log END12:56:09 UTC／exit2（quarantine），原兩PID已missing。Root讀回2014-01-01至2026-09-07共5,295,781 routed rows、17,830候選：SQLite invalid16,892、CSV mismatch827、missing55、both-scale33、canonical-scale23。64樣本、621,045 bytes報告，全分類/日期總和與candidate_count一致，report hash重算通過；摘要 `output/v4_next_root/raw_full_history_readback.json`。原自然Raw失敗使用不同截止日，不據此直接計算修復率；下一步分類正常不可交易缺值與真錯誤，不補零、不blanket放行。
+- 06:00 Paper自然排程已由root live查核：LastRun=2026-09-08 06:00:01 Pacific、LastResult=0、NextRun=9/9 06:00。新receipt recorded13:00:06.868388UTC，使用9/7凍結推薦、9/8執行日；root真SQLite唯讀逐欄匹配8筆委託紀錄（6全成、1部分、1拒絕，7筆非零股數），candidate檔案SHA吻合，獨立Decimal重算cash161,526.11與projection相等。證據 `output/v4_next_root/paper_natural_eod_20260908_readback.json`。這是自然工作產生的delayed EOD Paper replay，不是券商成交或盤中custody；event_time_proven=false/research_only=true，尚不授予Formal 3/3，9/9固定clock也不能回溯採認9/8。
+- Root Paper政策範圍審查：今日receipt宣告weekly_turnover_cap_bp2000，但post_execution_projection.turnover_bp7457；producer僅將config投影，未見PaperPortfolioPolicy.evaluate／weekly_turnover_used接入。cooldown另明示research不套用。本次帳務驗收不代表風控全通過；證據 `output/v4_next_root/paper_natural_policy_scope_review.json`。已交Formal owner在common identity收尾後補正式paper風控及enforced/diagnostic政策揭露，保留今日immutable research receipt。原始fill gross計算的換手與reference逐筆bp口徑不同，不把數值差異直接判為帳務錯誤。
+- Common identity producer已加入，但root隔離負例證實generic source receipt驗證層仍接受observed_at=2099及錯誤result.file_hash全0（當下observed為2026）；證據 `output/v4_next_root/formal_identity_receipt_binding_probe.json`。此只測receipt層，不代表完整三source consumer通過。已交Formal補receipt實際時間／source hash與ledger portfolio clock／Rule window匹配後再形成common identity，不能僅對傳入clock重新貼標。
+- Root依owner全量分類調整修復順序：16,892 invalid分成15,445筆literal --與1,447筆NULL／空價格。用途限制可直接依observed price_unavailable成立，不要求先推定每筆停牌／掛牌原因；已交ML實作保留原始列/日期/missing mask、排除受影響feature/label窗口的新研究contract，嚴禁drop後錯接相鄰日期、補零或放行真正mismatch。分佈報告為owner產物，root未重跑全量SQL，不冒充獨立全量查核。
+- Operations日曆前置已完成root定向驗收；後續分工改由Ops在app_module獨立實作Paper policy adapter及tests，Formal owner保留daily execution producer接線。兩者須先對齊真ledger週換手／冷卻／sector contract，避免讓Formal common identity與風控完全串行；今天immutable Paper receipt不改寫。
+
+### 2026-09-08 收據與政策接續審核
+
+- Root 已重驗 common identity 的收據時間與來源雜湊修補：正常收據接受，2099 未來收據與錯誤來源 file hash 均拒絕，隔離探測 exit 0。證據 `output/v4_next_root/formal_identity_receipt_binding_recheck.json`；這只涵蓋 receipt helper，真實三來源、共同 clock 與跨日受控接線仍待整鏈驗收。
+- Root 獨立重現 Paper policy adapter 的未來資料干擾：同一 9/8 context 原為 ready，追加 9/9 fill 後因日曆缺少未來日期而變 blocked。證據 `output/v4_next_root/paper_policy_future_row_probe.json`；已要求先依決策可見性限制資料，再驗證當下狀態。另待同一 SQLite transaction 的內容 digest（含 WAL 可見列）、官方日曆完整區間與批次 cash／turnover／sector reservation，不能以單一候選各自通過取代整批風控。
+- Root 重跑價格可用性契約與來源品質兩套測試，19 passed。另獨立重現只提供 feature window、label window 未提供時，horizon_expansion_required 卻為 false；證據 `output/v4_next_root/price_window_partial_contract_probe.json`。已要求分開兩類窗口完整性並驗證真正下游消費，不以診斷旗標宣稱缺價窗口隔離已完成。
+- Operations 05:15 自然 evidence dry-run 的 portfolio_alert／risk_prompt sections 仍缺來源，已排入 policy adapter 後續 producer 接線；不把 exit 0 或 degraded 當成正式 evidence ready。Direct maintainer PID 44380 本輪 Get-Process 確認仍存活，未停止或重啟它；存活本身不代表訓練已開始或完成。
+- Root 最新三線定向測試曾為16 passed（Formal receipt四項、Paper adapter七項、price availability五項），涵蓋未來列先隔離、batch turnover reservation及部分window完整性。另真SQLite WAL探測確認主DB檔SHA不變時，新增已提交列0→1仍改變transaction rows digest；證據 `output/v4_next_root/paper_policy_wal_digest_recheck.json`。
+- Formal 新增三來源build/read整合測試後，root本輪結果為4 passed／1 failed，失敗為Rule Champion history store identity mismatch。已交owner釐清producer／consumer store配置與runtime根目錄，不能放寬identity guard解決；先前helper通過不代表整鏈可用。Paper另須驗partial/rejected sell不替後續buy提供未實現現金。
+- Formal 三來源整鏈修補後 root 重跑5 tests全部通過：PIT測試helper覆寫Rule store環境，恢復正確producer store後，三source producer→identity build/read→controlled handoff plan成功，且future identity拒絕；未放寬正式consumer。此為隔離工程驗收，非真實正式輸入3/3或受控環境已切換。
+- Paper adapter／原policy／CLI root最新18 passed，涵蓋批次換手與產業額度、不提前釋放未成交賣款、重複symbol及WAL。執行producer尚待接線；實際partial/rejected sell後的現金與產業曝險必須依成交重验，不能靠預期賣出降低曝險便放行後續買入。
+- Operations owner已交付穩定Paper policy adapter，root交付後重跑adapter／原policy／CLI為18 passed（2.69秒）；owner另報20項含其交付範圍，兩數不混用。Formal owner承接execution接線，Ops轉入05:15 Evidence缺portfolio_alert／risk_prompt真來源與Direct外層狀態投影修補，維持三線平行且不重啟現有Direct流程。
+- Root缺價整鏈測試由33 passed／1 failed修復為35 passed（1.41秒）；原測試以ISO字串匹配YYYYMMDD來源導致gap未注入，修正後通過。另source品質新負例尚未修復：SQLite open95/highNULL、CSV open195/high'--'時canonical整列被丟棄，missing-only研究豁免錯誤成立。root重跑已完整清理TEMP、exit0；證據 `output/v4_next_root/raw_partial_missing_mismatch_probe_clean.json`。不能以35項既有測試授予這項新路徑完成狀態。
+- Direct live查核已穿透venv launcher：實際builder PID34224持續CPU計算，OOC helper等待Direct store，release等待OOC；未新發布store manifest。當輪D可用313,038,200,832 bytes（約291.54 GiB）；屬當下可用量觀測，不是全流程峰值或額外heavy啟動授權。證據 `output/v4_next_root/direct_live_process_readback_20260908.json`。

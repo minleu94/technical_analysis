@@ -1,7 +1,9 @@
 ﻿# 專案導航文件
 
 **版本**：v1.4.10
-**最後更新**：2026-09-07
+**最後更新**：2026-09-08
+
+本輪請先看 [目前狀態](docs/00_core/PROJECT_SNAPSHOT.md)、[Luna整合驗收](docs/06_qa/V4_LUNA_REVIEW_AND_WORKSPACE_CLOSEOUT_2026_09_08.md)及[工作區檔案說明](docs/07_guides/WORKSPACE_FILES_AND_CLEANUP.md)。個股研究入口由持倉／觀察清單共用，操作與限制以 [Manual](docs/07_guides/APPLICATION_MANUAL.md) 為準。
 **目標讀者**：專案開發者、新加入工程師
 
 ---

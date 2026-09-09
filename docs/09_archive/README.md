@@ -8,6 +8,8 @@
 
 ## 📄 文檔列表
 
+- [PROJECT_SNAPSHOT歷史封存](PROJECT_SNAPSHOT_HISTORY_2026_09_08.md)：2026-09-08整理前的完整快照與時間順序；僅作追溯。
+
 - **`DOCUMENTATION_UPDATE_SUMMARY.md`**
   - 文檔更新總結（歷史記錄）
 

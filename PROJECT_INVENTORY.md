@@ -1,9 +1,9 @@
 ﻿# 專案盤點報告
 
-> **最後整理**：2026-09-07
+> **最後整理**：2026-09-08
 > **用途**：提供根目錄層級的目前結構盤點。細節文件以 `docs/00_core/DOCUMENTATION_INDEX.md` 為準。
 >
-> **目前程式盤點**：七個 readiness lane、已完成工程、未完成產品 Gate 與推進順序見
+> **2026-08-29歷史程式盤點**：七個 readiness lane、當時工程與產品 Gate 見
 > `docs/06_qa/PROGRAM_STATUS_REBASELINE_2026_08_29.md`。2026-08-29 的
 > `FA_Data/output/release_v4` retention 行為、43 個刪除目標、18 個 retained runs、pointer
 > 與歷史 tombstone 見
@@ -11,6 +11,9 @@
 > refresh 見 `docs/06_qa/P0_EVIDENCE_REFRESH_2026_08_30.md`；raw data 未納入清理。
 
 ## 本輪結構整併入口
+
+- [目前狀態](docs/00_core/PROJECT_SNAPSHOT.md)與[本輪驗收](docs/06_qa/V4_LUNA_REVIEW_AND_WORKSPACE_CLOSEOUT_2026_09_08.md)。
+- [工作區檔案分類](docs/07_guides/WORKSPACE_FILES_AND_CLEANUP.md)與[實際清理結果](docs/06_qa/V4_WORKSPACE_CLEANUP_CLOSEOUT.md)：區分原始碼、虛擬環境、Git變更與執行產物。
 
 - [整理結果與架構判斷](docs/06_qa/PROJECT_CONSOLIDATION_REVIEW_2026_09_07.md)：全 tracked tree 清查、精確移除／回滾、保留邊界與本次驗證限制。
 - [LUNA 三線計畫](docs/07_guides/LUNA_PARALLEL_PLAN_2026_09_07.md)：資料／ML、架構／QA、UI／UX 各自的所有權與可貼用 Prompt。
