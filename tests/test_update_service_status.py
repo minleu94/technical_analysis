@@ -54,9 +54,29 @@ def _sqlite_config(tmp_path):
 def test_batch_daily_trading_days_include_start_date():
     assert get_trading_days("2026-06-18", "2026-06-22") == [
         "2026-06-18",
-        "2026-06-19",
         "2026-06-22",
     ]
+
+
+def test_update_tpex_daily_price_range_treats_holiday_only_range_as_noop(
+    tmp_path, monkeypatch
+):
+    service = UpdateService(_config(tmp_path))
+    monkeypatch.setattr(service, "_iter_weekday_date_keys", lambda *_args: [])
+    monkeypatch.setattr(
+        service,
+        "_create_tpex_daily_price_source",
+        lambda: (_ for _ in ()).throw(AssertionError("holiday range must not call API")),
+    )
+
+    result = service.update_tpex_daily_price_range(
+        "2026-06-20", "2026-06-21", delay_seconds=0
+    )
+
+    assert result["success"] is True
+    assert result["no_op"] is True
+    assert result["failed_dates"] == []
+    assert "沒有官方交易日" in result["message"]
 
 
 def test_update_daily_checks_selected_start_date_when_file_missing(tmp_path, monkeypatch):
@@ -1233,7 +1253,7 @@ def test_update_tpex_daily_price_range_stops_at_date_boundary_when_cancelled(tmp
     assert calls == ["20260702"]
 
 
-def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
+def test_sync_market_and_industry_csv_to_sqlite_replaces_only_source_dates(tmp_path):
     from data_module.db_manager import DBManager
 
     config = _sqlite_config(tmp_path)
@@ -1257,13 +1277,18 @@ def test_sync_market_and_industry_csv_to_sqlite_replaces_tables(tmp_path):
     service = UpdateService(config)
     market_result = service.sync_source_to_sqlite("market_index")
     industry_result = service.sync_source_to_sqlite("industry_index")
+    market_rerun = service.sync_source_to_sqlite("market_index")
+    industry_rerun = service.sync_source_to_sqlite("industry_index")
 
     assert market_result["success"] is True
     assert industry_result["success"] is True
+    assert market_rerun["success"] is True
+    assert industry_rerun["success"] is True
     market = db.execute_query("SELECT 日期, 指數名稱, 收盤指數 FROM market_indices;")
     industry = db.execute_query("SELECT 日期, 指數名稱, 收盤指數 FROM industry_indices;")
     assert market.to_dict(orient="records") == [
-        {"日期": "20260529", "指數名稱": "加權指數", "收盤指數": 21100.0}
+        {"日期": "20260528", "指數名稱": "加權指數", "收盤指數": 21000.0},
+        {"日期": "20260529", "指數名稱": "加權指數", "收盤指數": 21100.0},
     ]
     assert industry.to_dict(orient="records") == [
         {"日期": "20260529", "指數名稱": "半導體", "收盤指數": 500.0}

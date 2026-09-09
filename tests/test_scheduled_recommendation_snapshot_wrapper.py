@@ -78,6 +78,40 @@ class FakeRecommendationRepository:
         return result.result_id
 
 
+class FakePersistingRecommendationRepository(FakeRecommendationRepository):
+    def save_result(self, result) -> str:
+        result.result_id = result.result_id or "scheduled_rec_fixture"
+        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        (self.runs_dir / f"{result.result_id}.json").write_text(
+            json.dumps(result.to_dict(), ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return result.result_id
+
+
+class FakeForwardCandidateProducer:
+    calls: list[dict[str, object]] = []
+
+    def __init__(self, output_root, *, calendar_cache_path=None) -> None:
+        self.output_root = output_root
+        self.calendar_cache_path = calendar_cache_path
+
+    def produce(self, recommendation_path, *, policy_path=None):
+        self.calls.append(
+            {
+                "output_root": self.output_root,
+                "recommendation_path": recommendation_path,
+                "policy_path": policy_path,
+                "calendar_cache_path": self.calendar_cache_path,
+            }
+        )
+        return {
+            "status": "degraded",
+            "candidate_count": 1,
+            "candidates": [{"status": "awaiting_explicit_policy"}],
+        }
+
+
 def test_scheduled_recommendation_snapshot_saves_result_and_status(
     tmp_path: Path,
     monkeypatch,
@@ -143,6 +177,61 @@ def test_scheduled_default_config_uses_recommendation_service_tokens() -> None:
 
     assert config["filters"]["industry"] == "全部"
     assert config["patterns"]["selected"] == ["旗形", "三角形", "矩形", "V形反轉"]
+
+
+def test_scheduled_snapshot_emits_forward_candidate_after_result_is_persisted(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    FakeForwardCandidateProducer.calls.clear()
+    monkeypatch.setattr(run_scheduled_recommendation_snapshot, "RecommendationService", FakeRecommendationService)
+    monkeypatch.setattr(
+        run_scheduled_recommendation_snapshot,
+        "RecommendationRepository",
+        FakePersistingRecommendationRepository,
+    )
+    monkeypatch.setattr(
+        run_scheduled_recommendation_snapshot,
+        "ForwardPositionThesisCandidateProducer",
+        FakeForwardCandidateProducer,
+    )
+    monkeypatch.setattr(
+        run_scheduled_recommendation_snapshot,
+        "_build_result_id",
+        lambda _now: "scheduled_rec_fixture",
+    )
+
+    output_root = tmp_path / "output"
+    forward_root = tmp_path / "forward"
+    exit_code = run_scheduled_recommendation_snapshot.main(
+        [
+            "--data-root",
+            str(tmp_path / "data"),
+            "--output-root",
+            str(output_root),
+            "--forward-candidate-output-root",
+            str(forward_root),
+            "--forward-thesis-policy-path",
+            str(tmp_path / "policy.json"),
+            "--forward-calendar-cache-path",
+            str(tmp_path / "calendar.json"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert len(FakeForwardCandidateProducer.calls) == 1
+    call = FakeForwardCandidateProducer.calls[0]
+    assert call["output_root"] == str(forward_root)
+    assert Path(call["recommendation_path"]).is_file()
+    assert call["policy_path"] == str(tmp_path / "policy.json")
+    assert call["calendar_cache_path"] == str(tmp_path / "calendar.json")
+    status = json.loads(
+        (output_root / "scheduled" / "recommendation_snapshot" / "latest_status.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert status["forward_position_thesis"]["status"] == "degraded"
+    assert "forward_position_thesis_candidate_degraded" in status["warnings"]
 
 
 def test_scheduled_recommendation_snapshot_script_help_bootstraps_repo_path() -> None:

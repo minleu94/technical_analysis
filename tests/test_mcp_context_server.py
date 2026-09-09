@@ -27,7 +27,10 @@ def test_build_twstock_config_snapshot_uses_twstock_config_paths(tmp_path, monke
 
 def test_read_project_snapshot_reads_authoritative_file():
     snapshot = read_project_snapshot()
+    authoritative_path = PROJECT_ROOT / "docs" / "00_core" / "PROJECT_SNAPSHOT.md"
+    authoritative_content = authoritative_path.read_text(encoding="utf-8")
 
-    assert snapshot["path"] == str(PROJECT_ROOT / "docs" / "00_core" / "PROJECT_SNAPSHOT.md")
-    assert "可驗證" in snapshot["content"]
+    assert snapshot["path"] == str(authoritative_path)
+    assert snapshot["content"] == authoritative_content
+    assert snapshot["line_count"] == len(authoritative_content.splitlines())
     assert snapshot["line_count"] > 0

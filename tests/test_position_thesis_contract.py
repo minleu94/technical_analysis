@@ -66,3 +66,28 @@ def test_rule_rejects_float_threshold_and_unknown_operator() -> None:
         PositionInvalidationRule("risk_bp", "gte", 5.0)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         PositionInvalidationRule("risk_bp", "contains", Decimal("5"))
+
+
+@pytest.mark.parametrize("value", [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")])
+def test_rule_rejects_non_finite_decimal_threshold(value: Decimal) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        PositionInvalidationRule("risk_bp", "gte", value)
+
+
+def test_contract_from_dict_rejects_json_float_threshold() -> None:
+    payload = {
+        "position_id": "p",
+        "stock_code": "2330",
+        "entry_date": "2026-07-10",
+        "decision_date": "2026-07-10",
+        "available_date": "2026-07-10",
+        "entry_thesis": "observed rule evidence",
+        "holding_horizon_trading_days": 5,
+        "next_review_date": "2026-07-17",
+        "source_trace": ["rec-1"],
+        "invalidation_rules": [
+            {"metric_id": "risk_bp", "operator": "gte", "threshold": 5.0}
+        ],
+    }
+    with pytest.raises(ValueError, match="Decimal text"):
+        PositionThesisContract.from_dict(payload)

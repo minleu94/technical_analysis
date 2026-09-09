@@ -10,7 +10,6 @@ SCHEDULED_DIR = ROOT / "scripts" / "scheduled"
 
 
 TASK_NAMES = (
-    "baldr-paper-execution-eod-replay-daily",
     "baldr-data-update-quick-daily",
     "baldr-official-market-events-daily",
     "baldr-data-freshness-check-daily",
@@ -22,7 +21,11 @@ TASK_NAMES = (
     "baldr-ml-promotion-authority-daily",
     "baldr-ml-allocation-copilot-daily",
     "baldr-decision-evidence-capture-daily",
+    "baldr-paper-execution-eod-replay-daily",
+    "baldr-pit-sector-membership-preopen-capture-daily",
     "baldr-paper-portfolio-daily",
+    "baldr-ml-allocation-forward-daily",
+    "baldr-formal-pit-sidecar-postcutoff-daily",
     "baldr-formal-input-producer-daily",
 )
 
@@ -45,11 +48,12 @@ def test_register_cmd_contains_task_names_and_times() -> None:
     assert "05:18" in text
     assert "05:20" in text
     assert "05:25" in text
-    assert "16:30" in text
+    assert "06:00" in text
+    assert "16:00" in text
+    assert "16:15" in text
     assert "DAILY 17:30" not in text
-    assert "Taipei mapping: 07:30 PDT / 08:30 PST" in text
+    assert "Taipei mapping: 07:15 PDT / 08:15 PST" in text
     assert "call :check_timezone" in text
-    assert "00:05" in text
     assert "21:25" in text
     assert "schtasks.exe /Create" in text
     assert "run_daily_data_update_quick.cmd" in text
@@ -66,6 +70,9 @@ def test_register_cmd_contains_task_names_and_times() -> None:
     assert "run_paper_portfolio_daily.cmd" in text
     assert "register_paper_portfolio_task.cmd" in text
     assert "run_paper_execution_daily_isolated.cmd" in text
+    assert "run_pit_sector_membership_preopen_capture.cmd" in text
+    assert "run_formal_pit_sidecar_postcutoff.cmd" in text
+    assert "register_pit_sector_handoff_tasks.cmd" in text
     assert "run_formal_input_producer_daily.cmd" in text
     assert "register-all" in text
     assert "Wrapper preflight failed" in text
@@ -105,6 +112,8 @@ def test_register_powershell_defines_all_daily_and_weekly_tasks() -> None:
         "DecisionEvidenceAt",
         "PaperPortfolioAt",
         "PaperExecutionAt",
+        "PitPreopenAt",
+        "FormalPitSidecarAt",
         "FormalInputAt",
         "WeeklyDay",
         "WeeklyAt",
@@ -120,6 +129,8 @@ def test_register_powershell_defines_all_daily_and_weekly_tasks() -> None:
     assert "run_recommendation_snapshot.cmd" in text
     assert "run_v2_2_weekly_collection.cmd" in text
     assert "run_paper_execution_daily_isolated.cmd" in text
+    assert "run_pit_sector_membership_preopen_capture.cmd" in text
+    assert "run_formal_pit_sidecar_postcutoff.cmd" in text
     assert "run_formal_input_producer_daily.cmd" in text
 
 
@@ -166,7 +177,7 @@ def test_query_cmd_returns_nonzero_when_a_task_is_missing(tmp_path: Path) -> Non
 
     assert result.returncode == 1
     assert "Task not found: baldr-ml-allocation-copilot-daily" in result.stdout
-    assert "1 of 15 task(s) missing or unavailable" in result.stdout
+    assert "1 of 18 task(s) missing or unavailable" in result.stdout
 
 
 def test_query_cmd_returns_zero_when_all_tasks_exist(tmp_path: Path) -> None:
@@ -190,7 +201,7 @@ def test_query_cmd_returns_zero_when_all_tasks_exist(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "all 15 task(s) are available" in result.stdout
+    assert "all 18 task(s) are available" in result.stdout
 
 
 def test_weekly_register_creates_only_the_sunday_sidecar_collection_task() -> None:

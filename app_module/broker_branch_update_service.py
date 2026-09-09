@@ -23,6 +23,10 @@ from app_module.broker_branch_merge import merge_metric_records
 from app_module.broker_branch_transport import build_branch_url
 from app_module.broker_branch_write_coordinator import BrokerBranchWriteCoordinator
 from app_module.application_ports import BrokerBranchWritePort
+from data_module.official_trading_calendar import (
+    OfficialTradingCalendar,
+    OfficialTradingCalendarError,
+)
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -851,17 +855,41 @@ class BrokerBranchUpdateService:
 
             self.logger.info(f"開始更新 {len(branches)} 個分點的資料: {start_date} 至 {end_date}")
 
-            # 生成日期列表（排除週末）
+            # 生成日期列表必須以官方交易日曆為準；本地行情檔只能作為
+            # broker route 的額外 receipt，不能反過來把缺行情誤判成休市。
             start = datetime.strptime(start_date, '%Y-%m-%d')
             end = datetime.strptime(end_date, '%Y-%m-%d')
-            dates = []
-            current = start
-            while current <= end:
-                if current.weekday() < 5:  # 週一到週五
-                    dates.append(current.strftime('%Y-%m-%d'))
-                current += timedelta(days=1)
+            calendar_cache = (
+                Path(__file__).resolve().parents[1]
+                / 'output'
+                / 'paper_execution_eod_replay'
+                / 'calendar_cache'
+            )
+            calendar = OfficialTradingCalendar(
+                db_path=getattr(self.config, 'db_file', None),
+                calendar_cache_path=calendar_cache if calendar_cache.is_dir() else None,
+            )
+            records = calendar.require_trading_days_in_range(
+                start.date(),
+                end.date(),
+                allow_online_probe=True,
+            )
+            dates = [
+                str(record['date_str'])
+                for record in records
+                if record.get('is_trading_day') is True
+            ]
+            calendar_non_trading_dates = [
+                str(record['date_str'])
+                for record in records
+                if record.get('is_trading_day') is False
+            ]
 
-            dates, non_trading_dates = self._filter_trade_dates_for_broker_update(dates)
+            # A missing local daily-price receipt is a source-completeness
+            # problem, not proof of a market closure.  Keep every official
+            # session in the MoneyDJ request set; the freshness probe reports
+            # the independent daily-price gap separately.
+            non_trading_dates = list(dict.fromkeys(calendar_non_trading_dates))
 
             if is_cancel_requested():
                 return {
@@ -1141,6 +1169,20 @@ class BrokerBranchUpdateService:
                 'total_records': total_records
             }
 
+        except OfficialTradingCalendarError as e:
+            self.logger.error(f"官方交易日曆無法解析，停止券商分點更新: {str(e)}")
+            return {
+                'success': False,
+                'message': f'官方交易日曆無法解析: {str(e)}',
+                'updated_dates': [],
+                'failed_dates': [],
+                'skipped_dates': [],
+                'non_trading_dates': [],
+                'updated_branches': [],
+                'failed_branches': [],
+                'total_processed': 0,
+                'total_records': 0,
+            }
         except Exception as e:
             self.logger.error(f"更新過程中發生錯誤: {str(e)}", exc_info=True)
             self._cleanup_driver()

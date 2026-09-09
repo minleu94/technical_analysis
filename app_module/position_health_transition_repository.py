@@ -123,6 +123,64 @@ class PositionHealthTransitionRepository:
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"transition event already exists: {record.event_id}") from exc
 
+    def append_proposal_idempotent(
+        self,
+        record: PositionHealthTransitionRecord,
+    ) -> str:
+        """Atomically append one proposal or return its idempotent result.
+
+        The evaluator uses ``position_id + decision_date`` as the identity
+        boundary. ``BEGIN IMMEDIATE`` serializes two scheduled writers so a
+        list-then-insert race cannot allow contradictory proposals for the same
+        position and date.
+        """
+
+        if record.decision_kind != "proposal":
+            raise ValueError("idempotent append only accepts proposals")
+        with sqlite3.connect(self._path, timeout=30.0) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("BEGIN IMMEDIATE")
+            existing = conn.execute(
+                """
+                SELECT event_id, previous_state, proposed_state, recorded_state,
+                       decision_kind, reasons_json
+                FROM position_health_transitions
+                WHERE position_id = ? AND decision_date = ?
+                """,
+                (record.position_id, record.decision_date),
+            ).fetchone()
+            if existing is not None:
+                same_payload = (
+                    str(existing["event_id"]) == record.event_id
+                    and str(existing["previous_state"]) == record.previous_state.value
+                    and str(existing["proposed_state"]) == record.proposed_state.value
+                    and str(existing["recorded_state"]) == record.recorded_state.value
+                    and str(existing["decision_kind"]) == "proposal"
+                    and tuple(json.loads(str(existing["reasons_json"]))) == record.reasons
+                )
+                if same_payload:
+                    return "idempotent"
+                raise ValueError("conflicting health proposal for position/date")
+            try:
+                conn.execute(
+                    "INSERT INTO position_health_transitions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        record.event_id,
+                        record.position_id,
+                        record.decision_date,
+                        record.previous_state.value,
+                        record.proposed_state.value,
+                        record.recorded_state.value,
+                        record.decision_kind,
+                        json.dumps(record.reasons),
+                        record.reviewer,
+                        int(record.auto_action_allowed),
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(f"transition event already exists: {record.event_id}") from exc
+        return "written"
+
     def list_for_position(self, position_id: str) -> tuple[PositionHealthTransitionRecord, ...]:
         with sqlite3.connect(self._path) as conn:
             rows = conn.execute(

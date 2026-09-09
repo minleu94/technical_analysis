@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, ROUND_HALF_EVEN, localcontext
 import hashlib
 import json
@@ -14,6 +14,9 @@ from data_module.ml_historical_snapshot_provider import (
     HistoricalPriceObservation,
     HistoricalRawSnapshot,
     HistoricalTechnicalObservation,
+)
+from data_module.ml_price_availability_contract import (
+    build_price_unavailable_research_contract,
 )
 from ml_module.feature_registry import (
     CORE_LONG_HISTORY_FEATURE_REGISTRY,
@@ -195,9 +198,56 @@ class HistoricalFeatureBuilder:
         rows: list[HistoricalFeatureRow] = []
         for symbol in sorted(price_by_symbol):
             observations = sorted(price_by_symbol[symbol], key=lambda row: row.trading_date)
-            closes = [row.close_price for row in observations]
-            volumes = [row.volume for row in observations]
-            latest = observations[-1]
+            # Build the same research contract used by source-quality audit for
+            # every incomplete OHLC row.  A missing middle row becomes an
+            # explicit gap for all price windows; surrounding observations are
+            # never silently bridged into a synthetic adjacent sequence.
+            price_unavailable_dates = {
+                contract["date"]
+                for observation in observations
+                if any(
+                    value is None
+                    for value in (
+                        observation.open_price,
+                        observation.high_price,
+                        observation.low_price,
+                        observation.close_price,
+                    )
+                )
+                for contract in (
+                    build_price_unavailable_research_contract(
+                        symbol=symbol,
+                        date_iso=observation.trading_date,
+                        raw_row={
+                            "symbol": observation.symbol,
+                            "open": observation.open_price,
+                            "high": observation.high_price,
+                            "low": observation.low_price,
+                            "close": observation.close_price,
+                            "volume": observation.volume,
+                        }
+                    ),
+                )
+            }
+            effective_observations = [
+                (
+                    replace(
+                        observation,
+                        open_price=None,
+                        high_price=None,
+                        low_price=None,
+                        close_price=None,
+                        volume=None,
+                        turnover_amount_minor=None,
+                    )
+                    if observation.trading_date in price_unavailable_dates
+                    else observation
+                )
+                for observation in observations
+            ]
+            closes = [row.close_price for row in effective_observations]
+            volumes = [row.volume for row in effective_observations]
+            latest = effective_observations[-1]
             latest_close = latest.close_price
             technicals = sorted(technical_by_symbol[symbol], key=lambda row: row.trading_date)
             technical = technicals[-1] if technicals else None
@@ -212,7 +262,7 @@ class HistoricalFeatureBuilder:
                 "stock_return_20d_bp": stock_20,
                 "stock_return_60d_bp": _return_bp(closes, 60),
                 "trailing_volatility_20d_bp": _volatility_bp(closes, 20),
-                "high_low_range_20d_bp": _range_bp(observations, 20),
+                "high_low_range_20d_bp": _range_bp(effective_observations, 20),
                 "close_to_ma_5d_bp": _close_to_average_bp(closes, 5),
                 "close_to_ma_20d_bp": _close_to_average_bp(closes, 20),
                 "close_to_ma_60d_bp": _close_to_average_bp(closes, 60),
@@ -257,7 +307,10 @@ def _quantized_integer(value: Decimal) -> int:
 def _return_bp(values: list[Decimal | None], periods: int) -> int | None:
     if len(values) <= periods:
         return None
-    start, end = values[-periods - 1], values[-1]
+    window = values[-periods - 1:]
+    if any(value is None for value in window):
+        return None
+    start, end = window[0], window[-1]
     if start is None or start == 0 or end is None:
         return None
     return _quantized_integer((end / start - 1) * _BASIS_POINTS)

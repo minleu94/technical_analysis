@@ -66,6 +66,10 @@ class ModelLifecycleRegistry:
 
     def append(self, event: ModelLifecycleEvent) -> str:
         with self._connect_rw() as conn:
+            # A single-event writer must take the same write lock as pair
+            # append.  Otherwise it could read an old current status, wait for
+            # a pair commit, and then insert a transition based on stale state.
+            conn.execute("BEGIN IMMEDIATE")
             existing = conn.execute(
                 "SELECT payload_json FROM ml_model_lifecycle_events WHERE event_id = ?", (event.event_id,)
             ).fetchone()
@@ -77,11 +81,84 @@ class ModelLifecycleRegistry:
             current = self._current_status(conn, event.model_id)
             if event.event_type not in _ALLOWED_TRANSITIONS[current]:
                 raise ValueError(f"invalid lifecycle transition: {current} -> {event.event_type}")
-            conn.execute(
-                "INSERT INTO ml_model_lifecycle_events VALUES (?, ?, ?, ?, ?)",
-                (event.event_id, event.model_id, event.event_type, event.created_at, payload_json),
-            )
+            self._insert_event(conn, event, payload_json)
         return "inserted"
+
+    def append_pair(self, events: tuple[ModelLifecycleEvent, ModelLifecycleEvent]) -> str:
+        """Atomically append one lifecycle decision/evidence pair.
+
+        Drift review and rollback both produce two related lifecycle events.  They
+        must be committed together so a process crash cannot publish only the
+        decision or only the disabling evidence.  A pair whose first event was
+        written by an older caller can be completed on retry; a pair in the
+        opposite order or whose lifecycle state has advanced is rejected.
+
+        The return value is ``inserted`` for a new pair, ``recovered`` when an
+        exact first event already existed and the second was completed, and
+        ``idempotent`` when both exact events already existed.
+        """
+        if len(events) != 2:
+            raise ValueError("lifecycle pair must contain exactly two events")
+        first, second = events
+        if first.event_id == second.event_id:
+            raise ValueError("lifecycle pair event ids must be unique")
+        if first.event_type == second.event_type:
+            raise ValueError("lifecycle pair event types must be distinct")
+        if first.model_id != second.model_id:
+            raise ValueError("lifecycle pair model ids must match")
+        if first.created_at != second.created_at:
+            raise ValueError("lifecycle pair created_at values must match")
+        if first.reason != second.reason:
+            raise ValueError("lifecycle pair reasons must match")
+
+        payloads = tuple(
+            json.dumps(event.to_dict(), sort_keys=True, separators=(",", ":"))
+            for event in events
+        )
+        with self._connect_rw() as conn:
+            # Serialize pair recovery against another lifecycle writer.  The
+            # context manager commits both inserts or rolls back all inserts if
+            # any validation or write fails.
+            conn.execute("BEGIN IMMEDIATE")
+            existing_payloads: dict[str, str] = {}
+            for event, payload_json in zip(events, payloads):
+                row = conn.execute(
+                    "SELECT payload_json FROM ml_model_lifecycle_events WHERE event_id = ?",
+                    (event.event_id,),
+                ).fetchone()
+                if row is not None:
+                    stored_payload = str(row[0])
+                    if stored_payload != payload_json:
+                        raise ValueError(f"lifecycle event conflict: {event.event_id}")
+                    existing_payloads[event.event_id] = stored_payload
+
+            if len(existing_payloads) == len(events):
+                return "idempotent"
+
+            # Recovery is intentionally limited to the exact prefix.  If the
+            # disabling event exists while the decision event is absent, the
+            # historical state cannot prove the pair's intended order.
+            existing_indexes = {
+                index for index, event in enumerate(events) if event.event_id in existing_payloads
+            }
+            if 1 in existing_indexes and 0 not in existing_indexes:
+                raise ValueError("lifecycle pair has a non-recoverable suffix")
+            if 0 in existing_indexes:
+                latest = self._latest_event(conn, first.model_id)
+                if latest != (first.event_id, first.event_type):
+                    raise ValueError("lifecycle pair cannot recover after lifecycle state advanced")
+
+            current = self._current_status(conn, first.model_id)
+            append_status = "recovered" if existing_payloads else "inserted"
+            for event, payload_json in zip(events, payloads):
+                if event.event_id in existing_payloads:
+                    current = event.event_type
+                    continue
+                if event.event_type not in _ALLOWED_TRANSITIONS[current]:
+                    raise ValueError(f"invalid lifecycle transition: {current} -> {event.event_type}")
+                self._insert_event(conn, event, payload_json)
+                current = event.event_type
+        return append_status
 
     def list_events(self, model_id: str) -> tuple[ModelLifecycleEvent, ...]:
         with self._connect_rw() as conn:
@@ -97,16 +174,32 @@ class ModelLifecycleRegistry:
 
     @staticmethod
     def _current_status(conn: sqlite3.Connection, model_id: str) -> str | None:
+        latest = ModelLifecycleRegistry._latest_event(conn, model_id)
+        return None if latest is None else latest[1]
+
+    @staticmethod
+    def _latest_event(conn: sqlite3.Connection, model_id: str) -> tuple[str, str] | None:
         row = conn.execute(
-            "SELECT event_type FROM ml_model_lifecycle_events WHERE model_id = ? ORDER BY rowid DESC LIMIT 1",
+            "SELECT event_id, event_type FROM ml_model_lifecycle_events WHERE model_id = ? ORDER BY rowid DESC LIMIT 1",
             (model_id,),
         ).fetchone()
-        return None if row is None else str(row[0])
+        return None if row is None else (str(row[0]), str(row[1]))
 
     def _connect_rw(self) -> sqlite3.Connection:
         if not self._path.is_file():
             raise FileNotFoundError(f"lifecycle registry is not initialized: {self._path}")
         return sqlite3.connect(f"file:{self._path.as_posix()}?mode=rw", uri=True)
+
+    @staticmethod
+    def _insert_event(
+        conn: sqlite3.Connection,
+        event: ModelLifecycleEvent,
+        payload_json: str,
+    ) -> None:
+        conn.execute(
+            "INSERT INTO ml_model_lifecycle_events VALUES (?, ?, ?, ?, ?)",
+            (event.event_id, event.model_id, event.event_type, event.created_at, payload_json),
+        )
 
 
 def _validate_shadow_db(path: str | Path, *, data_root: str | Path | None) -> Path:

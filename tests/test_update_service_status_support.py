@@ -46,3 +46,37 @@ def test_compose_sqlite_status_read_model_marks_date_lag_only_when_requested():
     assert result["market_index"]["status"] == "lagging"
     # input mapping 必須維持唯讀／不被副作用修改。
     assert statuses["market_index"]["status"] == "ok"
+
+
+def test_compose_sqlite_status_read_model_projects_explicit_freshness_receipt():
+    statuses = _statuses()
+    receipt = {
+        "status": "degraded",
+        "checked_at": "2026-07-10T05:00:00-07:00",
+        "source_statuses": [
+            {
+                "source_id": "sqlite.market_indices",
+                "freshness_status": "partial",
+                "reason": "missing official session",
+                "expected_period": "20260710",
+                "actual_period": "20260709",
+                "available_at": "2026-07-10T05:00:00-07:00",
+                "coverage": {"observed_official_sessions": 9},
+                "missing_periods": ["20260708"],
+            },
+        ],
+    }
+
+    result = compose_sqlite_status_read_model(
+        statuses,
+        apply_freshness=True,
+        freshness_receipt=receipt,
+    )
+
+    assert result["market_index"]["freshness_status"] == "partial"
+    assert result["market_index"]["freshness_reason"] == "missing official session"
+    assert result["market_index"]["freshness_expected_period"] == "20260710"
+    assert result["market_index"]["freshness_missing_periods"] == ["20260708"]
+    assert result["market_index"]["status"] == "lagging"
+    assert result["market_index"]["freshness_probe_checked_at"] == receipt["checked_at"]
+    assert statuses["market_index"]["status"] == "ok"

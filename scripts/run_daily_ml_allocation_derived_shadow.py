@@ -740,6 +740,12 @@ def _run_unlocked(
     compression_level: int = 6,
     calendar: object | None = None,
     heavy_lock_path: Path | None = None,
+    pit_machine_operational_path: Path | None = None,
+    pit_machine_operational_publication_file_hash: str | None = None,
+    pit_machine_archive_root: Path | None = None,
+    pit_machine_archive_manifest: Path | None = None,
+    pit_machine_archive_manifest_file_hash: str | None = None,
+    natural_forward_deadline_at: datetime | None = None,
 ) -> dict[str, object]:
     if mode not in {RESEARCH_MODE, FORWARD_MODE}:
         raise ValueError(f"unsupported mode: {mode}")
@@ -748,6 +754,16 @@ def _run_unlocked(
     database_path = database_path.resolve()
     release_root = release_root.resolve()
     paper_state_db_path = paper_state_db_path.resolve()
+    if pit_machine_operational_path is not None:
+        pit_machine_operational_path = (
+            pit_machine_operational_path.expanduser().resolve()
+        )
+    if pit_machine_archive_root is not None:
+        pit_machine_archive_root = pit_machine_archive_root.expanduser().resolve()
+    if pit_machine_archive_manifest is not None:
+        pit_machine_archive_manifest = (
+            pit_machine_archive_manifest.expanduser().resolve()
+        )
     budget = MLStorageCapacityBudget(
         persistent_new_bytes_budget=MAX_PERSISTENT_NEW_BYTES,
         temporary_peak_bytes_budget=MAX_TEMPORARY_PEAK_BYTES,
@@ -958,6 +974,11 @@ def _run_unlocked(
         }
 
     assert isinstance(selected_decision_at, str)
+    if natural_forward_deadline_at is not None and (
+        natural_forward_deadline_at.tzinfo is None
+        or natural_forward_deadline_at.utcoffset() is None
+    ):
+        raise ValueError("natural_forward_deadline_at must contain a timezone")
     policy_hash = release.manifest.missing_policy.policy_hash
     policy_id = release.manifest.missing_policy.policy_id
     # exporter 的唯讀 filesystem preflight 需要 probe path 已存在；只預建
@@ -967,6 +988,30 @@ def _run_unlocked(
     )
     daily_output_root.mkdir(parents=True, exist_ok=True)
     release_manifest_before = _stat_evidence(release.manifest_path)
+    expected_natural_forward_deadline_at = (
+        _parse_aware_timestamp(
+            selected_decision_at,
+            field_name="selection.decision_at",
+        )
+        + MAX_FORWARD_CAPTURE_DELAY
+        if mode == FORWARD_MODE
+        else None
+    )
+    if natural_forward_deadline_at is not None:
+        if mode != FORWARD_MODE:
+            raise ValueError(
+                "natural_forward_deadline_at is only valid in forward mode"
+            )
+        if expected_natural_forward_deadline_at is None:
+            raise ValueError("forward deadline could not be derived")
+        if natural_forward_deadline_at.astimezone(TAIPEI) != (
+            expected_natural_forward_deadline_at.astimezone(TAIPEI)
+        ):
+            raise ValueError(
+                "natural_forward_deadline_at must equal decision_at plus 5 minutes"
+            )
+    elif mode == FORWARD_MODE:
+        natural_forward_deadline_at = expected_natural_forward_deadline_at
     daily_status = daily.run(
         database_path=database_path,
         output_root=output_root,
@@ -995,6 +1040,16 @@ def _run_unlocked(
         model_id=release.model_id,
         universe_id=daily.DEFAULT_UNIVERSE_ID,
         policy_id=policy_id,
+        pit_machine_operational_path=pit_machine_operational_path,
+        pit_machine_operational_publication_file_hash=(
+            pit_machine_operational_publication_file_hash
+        ),
+        pit_machine_archive_root=pit_machine_archive_root,
+        pit_machine_archive_manifest=pit_machine_archive_manifest,
+        pit_machine_archive_manifest_file_hash=(
+            pit_machine_archive_manifest_file_hash
+        ),
+        natural_forward_deadline_at=natural_forward_deadline_at,
         # Release reference / authority are intentionally absent in this
         # research shadow.  Promotion therefore remains machine fail-closed.
         promotion_reference_pointer_path=None,
@@ -1059,8 +1114,18 @@ def _run_unlocked(
         daily_status.get("orchestration_status") == "completed"
         and daily_status.get("shadow_observation_recorded") is True
     )
+    natural_pruning_exit_code = daily_status.get(
+        "natural_shadow_pruning_evidence_exit_code",
+        0,
+    )
+    natural_pruning_integrity_blocked = natural_pruning_exit_code != 0
     if actual_new_bytes > MAX_PERSISTENT_NEW_BYTES:
         wrapper_status = "blocked_capacity_post_run"
+    elif natural_pruning_integrity_blocked:
+        # Preserve the inner Rule-only status and its non-zero scheduler
+        # signal.  A derived shadow wrapper must not turn an integrity-failed
+        # natural maturity readback into a completed candidate.
+        wrapper_status = "blocked_natural_shadow_pruning_evidence"
     elif orchestration_completed:
         wrapper_status = "completed"
     elif status_text.startswith("passed_"):
@@ -1094,6 +1159,9 @@ def _run_unlocked(
             },
         }
     )
+    completion_clock = daily_status.get("natural_forward_completion_clock")
+    if isinstance(completion_clock, Mapping):
+        record["natural_forward_completion_clock"] = dict(completion_clock)
     record["source_date_evidence"] = _source_date_evidence(
         database_path=database_path,
         symbols=daily.DEFAULT_SYMBOLS,
@@ -1222,11 +1290,18 @@ def run(
     compression_level: int = 6,
     calendar: object | None = None,
     lock_path: Path | None = None,
+    pit_machine_operational_path: Path | None = None,
+    pit_machine_operational_publication_file_hash: str | None = None,
+    pit_machine_archive_root: Path | None = None,
+    pit_machine_archive_manifest: Path | None = None,
+    pit_machine_archive_manifest_file_hash: str | None = None,
+    natural_forward_deadline_at: datetime | None = None,
 ) -> dict[str, object]:
     """持有真實 parent release_v4 lock 後執行整段 shadow chain。"""
 
     resolved_database = database_path.resolve()
     canonical_lock = _default_heavy_chain_lock_path(resolved_database)
+    resolved_lock: Path
     if lock_path is not None and resolved_database.parent.name.casefold() != "sqlite":
         # A caller supplied lock remains useful for isolated fixtures whose
         # database is not under the production ``sqlite`` directory.
@@ -1236,12 +1311,13 @@ def run(
         # so resolve the explicit path against the canonical release root
         # rather than inferring a lock from the shadow output directory.  This
         # keeps a production caller from creating a second lock.
-        resolved_lock = resolve_heavy_chain_lock_path(
+        candidate_lock = resolve_heavy_chain_lock_path(
             canonical_lock.parent,
             explicit_path=lock_path,
         )
-        if resolved_lock is None:
-            resolved_lock = canonical_lock
+        resolved_lock = (
+            canonical_lock if candidate_lock is None else candidate_lock
+        )
     try:
         reservation = acquire_heavy_chain_reservation(resolved_lock)
     except StorageCapacityError as exc:
@@ -1293,6 +1369,16 @@ def run(
             compression_level=compression_level,
             calendar=calendar,
             heavy_lock_path=resolved_lock,
+            pit_machine_operational_path=pit_machine_operational_path,
+            pit_machine_operational_publication_file_hash=(
+                pit_machine_operational_publication_file_hash
+            ),
+            pit_machine_archive_root=pit_machine_archive_root,
+            pit_machine_archive_manifest=pit_machine_archive_manifest,
+            pit_machine_archive_manifest_file_hash=(
+                pit_machine_archive_manifest_file_hash
+            ),
+            natural_forward_deadline_at=natural_forward_deadline_at,
         )
     finally:
         release_heavy_chain_reservation(reservation)
@@ -1312,6 +1398,43 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--decision-at",
         help="可選；只接受當日台北 08:30，過期／未到鐘一律留 blocked state。",
+    )
+    parser.add_argument(
+        "--pit-machine-operational-publication",
+        type=Path,
+        help=(
+            "可選的受控自然日 PIT operational publication；可由前一日"
+            "收盤後或盤前 producer 完成，但必須在模型日台北 08:30 前"
+            "可見，consumer 會重驗 receipt、available_at、effective_from 與 HMAC。"
+        ),
+    )
+    parser.add_argument(
+        "--pit-machine-operational-publication-file-hash",
+        help="operational publication bytes 的 frozen sha256:<64 hex>",
+    )
+    parser.add_argument(
+        "--natural-forward-deadline-at",
+        help=(
+            "forward mode 的明確 emission deadline；必須嚴格等於"
+            " decision_at 後 5 分鐘"
+        ),
+    )
+    parser.add_argument(
+        "--pit-machine-archive-root",
+        type=Path,
+        help=(
+            "可選的受控 Formal pit_candidate_archive root；必須同時提供 "
+            "exact archive manifest 與其 frozen file hash"
+        ),
+    )
+    parser.add_argument(
+        "--pit-machine-archive-manifest",
+        type=Path,
+        help="已選定且凍結 hash 的 exact archive_manifest.json",
+    )
+    parser.add_argument(
+        "--pit-machine-archive-manifest-file-hash",
+        help="archive_manifest.json bytes 的 sha256:<64 hex>",
     )
     parser.add_argument(
         "--lock-path",
@@ -1338,6 +1461,23 @@ def main(argv: list[str] | None = None) -> int:
             raw_lookback_days=args.raw_lookback_days,
             batch_size=args.batch_size,
             compression_level=args.compression_level,
+            pit_machine_operational_path=args.pit_machine_operational_publication,
+            pit_machine_operational_publication_file_hash=(
+                args.pit_machine_operational_publication_file_hash
+            ),
+            pit_machine_archive_root=args.pit_machine_archive_root,
+            pit_machine_archive_manifest=args.pit_machine_archive_manifest,
+            pit_machine_archive_manifest_file_hash=(
+                args.pit_machine_archive_manifest_file_hash
+            ),
+            natural_forward_deadline_at=(
+                _parse_aware_timestamp(
+                    args.natural_forward_deadline_at,
+                    field_name="natural_forward_deadline_at",
+                )
+                if args.natural_forward_deadline_at is not None
+                else None
+            ),
         )
     except (OSError, TypeError, ValueError, KeyError, sqlite3.Error) as exc:
         payload = {
@@ -1358,8 +1498,13 @@ def main(argv: list[str] | None = None) -> int:
             reconfigure(encoding="utf-8")
         except (OSError, ValueError):
             pass
+    # Keep the complete derived wrapper on stdout.  Its outer status includes
+    # post-run capacity and read-only integrity gates; an inner completed
+    # orchestration must never hide an outer blocked result.
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
-    return 0 if str(payload.get("status", "")).startswith(("completed", "skipped", "waiting")) else 1
+    return 0 if str(payload.get("status", "")).startswith(
+        ("completed", "skipped", "waiting")
+    ) else 1
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,6 +108,62 @@ def test_operation_root_junction_outside_repo_is_rejected(
         isolated._validate_write_scope()
 
 
+def test_pit_sector_manifest_resolver_freezes_exact_hash_and_available_at(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = tmp_path / "repo"
+    archive_root = (
+        repo
+        / "output"
+        / "formal_daily_publications"
+        / "pit_candidate_archive"
+    )
+    for entry, effective in (("old", "2026-09-07"), ("new", "2026-09-08")):
+        manifest = archive_root / effective / entry / "archive_manifest.json"
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(
+            json.dumps({"effective_from": effective}) + "\n",
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(isolated, "ROOT", repo)
+
+    import ml_module.pit_archive_consumer as archive_consumer
+
+    def fake_consume(**kwargs: object) -> dict[str, object]:
+        manifest_path = kwargs["manifest_path"]
+        assert isinstance(manifest_path, Path)
+        effective = manifest_path.parents[1].name
+        return {
+            "status": "machine_verified_archive_candidate",
+            "archive_manifest_hash": "sha256:" + effective[-1] * 64,
+            "archive_id": "pit-candidate:" + effective,
+            "effective_from": effective,
+            "captured_at": effective + "T08:30:00+08:00",
+            "available_at": effective + "T08:31:00+08:00",
+            "archived_at": effective + "T08:32:00+08:00",
+            "row_count": 1984,
+            "source_ids": ["official:twse:t187ap03_L"],
+        }
+
+    monkeypatch.setattr(
+        archive_consumer,
+        "consume_pit_candidate_archive",
+        fake_consume,
+    )
+    path, file_hash, projection = isolated._resolve_pit_sector_manifest(
+        datetime(2026, 9, 9, 12, 0, tzinfo=timezone.utc)
+    )
+
+    assert path == (
+        archive_root / "2026-09-08" / "new" / "archive_manifest.json"
+    ).resolve()
+    assert file_hash == "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    assert projection["status"] == "selected"
+    assert projection["effective_from"] == "2026-09-08"
+    assert projection["available_at"] == "2026-09-08T00:31:00+00:00"
+
+
 def test_isolated_adapter_ignores_path_environment_and_keeps_ledger_empty_until_writer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -149,6 +206,7 @@ def test_isolated_adapter_ignores_path_environment_and_keeps_ledger_empty_until_
         "STATE_DB": state_db,
         "MARKET_DB": market_db,
         "RECOMMENDATION_ROOT": recommendation_root,
+        "EVENT_CAPTURE_ROOT": operation_root / "event_captures",
         "SCOPE_MANIFEST": scope_manifest,
         }.items():
             monkeypatch.setattr(isolated, name, value)
@@ -161,6 +219,30 @@ def test_isolated_adapter_ignores_path_environment_and_keeps_ledger_empty_until_
     )
     monkeypatch.setenv("PAPER_EXECUTION_LEDGER_DB", r"D:\unsafe\ledger.sqlite")
     monkeypatch.setenv("PAPER_EXECUTION_OUTPUT_ROOT", r"D:\unsafe\output")
+    sector_manifest = (
+        repo_output
+        / "formal_daily_publications"
+        / "pit_candidate_archive"
+        / "2026-09-08"
+        / "capture-1"
+        / "archive_manifest.json"
+    )
+    sector_manifest.parent.mkdir(parents=True)
+    sector_manifest.write_text("{}", encoding="utf-8")
+    sector_hash = "sha256:" + "a" * 64
+    monkeypatch.setattr(
+        isolated,
+        "_resolve_pit_sector_manifest",
+        lambda observed: (
+            sector_manifest,
+            sector_hash,
+            {
+                "status": "selected",
+                "manifest_path": str(sector_manifest),
+                "manifest_file_hash": sector_hash,
+            },
+        ),
+    )
     monkeypatch.setattr(
         isolated,
         "_refresh_calendar_cache",
@@ -202,10 +284,13 @@ def test_isolated_adapter_ignores_path_environment_and_keeps_ledger_empty_until_
     assert paths.state_db == state_db
     assert paths.market_db == market_db
     assert paths.ledger_db == ledger_db
+    assert paths.sector_membership_path == sector_manifest
+    assert paths.sector_membership_file_hash == sector_hash
     assert paths.controlled_output_root == candidate_root
     assert paths.output_root.parent == candidate_root
     assert observed["recommendation_root"] == recommendation_root
     assert observed["receipt_root"] == receipt_root
+    assert observed["persist_receipt"] is False
     calendar = observed["calendar"]
     assert isinstance(calendar, isolated.OfficialTradingCalendar)
     assert calendar.calendar_cache_path == operation_root / "calendar_cache"
@@ -219,6 +304,9 @@ def test_isolated_adapter_ignores_path_environment_and_keeps_ledger_empty_until_
     assert scope["environment_path_overrides_ignored"] is True
     source_observation = scope["source_observation"]
     assert isinstance(source_observation, dict)
+    sector_source = source_observation["sector_membership_source"]
+    assert isinstance(sector_source, dict)
+    assert sector_source["status"] == "selected"
     assert source_observation["calendar_refresh"]["status"] == "cache_valid"  # type: ignore[index]
     assert source_observation["temporary_closure_refresh"]["status"] == (  # type: ignore[index]
         "temporary_closure_discovery_blocked"

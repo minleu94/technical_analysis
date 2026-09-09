@@ -16,13 +16,19 @@ def _run_registration(
     *,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         ["cmd.exe", "/d", "/c", str(REGISTRATION), mode],
         cwd=ROOT,
         env=env,
         capture_output=True,
         check=False,
-        text=True,
+        text=False,
+    )
+    return subprocess.CompletedProcess(
+        result.args,
+        result.returncode,
+        stdout=(result.stdout or b"").decode("utf-8", errors="replace"),
+        stderr=(result.stderr or b"").decode("utf-8", errors="replace"),
     )
 
 
@@ -31,9 +37,10 @@ def test_dedicated_paper_registration_dryrun_is_eod_safe_and_single_task() -> No
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert PAPER_TASK in result.stdout
-    assert "Schedule: DAILY 00:05 Pacific local time" in result.stdout
-    assert "Taipei mapping: 15:05 PDT / 16:05 PST" in result.stdout
-    assert "Execution policy: 1 hour limit; duplicate instances IgnoreNew" in result.stdout
+    assert "Schedule: DAILY 06:00 Pacific local time" in result.stdout
+    assert "Taipei mapping: 21:00 PDT / 22:00 PST" in result.stdout
+    assert "existing principal/settings preserved" in result.stdout
+    assert "bounded retry" in result.stdout
     assert "run_paper_execution_daily_isolated.cmd" in result.stdout
     assert "repo-isolated Paper ledger" in result.stdout
     assert "Dryrun only. No scheduled task was created." in result.stdout
@@ -70,15 +77,57 @@ def test_dedicated_paper_registration_register_calls_only_paper_task(
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert (
-        '/Create /TN "baldr-paper-execution-eod-replay-daily" '
-        '/SC DAILY /ST 00:05'
+        '/Change /TN "baldr-paper-execution-eod-replay-daily" '
+        '/ST 06:00'
     ) in result.stdout
-    assert "MultipleInstances IgnoreNew" in result.stdout
-    assert "ExecutionTimeLimit" in result.stdout
+    assert '/Create /TN "baldr-paper-execution-eod-replay-daily"' not in result.stdout
+    assert "fake-powershell" not in result.stdout
+    assert "Existing task found; updating only trigger and action." in result.stdout
     assert '/Query /TN "baldr-paper-execution-eod-replay-daily"' in result.stdout
     assert "baldr-formal-input-producer-daily" not in result.stdout
     assert "baldr-paper-portfolio-daily" not in result.stdout
     assert "baldr-ml-allocation-copilot-daily" not in result.stdout
+
+
+def test_missing_paper_task_is_created_with_bounded_policy_only(
+    tmp_path: Path,
+) -> None:
+    fake_schtasks = tmp_path / "fake_schtasks.cmd"
+    fake_schtasks.write_text(
+        "@echo off\n"
+        "echo fake-schtasks %*\n"
+        "if exist \"%~dp0created\" goto success\n"
+        "echo %* | findstr /I /C:\"/Query\" >nul\n"
+        "if not errorlevel 1 (\n"
+        "  echo ERROR: The system cannot find the file specified.\n"
+        "  exit /b 1\n"
+        ")\n"
+        ">\"%~dp0created\" echo created\n"
+        ":success\n"
+        "exit /b 0\n",
+        encoding="utf-8",
+    )
+    fake_powershell = tmp_path / "fake_powershell.cmd"
+    fake_powershell.write_text(
+        "@echo off\n"
+        "echo fake-powershell %*\n"
+        "exit /b 0\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["BALDR_SCHTASKS_EXE"] = str(fake_schtasks)
+    env["BALDR_POWERSHELL_EXE"] = str(fake_powershell)
+
+    result = _run_registration("register", env=env)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (
+        '/Create /TN "baldr-paper-execution-eod-replay-daily" '
+        '/SC DAILY /ST 06:00'
+    ) in result.stdout
+    assert "fake-powershell" in result.stdout
+    assert "MultipleInstances IgnoreNew" in result.stdout
+    assert "ExecutionTimeLimit" in result.stdout
 
 
 def test_dedicated_paper_registration_rejects_non_pacific_timezone(

@@ -30,7 +30,10 @@ from data_module.formal_daily_input_producer import (
     _calendar_projection,
 )
 from data_module.official_trading_calendar import OfficialTradingCalendar
-from data_module.prospective_formal_clock import load_clock_manifest_for_capture
+from data_module.prospective_formal_clock import (
+    build_clock_manifest,
+    load_clock_manifest_for_capture,
+)
 from data_module.prospective_official_pit_source import (
     OFFICIAL_COMPANY_SOURCE_DEFINITIONS,
 )
@@ -175,6 +178,41 @@ def _paper_sources(
     return snapshots_path, fills_path
 
 
+def test_paper_fill_reader_preserves_null_execution_gap_for_rejected_fill(
+    tmp_path: Path,
+) -> None:
+    """零股 rejected row 的 optional execution gap 仍可被正式 reader 重驗。"""
+
+    fills_path = tmp_path / "paper_fills_rejected.sqlite"
+    PaperTradeLedgerRepository(fills_path).append(
+        PaperTradeFill(
+            fill_id="fill-rejected-20260817-2330",
+            order_id="order-rejected-20260817-2330",
+            portfolio_id="paper-main",
+            event_date="2026-08-17",
+            stock_code="2330",
+            side="sell",
+            requested_quantity=10,
+            filled_quantity=0,
+            reference_price=Decimal("100.00"),
+            fill_price=None,
+            commission=Decimal("0.00"),
+            tax=Decimal("0.00"),
+            slippage_cost=Decimal("0.00"),
+            turnover_bp=0,
+            execution_gap_bp=None,
+            status="rejected",
+            source_event_id="source-event-rejected-20260817-2330",
+        )
+    )
+
+    rows = formal_daily_input_producer_module._read_paper_fills(fills_path)
+    assert len(rows) == 1
+    fill = rows[0]["fill"]
+    assert isinstance(fill, PaperTradeFill)
+    assert fill.execution_gap_bp is None
+
+
 def _pit_raw_payloads() -> dict[str, bytes]:
     return {
         "twse": json.dumps(
@@ -212,6 +250,7 @@ def _candidate_paths(
     clock_path: Path,
     snapshots_path: Path,
     fills_path: Path,
+    portfolio_clock_path: Path | None = None,
     publication_root: Path | None = None,
 ) -> DailyFormalInputPaths:
     return DailyFormalInputPaths(
@@ -219,6 +258,7 @@ def _candidate_paths(
         development_output_root=tmp_path / "technical_analysis_development_output",
         market_db=tmp_path / "unused-market.sqlite",
         clock_manifest=clock_path,
+        portfolio_clock_manifest=portfolio_clock_path,
         paper_snapshot_db_path=snapshots_path,
         paper_trade_ledger_db_path=fills_path,
         publication_root=publication_root,
@@ -278,7 +318,7 @@ def test_paper_fill_on_start_boundary_is_consumed_and_read_back(
         assert connection.execute("SELECT COUNT(*) FROM transitions").fetchone()[0] == 1
 
 
-def test_paper_fill_on_end_boundary_is_rejected_as_future_interval(
+def test_paper_fill_without_closed_boundary_is_rejected_for_cash_conservation(
     tmp_path: Path,
 ) -> None:
     clock_path, _, _, _ = _clock(tmp_path)
@@ -296,13 +336,172 @@ def test_paper_fill_on_end_boundary_is_rejected_as_future_interval(
 
     with pytest.raises(
         FormalDailyInputProducerError,
-        match=r"\[start, end\) snapshot intervals",
+        match=r"paper fill (quantity|cash) reconciliation mismatch",
     ):
         _produce_formal_ledger_candidate(
             paths=paths,
             output_root=paths.output_root,
             observed=datetime(2026, 8, 19, 9, 5, tzinfo=TAIPEI),
             calendar=_AdjacentTradingCalendar(tmp_path / "unused.sqlite"),
+        )
+
+
+def test_multiday_ledger_keeps_open_tail_then_consumes_next_boundary(
+    tmp_path: Path,
+) -> None:
+    """完整 closed interval 可發布，尾端 fill 留在 custody 待下一 snapshot。"""
+
+    clock_path, _, _, _ = _clock(tmp_path)
+    daily_rule_clock_path = tmp_path / "daily-rule-clock-20260819.json"
+    daily_rule_payload = json.loads(clock_path.read_text(encoding="utf-8"))
+    daily_rule_payload.pop("manifest_hash")
+    daily_rule_payload["clock_id"] = "clock:prospective:test-rule-daily:20260819"
+    daily_rule_payload["activation_trading_day"] = "2026-08-19"
+    daily_rule_calendar = dict(daily_rule_payload["activation_calendar_evidence"])
+    daily_rule_calendar["date"] = "2026-08-19"
+    daily_rule_payload["activation_calendar_evidence"] = daily_rule_calendar
+    daily_rule_clock_path.write_text(
+        json.dumps(build_clock_manifest(daily_rule_payload)),
+        encoding="utf-8",
+    )
+    snapshots_path, fills_path = _paper_sources(
+        tmp_path,
+        fill_date="2026-08-17",
+    )
+    snapshots = PaperPortfolioSnapshotRepository(snapshots_path)
+    snapshots.append(
+        PaperPortfolioSnapshot(
+            snapshot_id="snapshot-20260819",
+            portfolio_id="paper-main",
+            decision_date="2026-08-19",
+            source_result_id="paper-result-20260819",
+            cash=Decimal("7500.00"),
+            total_value=Decimal("10000.00"),
+            positions=(
+                PaperPortfolioPositionSnapshot(
+                    stock_code="2330",
+                    quantity=25,
+                    mark_price=Decimal("100.00"),
+                    market_value=Decimal("2500.00"),
+                    weight_bp=2500,
+                ),
+            ),
+        )
+    )
+    PaperTradeLedgerRepository(fills_path).append(
+        PaperTradeFill(
+            fill_id="fill-20260818-2330",
+            order_id="order-20260818-2330",
+            portfolio_id="paper-main",
+            event_date="2026-08-18",
+            stock_code="2330",
+            side="buy",
+            requested_quantity=5,
+            filled_quantity=5,
+            reference_price=Decimal("100.00"),
+            fill_price=Decimal("100.00"),
+            commission=Decimal("0.00"),
+            tax=Decimal("0.00"),
+            slippage_cost=Decimal("0.00"),
+            turnover_bp=500,
+            execution_gap_bp=0,
+            status="filled",
+            source_event_id="source-event-20260818-2330",
+        )
+    )
+    publication_root = tmp_path / "persistent-output"
+    first_paths = _candidate_paths(
+        tmp_path / "first",
+        clock_path=daily_rule_clock_path,
+        snapshots_path=snapshots_path,
+        fills_path=fills_path,
+        portfolio_clock_path=clock_path,
+        publication_root=publication_root,
+    )
+    first_paths.output_root.mkdir(parents=True)
+    first = _produce_formal_ledger_candidate(
+        paths=first_paths,
+        output_root=first_paths.output_root,
+        observed=datetime(2026, 8, 19, 9, 5, tzinfo=TAIPEI),
+        calendar=_AdjacentTradingCalendar(tmp_path / "unused-calendar.sqlite"),
+        publication_root=publication_root,
+    )
+    assert first["publication_status"] == "published"
+    assert first["snapshot_rows_used"] == 2
+    assert first["fill_rows_read"] == 2
+    assert first["fill_rows_used"] == 1
+    assert first["pending_tail_fill_rows"] == 1
+    assert first["pending_tail_fill_dates"] == ["2026-08-18"]
+    assert first["daily_rule_clock_activation_trading_day"] == "2026-08-19"
+    assert first["portfolio_clock_activation_trading_day"] == "2026-08-17"
+    assert first["portfolio_clock_scope"] == "cumulative_paper_portfolio_state"
+    assert first["daily_rule_scope"] == "natural_day_rule_source_version"
+    assert first["portfolio_clock_id"] == load_clock_manifest_for_capture(
+        clock_path,
+        now=datetime(2026, 8, 19, 9, 5, tzinfo=TAIPEI),
+    ).clock_id
+    first_portfolio_clock_hash = first["portfolio_clock_universe_hash"]
+    first_run = publication_root / "causal_ledger" / str(first["publication_run_id"])
+    custody = json.loads(
+        (first_run / "fill_source_custody.json").read_text(encoding="utf-8")
+    )
+    assert custody["row_count"] == 2
+    assert len(custody["rows"]) == 2
+
+    second_paths = _candidate_paths(
+        tmp_path / "second",
+        clock_path=daily_rule_clock_path,
+        snapshots_path=snapshots_path,
+        fills_path=fills_path,
+        portfolio_clock_path=clock_path,
+        publication_root=publication_root,
+    )
+    second_paths.output_root.mkdir(parents=True)
+    second = _produce_formal_ledger_candidate(
+        paths=second_paths,
+        output_root=second_paths.output_root,
+        observed=datetime(2026, 8, 20, 9, 5, tzinfo=TAIPEI),
+        calendar=_AdjacentTradingCalendar(tmp_path / "unused-calendar-2.sqlite"),
+        publication_root=publication_root,
+    )
+    assert second["publication_status"] == "published"
+    assert second["snapshot_rows_used"] == 3
+    assert second["fill_rows_used"] == 2
+    assert second["pending_tail_fill_rows"] == 0
+    assert second["decision_dates"] == ["2026-08-18", "2026-08-19"]
+    assert second["portfolio_clock_activation_trading_day"] == "2026-08-17"
+    assert second["portfolio_clock_id"] == first["portfolio_clock_id"]
+    assert second["portfolio_clock_universe_hash"] == first_portfolio_clock_hash
+    assert second["portfolio_clock_manifest"] == first["portfolio_clock_manifest"]
+    with sqlite3.connect(Path(str(second["sqlite_path"]))) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM transitions").fetchone()[0] == 2
+
+
+def test_formal_ledger_with_pinned_portfolio_clock_requires_daily_rule_clock(
+    tmp_path: Path,
+) -> None:
+    clock_path, _, _, _ = _clock(tmp_path)
+    snapshots_path, fills_path = _paper_sources(tmp_path)
+    paths = DailyFormalInputPaths(
+        output_root=tmp_path / "output",
+        development_output_root=tmp_path / "technical_analysis_development_output",
+        market_db=tmp_path / "unused-market.sqlite",
+        clock_manifest=None,
+        portfolio_clock_manifest=clock_path,
+        paper_snapshot_db_path=snapshots_path,
+        paper_trade_ledger_db_path=fills_path,
+    )
+    paths.output_root.mkdir(parents=True)
+
+    with pytest.raises(
+        FormalDailyInputProducerError,
+        match="daily Rule clock is required when using cumulative portfolio clock",
+    ):
+        _produce_formal_ledger_candidate(
+            paths=paths,
+            output_root=paths.output_root,
+            observed=datetime(2026, 8, 19, 9, 5, tzinfo=TAIPEI),
+            calendar=_AdjacentTradingCalendar(tmp_path / "unused-calendar.sqlite"),
         )
 
 
@@ -422,6 +621,89 @@ def test_public_daily_run_connects_paper_source_to_formal_consumer(
     assert isinstance(ledger_result, dict)
     assert ledger_result["consumer_verified"] is True
     assert ledger_result["candidate_only"] is True
+
+
+@pytest.mark.parametrize(
+    ("identity_configured", "expected_status"),
+    ((True, "blocked"), (False, "individual_sources_verified")),
+)
+def test_common_identity_is_required_for_three_source_formal_ready_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    identity_configured: bool,
+    expected_status: str,
+) -> None:
+    """三個 consumer 各自可讀仍須等 common identity 才能宣告整體 ready。"""
+
+    preflight = {
+        "blockers": [],
+        "rule_capture": {"eligible": False, "blockers": []},
+        "pit_capture": {"capture_eligible": False, "eligible": False, "blockers": []},
+        "paper_sources": {
+            "paper_snapshot": {"state": "missing", "reason": "test"},
+            "paper_trade_ledger": {"state": "missing", "reason": "test"},
+            "durable_causal_ledger": {"state": "missing", "reason": "test"},
+        },
+    }
+    monkeypatch.setattr(
+        formal_daily_input_producer_module,
+        "build_daily_formal_input_preflight",
+        lambda *_args, **_kwargs: preflight,
+    )
+    monkeypatch.setattr(
+        formal_daily_input_producer_module,
+        "_readback_explicit_formal_sources",
+        lambda *_args, **_kwargs: (
+            {
+                "causal_non_cash_portfolio_ledger": {
+                    "formal_ready": True,
+                    "formal_consumer_compatible": True,
+                    "candidate_only": False,
+                    "status": "ready",
+                },
+                "formal_rule_champion_snapshot_history": {
+                    "formal_ready": True,
+                    "formal_consumer_compatible": True,
+                    "candidate_only": False,
+                    "status": "ready",
+                },
+                "pit_sector_membership": {
+                    "formal_ready": True,
+                    "formal_consumer_compatible": True,
+                    "candidate_only": False,
+                    "status": "ready",
+                },
+            },
+            [],
+        ),
+    )
+
+    paths = DailyFormalInputPaths(
+        output_root=tmp_path / "output",
+        development_output_root=tmp_path / "technical_analysis_development_output",
+        market_db=tmp_path / "market.sqlite",
+        common_identity_manifest_path=(
+            tmp_path / "identity.json" if identity_configured else None
+        ),
+    )
+    result = run_daily_formal_input_producer(
+        paths,
+        now=datetime(2026, 8, 19, 9, 5, tzinfo=TAIPEI),
+    )
+
+    assert result["formal_ready_input_count"] == 3
+    assert result["status"] == expected_status
+    inputs = result["inputs"]
+    assert isinstance(inputs, dict)
+    identity = inputs["common_identity_manifest"]
+    assert isinstance(identity, dict)
+    assert identity["formal_ready"] is False
+    expected_blocker = (
+        "common_identity_source_receipt_paths_missing"
+        if identity_configured
+        else "common_identity_manifest_required"
+    )
+    assert expected_blocker in identity["blockers"]
 
 
 def test_public_daily_run_reuses_cache_calendar_for_ledger_producer(

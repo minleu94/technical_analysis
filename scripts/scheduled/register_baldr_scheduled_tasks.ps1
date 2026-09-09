@@ -12,11 +12,15 @@ param(
     [string]$MLPromotionAuthorityAt = "05:18",
     [string]$MLAllocationAt = "05:20",
     [string]$DecisionEvidenceAt = "05:25",
-    # Pacific 16:30 在 PDT／PST 分別對應台北次日 07:30／08:30；adapter
-    # 以台北真實 08:30 cutoff guard 等待後才讀取來源，避免 PST 的 09:30
-    # 開盤後時間被誤稱為盤前，也避免 DST 漂移。
-    [string]$PaperPortfolioAt = "16:30",
-    [string]$PaperExecutionAt = "00:05",
+    # Pacific 16:15 在 PDT／PST 分別對應台北次日 07:15／08:15；adapter
+    # 以台北真實 08:30 cutoff guard 等待後才讀取來源，兩種 offset 都維持
+    # 在開盤前喚醒，也避免 DST 漂移。
+    [string]$PaperPortfolioAt = "16:15",
+    # Paper EOD runs after the 04:20 update and 05:00 freshness receipt. The
+    # adapter itself keeps the Taipei date/cutoff guard and bounded retry.
+    [string]$PaperExecutionAt = "06:00",
+    [string]$PitPreopenAt = "16:00",
+    [string]$FormalPitSidecarAt = "18:00",
     # 21:25 Pacific maps to 12:25 Taipei in PDT and 13:25 in PST; both are
     # inside the 09:00-13:30 Taiwan Rule capture window.
     [string]$FormalInputAt = "21:25",
@@ -92,11 +96,19 @@ $decisionEvidenceScript = Join-Path $RepoRoot "scripts\scheduled\run_decision_ev
 $paperPortfolioScript = Join-Path $RepoRoot "scripts\scheduled\run_paper_portfolio_daily.cmd"
 $paperPortfolioRegistrationScript = Join-Path $RepoRoot "scripts\scheduled\register_paper_portfolio_task.cmd"
 $paperExecutionScript = Join-Path $RepoRoot "scripts\scheduled\run_paper_execution_daily_isolated.cmd"
+$pitPreopenScript = Join-Path $RepoRoot "scripts\scheduled\run_pit_sector_membership_preopen_capture.cmd"
+$formalPitSidecarScript = Join-Path $RepoRoot "scripts\scheduled\run_formal_pit_sidecar_postcutoff.cmd"
 $formalInputScript = Join-Path $RepoRoot "scripts\scheduled\run_formal_input_producer_daily.cmd"
+$pitRegistrationScript = Join-Path $RepoRoot "scripts\scheduled\register_pit_sector_handoff_tasks.cmd"
 $weeklyScript = Join-Path $RepoRoot "scripts\scheduled\run_v2_2_weekly_collection.cmd"
+# baldr-ml-allocation-forward-daily is intentionally not part of $dailyTasks.
+# It is managed by the dedicated pinned UTF-16 XML plan and action
+# scripts\scheduled\run_ml_allocation_forward_daily.cmd; generic aggregate
+# registration must not replace its principal, battery policy, or release pin.
+$forwardTaskName = "baldr-ml-allocation-forward-daily"
+$forwardTaskScript = Join-Path $RepoRoot "scripts\scheduled\run_ml_allocation_forward_daily.cmd"
 
 $dailyTasks = @(
-    (New-DailyTaskSpec "baldr-paper-execution-eod-replay-daily" "Delayed EOD Paper execution candidate after the source availability cutoff." $paperExecutionScript $PaperExecutionAt),
     (New-DailyTaskSpec "baldr-data-update-quick-daily" "Non-UI baldr quick market data update." $updateScript $UpdateAt),
     (New-DailyTaskSpec "baldr-official-market-events-daily" "Append-only official market event publication." $officialEventsScript $OfficialEventsAt),
     (New-DailyTaskSpec "baldr-data-freshness-check-daily" "Read-only baldr data freshness check." $freshnessScript $FreshnessAt),
@@ -108,7 +120,10 @@ $dailyTasks = @(
     (New-DailyTaskSpec "baldr-ml-promotion-authority-daily" "Independent DPAPI-protected machine promotion authority for the next decision session." $mlPromotionAuthorityScript $MLPromotionAuthorityAt),
     (New-DailyTaskSpec "baldr-ml-allocation-copilot-daily" "Fail-closed baldr ML allocation co-pilot promotion evaluation." $mlAllocationScript $MLAllocationAt),
     (New-DailyTaskSpec "baldr-decision-evidence-capture-daily" "Idempotent Decision Desk snapshot and evidence event capture." $decisionEvidenceScript $DecisionEvidenceAt),
-    (New-DailyTaskSpec "baldr-paper-portfolio-daily" "Pacific 16:30 wake-up; Taipei 08:30 guarded repository-only Paper valuation." $paperPortfolioScript $PaperPortfolioAt),
+    (New-DailyTaskSpec "baldr-paper-execution-eod-replay-daily" "Delayed EOD Paper execution after same-day update/freshness proof; bounded same-source retry." $paperExecutionScript $PaperExecutionAt),
+    (New-DailyTaskSpec "baldr-paper-portfolio-daily" "Pacific 16:15 wake-up; Taipei 08:30 guarded repository-only Paper valuation." $paperPortfolioScript $PaperPortfolioAt),
+    (New-DailyTaskSpec "baldr-pit-sector-membership-preopen-capture-daily" "Candidate-only official PIT sector membership capture before Taipei open." $pitPreopenScript $PitPreopenAt),
+    (New-DailyTaskSpec "baldr-formal-pit-sidecar-postcutoff-daily" "Candidate-only PIT sidecar capture after Taipei cutoff." $formalPitSidecarScript $FormalPitSidecarAt),
     (New-DailyTaskSpec "baldr-formal-input-producer-daily" "Bounded machine Rule, causal Paper ledger, and current PIT input handoff with durable receipts." $formalInputScript $FormalInputAt)
 )
 $weeklyTasks = @(
@@ -144,20 +159,50 @@ if ($missingScripts.Count -gt 0) {
     throw "Wrapper preflight failed. No scheduled task was registered."
 }
 
+Write-Host "Forward task: $forwardTaskName"
+Write-Host "  Action: cmd.exe /c `"$forwardTaskScript`""
+Write-Host "  Registration: dedicated pinned XML plan; aggregate path leaves it unchanged."
+
 if ($Mode -eq "DryRun") {
-    Write-Host "DryRun only. No scheduled task was registered. Use RegisterAll to register all displayed tasks."
+    Write-Host "DryRun only. No scheduled task was registered. Use RegisterAll for the aggregate set; the forward task still requires its dedicated XML plan."
     return
 }
 
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+$pitTasksRegistered = $false
 
 foreach ($task in $selectedTasks) {
+    if ($task.Name -in @(
+        "baldr-pit-sector-membership-preopen-capture-daily",
+        "baldr-formal-pit-sidecar-postcutoff-daily"
+    )) {
+        if (-not $pitTasksRegistered) {
+            # The dedicated path distinguishes an existing task from a query
+            # error and changes only the trigger/action, preserving principal
+            # and host power settings just like the Paper Portfolio path.
+            & $pitRegistrationScript register
+            if ($LASTEXITCODE -ne 0) {
+                throw "PIT handoff dedicated registration failed with exit code $LASTEXITCODE."
+            }
+            $pitTasksRegistered = $true
+        }
+        continue
+    }
     if ($task.Name -eq "baldr-paper-portfolio-daily") {
         # 既有 Paper task 只能由 dedicated /Change 路徑更新 trigger/action；
         # 它會區分 not-found 與 query error，保留 principal 與其餘 settings。
         & $paperPortfolioRegistrationScript register
         if ($LASTEXITCODE -ne 0) {
             throw "Paper Portfolio dedicated registration failed with exit code $LASTEXITCODE."
+        }
+        continue
+    }
+    if ($task.Name -eq "baldr-paper-execution-eod-replay-daily") {
+        # Existing Paper EOD task is updated through its dedicated safe path;
+        # it preserves identity/settings and also owns the dependency gate.
+        & (Join-Path $RepoRoot "scripts\scheduled\register_paper_execution_task.cmd") register
+        if ($LASTEXITCODE -ne 0) {
+            throw "Paper EOD dedicated registration failed with exit code $LASTEXITCODE."
         }
         continue
     }

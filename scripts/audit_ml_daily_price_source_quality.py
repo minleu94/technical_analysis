@@ -22,7 +22,14 @@ from data_module.ml_daily_price_source_quality import (  # noqa: E402
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sqlite", type=Path, required=True)
-    parser.add_argument("--daily-price-dir", type=Path, required=True)
+    parser.add_argument(
+        "--daily-price-dir",
+        type=Path,
+        action="append",
+        dest="daily_price_dirs",
+        required=True,
+        help="repeat for explicit TWSE/TPEX canonical source roots",
+    )
     parser.add_argument("--start-date", required=True)
     parser.add_argument("--end-date", required=True)
     parser.add_argument("--symbol", action="append", dest="symbols")
@@ -41,6 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional timezone-aware source receipt time; never inferred from mtime",
     )
     parser.add_argument(
+        "--candidate-sample-limit",
+        type=int,
+        default=64,
+        help=(
+            "maximum candidate evidence rows retained in the report; "
+            "counts remain full and zero disables samples"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         required=True,
@@ -55,18 +71,19 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = audit_daily_price_source(
         sqlite_path=args.sqlite,
-        canonical_daily_price_dir=args.daily_price_dir,
+        canonical_daily_price_dirs=tuple(args.daily_price_dirs),
         start_date=args.start_date,
         end_date=args.end_date,
         symbols=args.symbols,
         source_manifest_hash=args.source_manifest_hash,
         quality_mode=args.quality_mode,
         quality_known_at=args.quality_known_at,
+        candidate_sample_limit=args.candidate_sample_limit,
     )
     output = write_quarantine_report(
         args.output,
         report,
-        source_roots=(args.sqlite.parent, args.daily_price_dir),
+        source_roots=(args.sqlite.parent, *tuple(args.daily_price_dirs)),
     )
     payload = dict(report)
     payload["report_path"] = str(output.resolve())

@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR, ROUND_HALF_UP
 import hashlib
 import json
 import os
@@ -33,6 +33,14 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app_module.execution_slippage_model import TaiwanStockTickSlippageModel
+from app_module.paper_portfolio_policy import PaperPortfolioAction
+from app_module.paper_portfolio_policy_adapter import (
+    PaperPolicyCandidate,
+    PaperPortfolioPolicyAdapter,
+    PaperPortfolioPolicyBatchResult,
+    PaperPortfolioPolicyContext,
+    PaperPortfolioPolicyAdapterResult,
+)
 from app_module.paper_portfolio_policy import PaperPortfolioPolicyConfig
 from app_module.paper_trade_ledger import (
     PaperTradeFill,
@@ -62,6 +70,19 @@ PAPER_EXECUTION_SOURCE_TYPE = "paper_daily_execution_delayed_eod_replay_v1"
 PAPER_EXECUTION_LEGACY_SOURCE_TYPES = frozenset({"paper_daily_execution_v1"})
 PAPER_EXECUTION_RECEIPT_SCHEMA_VERSION = "paper-execution-operational-receipt.v1"
 PAPER_PORTFOLIO_ID = "paper-main"
+# A waiting/temporarily unavailable source must retain the frozen decision that
+# produced it.  These states are deliberately separate from ``processed`` and
+# ``superseded``: a retry may consume them, but they never make a source
+# terminal by themselves.
+PAPER_EXECUTION_PENDING_QUEUE_STATES = frozenset(
+    {"pending_execution", "candidate_only_pending_append"}
+)
+PAPER_EXECUTION_TERMINAL_QUEUE_STATES = frozenset({"processed", "superseded"})
+# Receipts written before the pending-state contract existed are still
+# admissible when their complete source/result hashes and a narrowly
+# retryable status can be revalidated.  They are adopted in memory only;
+# historical files are never rewritten.
+PAPER_EXECUTION_LEGACY_PENDING_QUEUE_STATES = frozenset({"waiting", "failed"})
 PAPER_CASH_SETTLEMENT_SEMANTICS = (
     "gross_amount_plus_commission_plus_tax_v1"
 )
@@ -85,6 +106,12 @@ class PaperExecutionPaths:
     ledger_db: Path | None = None
     clock_manifest: Path | None = None
     controlled_output_root: Path | None = None
+    # The Paper policy consumer must receive an explicitly selected, hash-bound
+    # official PIT sector sidecar or durable archive manifest.  The scheduler
+    # owns selecting the exact path; this producer only validates and consumes
+    # it at the frozen recommendation time.
+    sector_membership_path: Path | None = None
+    sector_membership_file_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -110,6 +137,7 @@ class _QueueReceipt:
     source_result_id: str
     portfolio_id: str
     execution_date: date | None
+    recorded_at: datetime
 
 
 @dataclass(frozen=True)
@@ -199,8 +227,10 @@ def run_paper_execution_daily(
         "writes_formal_controlled_paths": False,
         "writes_market_database": False,
         "historical_backfill_claimed": False,
+        "late_replay_policy": "no_historical_backfill_pending_session_missed",
         "training_started": False,
         "broker_execution": False,
+        "retryable": False,
         "append_requested": bool(confirm_append),
     }
     try:
@@ -278,6 +308,7 @@ def run_paper_execution_daily(
             )
         if observed < execution_open_at:
             base["status"] = "waiting_for_execution_session"
+            base["retryable"] = True
             base["blockers"] = [
                 "paper_execution_waiting_for_next_session_open:"
                 + execution_open_at.isoformat(),
@@ -285,6 +316,7 @@ def run_paper_execution_daily(
             return _write_candidate(output_root, base)
         if observed < eod_replay_available_at:
             base["status"] = "waiting_for_execution_source"
+            base["retryable"] = True
             base["blockers"] = [
                 "paper_execution_waiting_for_delayed_eod_source:"
                 + eod_replay_available_at.isoformat(),
@@ -304,6 +336,26 @@ def run_paper_execution_daily(
             execution_date=execution_date,
             ledger_db=paths.ledger_db,
             allow_existing_execution_snapshot=True,
+        )
+        target = _build_target(
+            recommendation,
+            capital_amount=state.total_value,
+        )
+        # A delayed EOD retry must ignore only the immutable rows produced by
+        # this exact recommendation.  Same-day rows from another intent are
+        # real cash/position evidence and must be projected before the policy
+        # batch so a second candidate cannot borrow yesterday's cash or sector.
+        same_day_replay_ids = _expected_execution_fill_ids(
+            state=state,
+            target=target,
+            execution_date=execution_date,
+            recommendation_hash=recommendation.content_hash,
+        )
+        state = _apply_same_day_paper_fills(
+            state,
+            ledger_db=paths.ledger_db,
+            execution_date=execution_date,
+            exclude_fill_ids=frozenset(same_day_replay_ids),
         )
         symbols = tuple(
             sorted(
@@ -343,20 +395,51 @@ def run_paper_execution_daily(
             symbols=symbols,
             reference_prices=reference_prices,
         )
-        target = _build_target(
-            recommendation,
-            capital_amount=state.total_value,
-        )
-        fills, projection = _build_fills(
+        policy = PaperPortfolioPolicyConfig()
+        (
+            policy_target,
+            policy_projection,
+            policy_context,
+            policy_batch,
+        ) = _evaluate_policy_batch(
+            paths=paths,
             state=state,
             target=target,
             prices=market.prices,
+            recommendation=recommendation,
+            execution_date=execution_date,
+            calendar=calendar,
+            policy=policy,
+        )
+        fills, projection = _build_fills(
+            state=state,
+            target=policy_target,
+            prices=market.prices,
             volumes=market.volumes,
             execution_date=execution_date,
-            policy=PaperPortfolioPolicyConfig(),
+            policy=policy,
             recommendation_hash=recommendation.content_hash,
         )
+        post_policy = _reconcile_policy_after_fills(
+            state=state,
+            target=policy_target,
+            fills=fills,
+            projection=projection,
+            policy_context=policy_context,
+            policy_batch=policy_batch,
+            policy=policy,
+        )
         fill_records = _fill_candidate_records(fills, projection)
+        target_policy = _policy_projection(policy, target, recommendation)
+        target_policy.update(
+            {
+                "adapter": policy_projection,
+                "target_quantities_after_policy": dict(
+                    sorted(policy_target.items())
+                ),
+                "post_fill_reconciliation": post_policy,
+            }
+        )
         base.update(
             {
                 "status": "machine_verified_candidate",
@@ -415,11 +498,7 @@ def run_paper_execution_daily(
                     "file_hash_semantics": "main_db_bytes_observation_only",
                     "read_consistency": "sqlite_read_transaction",
                 },
-                "target_policy": _policy_projection(
-                    PaperPortfolioPolicyConfig(),
-                    target,
-                    recommendation,
-                ),
+                "target_policy": target_policy,
                 "fills": fill_records,
                 "fill_count": len(fills),
                 "post_execution_projection": projection,
@@ -459,12 +538,20 @@ def run_paper_execution_daily(
                     "mode": "append_only_writer_then_ro_readback",
                 }
             )
+            post_policy["ledger_readback"] = _verify_policy_ledger_readback(
+                paths.ledger_db,
+                policy_context=policy_context,
+                policy=policy,
+            )
+            post_policy["execution_readback_verified"] = True
         return _write_candidate(output_root, base)
     except PaperExecutionProducerError as error:
+        retryable = _is_retryable_source_error(error)
         base.update(
             {
                 "status": "blocked",
                 "blockers": [str(error)],
+                "retryable": retryable,
                 "formal_ready": False,
             }
         )
@@ -488,8 +575,9 @@ def run_paper_execution_daily_from_queue(
     now: datetime | None = None,
     calendar: OfficialTradingCalendar | None = None,
     confirm_append: bool = False,
+    persist_receipt: bool = True,
 ) -> dict[str, object]:
-    """由持久 recommendation queue 選取一筆待執行決策並保存 receipt。
+    """由持久 recommendation queue 選取一筆待執行決策並可保存 receipt。
 
     Queue 只消費已存在且已凍結的 recommendation；它依官方下一 session
     是否落在當前台北自然日選取 due item。成功、等待或失敗都可寫入獨立
@@ -525,6 +613,8 @@ def run_paper_execution_daily_from_queue(
             ledger_db=paths.ledger_db,
             clock_manifest=paths.clock_manifest,
             controlled_output_root=paths.controlled_output_root,
+            sector_membership_path=paths.sector_membership_path,
+            sector_membership_file_hash=paths.sector_membership_file_hash,
         )
         result = run_paper_execution_daily(
             selected_paths,
@@ -532,7 +622,7 @@ def run_paper_execution_daily_from_queue(
             calendar=calendar,
             confirm_append=confirm_append,
         )
-    if receipt_root is not None:
+    if receipt_root is not None and persist_receipt:
         result = persist_operational_receipt(
             result,
             receipt_root,
@@ -568,7 +658,7 @@ def resolve_pending_recommendation(
     terminal_hashes = {
         receipt.source_file_hash
         for receipt in queue_receipts
-        if receipt.state in {"processed", "superseded"}
+        if receipt.state in PAPER_EXECUTION_TERMINAL_QUEUE_STATES
     }
     processed_by_execution: dict[tuple[str, date], _QueueReceipt] = {}
     for receipt in queue_receipts:
@@ -577,6 +667,33 @@ def resolve_pending_recommendation(
         processed_by_execution.setdefault(
             (receipt.portfolio_id, receipt.execution_date),
             receipt,
+        )
+    pending_by_execution: dict[tuple[str, date], list[_QueueReceipt]] = {}
+    for receipt in queue_receipts:
+        if (
+            receipt.state in PAPER_EXECUTION_PENDING_QUEUE_STATES
+            and receipt.execution_date is not None
+        ):
+            pending_by_execution.setdefault(
+                (receipt.portfolio_id, receipt.execution_date),
+                [],
+            ).append(receipt)
+    stale_pending = [
+        receipt
+        for receipt in queue_receipts
+        if (
+            receipt.state in PAPER_EXECUTION_PENDING_QUEUE_STATES
+            and receipt.execution_date is not None
+            and receipt.execution_date < observed_at.astimezone(TAIPEI).date()
+        )
+    ]
+    if stale_pending:
+        stale_dates = sorted(
+            {receipt.execution_date for receipt in stale_pending if receipt.execution_date}
+        )
+        return None, (
+            "pending_execution_session_missed:"
+            + ",".join(item.isoformat() for item in stale_dates)
         )
     observed_taipei_date = observed_at.astimezone(TAIPEI).date()
     candidates: list[_Recommendation] = []
@@ -639,6 +756,7 @@ def resolve_pending_recommendation(
         # the key makes the queue invariant explicit if another research profile
         # is introduced later.
         selected_due: list[_Recommendation] = []
+        pending_retry_selected = False
         for execution_key, group in due_by_execution.items():
             processed = processed_by_execution.get(execution_key)
             if processed is not None:
@@ -653,6 +771,39 @@ def resolve_pending_recommendation(
                         observed=observed_at,
                     )
                     terminal_hashes.add(recommendation.file_hash)
+                continue
+            pending = pending_by_execution.get(execution_key, [])
+            pending_hashes = {item.source_file_hash for item in pending}
+            if len(pending_hashes) > 1:
+                # Two different frozen sources have both been recorded as
+                # pending for one execution session.  Switching between them
+                # would make retry non-deterministic, so stop and expose the
+                # conflict for reconciliation.
+                return None, (
+                    "pending_execution_source_conflict:"
+                    + execution_key[1].isoformat()
+                )
+            if pending_hashes:
+                pinned_hash = next(iter(pending_hashes))
+                pinned = next(
+                    (
+                        recommendation
+                        for recommendation in group
+                        if recommendation.file_hash == pinned_hash
+                    ),
+                    None,
+                )
+                if pinned is None:
+                    return None, (
+                        "pending_execution_source_missing:"
+                        + execution_key[1].isoformat()
+                    )
+                # Leave newer recommendations unclassified until this pinned
+                # source reaches a terminal receipt.  A later retry therefore
+                # cannot silently replace a pending decision with a 05:10
+                # recommendation for the same execution session.
+                selected_due.append(pinned)
+                pending_retry_selected = True
                 continue
             winner = max(
                 group,
@@ -682,7 +833,11 @@ def resolve_pending_recommendation(
                     item.path.name,
                 )
             )
-            return selected_due[-1].path, "next_official_session_due"
+            return selected_due[-1].path, (
+                "pending_execution_retry"
+                if pending_retry_selected
+                else "next_official_session_due"
+            )
         if receipt_issues:
             return None, _queue_diagnostic_reason(
                 "no_pending_recommendation_already_processed_invalid_receipt",
@@ -893,6 +1048,7 @@ def _write_queue_status(
         "writes_formal_controlled_paths": False,
         "writes_market_database": False,
         "historical_backfill_claimed": False,
+        "late_replay_policy": "no_historical_backfill_pending_session_missed",
         "training_started": False,
         "broker_execution": False,
         "append_requested": bool(append_requested),
@@ -903,6 +1059,7 @@ def _write_queue_status(
             "selection": "next_official_session_due",
             "reason": reason,
             "source_configured": recommendation_root.exists(),
+            "late_replay_policy": "no_historical_backfill_pending_session_missed",
         },
     }
     return _write_candidate(resolved_output, body)
@@ -920,7 +1077,13 @@ def _processed_recommendation_hashes(receipt_root: Path | None) -> set[str]:
 def _load_queue_receipts(
     receipt_root: Path | None,
 ) -> tuple[tuple[_QueueReceipt, ...], tuple[str, ...]]:
-    """只把完整、可重驗的 terminal receipt 用作 queue state。"""
+    """讀取完整 receipt，並只把可重驗狀態接回 queue。
+
+    ``pending_execution``（以及舊版未完成 append 的
+    ``candidate_only_pending_append``）不是 terminal state，但仍是重要的
+    queue state：它把 execution session 綁回第一次選中的 recommendation，
+    讓 crash／來源晚到的重試不會改用另一份 frozen source。
+    """
 
     if receipt_root is None:
         return (), ()
@@ -939,7 +1102,11 @@ def _load_queue_receipts(
             issues.append(f"{path.name}:receipt must be a JSON object")
             continue
         state = raw_value.get("queue_state")
-        if state not in {"processed", "superseded"}:
+        if state not in (
+            PAPER_EXECUTION_TERMINAL_QUEUE_STATES
+            | PAPER_EXECUTION_PENDING_QUEUE_STATES
+            | PAPER_EXECUTION_LEGACY_PENDING_QUEUE_STATES
+        ):
             continue
         validation_error = _validate_queue_receipt(path, raw_value)
         if validation_error is not None:
@@ -948,6 +1115,7 @@ def _load_queue_receipts(
         source_hash = raw_value.get("source_file_hash")
         source_result_id = raw_value.get("source_result_id")
         portfolio_value = raw_value.get("portfolio_id", PAPER_PORTFOLIO_ID)
+        recorded_value = raw_value.get("recorded_at")
         execution_value = raw_value.get("execution_date")
         execution_date = (
             None
@@ -959,14 +1127,24 @@ def _load_queue_receipts(
             # guard for type narrowing and future schema additions.
             issues.append(f"{path.name}:receipt source identity is invalid")
             continue
+        try:
+            recorded_at = _aware_datetime(recorded_value, f"{path.name}.recorded_at")
+        except PaperExecutionProducerError as error:
+            issues.append(f"{path.name}:receipt recorded_at is invalid:{error}")
+            continue
         valid.append(
             _QueueReceipt(
                 path=path,
-                state=str(state),
+                state=(
+                    "pending_execution"
+                    if state in PAPER_EXECUTION_LEGACY_PENDING_QUEUE_STATES
+                    else str(state)
+                ),
                 source_file_hash=source_hash,
                 source_result_id=source_result_id,
                 portfolio_id=str(portfolio_value),
                 execution_date=execution_date,
+                recorded_at=recorded_at,
             )
         )
     return tuple(valid), tuple(issues)
@@ -976,7 +1154,13 @@ def _validate_queue_receipt(
     path: Path,
     value: Mapping[object, object],
 ) -> str | None:
-    """驗證 receipt hash、source identity 與已完成的 ledger readback。"""
+    """驗證 receipt hash、source identity、日期與 ledger readback。
+
+    Historical ``waiting``／``failed`` receipts receive the same immutable
+    source/content/date checks as new ``pending_execution`` receipts.  Only a
+    clearly missing/late execution source is adopted for retry; mixed timing or
+    identity violations are rejected even if a missing-row marker is present.
+    """
 
     if value.get("schema_version") != PAPER_EXECUTION_RECEIPT_SCHEMA_VERSION:
         return "unsupported_schema_version"
@@ -987,6 +1171,10 @@ def _validate_queue_receipt(
     body.pop("content_sha256", None)
     if _payload_hash(body) != declared_hash:
         return "content_hash_mismatch"
+    try:
+        recorded_at = _aware_datetime(value.get("recorded_at"), f"{path.name}.recorded_at")
+    except PaperExecutionProducerError as error:
+        return f"recorded_at_invalid:{error}"
     source_hash = value.get("source_file_hash")
     if not _is_sha256(source_hash):
         return "source_file_hash_missing_or_invalid"
@@ -1029,14 +1217,33 @@ def _validate_queue_receipt(
             return "recommendation_source_not_object"
         if _payload_hash(source_value) != recommendation_content_hash:
             return "recommendation_source_content_changed"
+        recommendation = _load_recommendation(
+            Path(source_path).expanduser().resolve(),
+            observed=recorded_at,
+        )
+        if recommendation.result_id != source_result_id:
+            return "recommendation_source_result_id_changed"
+        if recommendation.decision_date.isoformat() != recommendation_value.get(
+            "decision_date"
+        ):
+            return "recommendation_source_decision_date_changed"
+    except PaperExecutionProducerError as error:
+        return f"recommendation_source_contract_invalid:{type(error).__name__}"
     except (UnicodeError, json.JSONDecodeError):
         return "recommendation_source_invalid_json"
     except (OSError, ValueError, RuntimeError) as error:
         return f"recommendation_source_unreadable:{type(error).__name__}"
 
+    raw_state = str(value.get("queue_state"))
+    state = (
+        "pending_execution"
+        if raw_state in PAPER_EXECUTION_LEGACY_PENDING_QUEUE_STATES
+        else raw_state
+    )
     if result_value.get("execution_date") != execution_value:
         return "result_execution_date_mismatch"
-    state = str(value.get("queue_state"))
+    if result_value.get("decision_date") != recommendation_value.get("decision_date"):
+        return "result_decision_date_mismatch"
     if state == "superseded":
         superseded_by = value.get("superseded_by_source_file_hash")
         if not _is_sha256(superseded_by) or superseded_by == source_hash:
@@ -1045,17 +1252,41 @@ def _validate_queue_receipt(
             return "superseded_result_status_mismatch"
         return None
 
+    result_status = result_value.get("status")
+    legacy_pending = raw_state in PAPER_EXECUTION_LEGACY_PENDING_QUEUE_STATES
+    if state in PAPER_EXECUTION_PENDING_QUEUE_STATES:
+        if result_status in {"waiting_for_execution_session", "waiting_for_execution_source"}:
+            if not legacy_pending and result_value.get("retryable") is not True:
+                return "pending_waiting_result_not_retryable"
+            if not _has_retryable_waiting_blocker(result_value):
+                return "pending_waiting_reason_not_retryable"
+            return _validate_optional_candidate_hashes(value, result_value)
+        if result_status == "blocked":
+            if not legacy_pending and result_value.get("retryable") is not True:
+                return "pending_blocked_result_not_retryable"
+            if not _has_retryable_source_blocker(result_value):
+                return "pending_blocked_reason_not_retryable"
+            return _validate_optional_candidate_hashes(value, result_value)
+        if result_status == "machine_verified_candidate":
+            candidate_error = _validate_required_candidate_hashes(value, result_value)
+            if candidate_error is not None:
+                return candidate_error
+            ledger_value = value.get("ledger")
+            result_ledger = result_value.get("ledger")
+            if not isinstance(ledger_value, Mapping) or not isinstance(result_ledger, Mapping):
+                return "pending_ledger_missing"
+            if dict(ledger_value) != dict(result_ledger):
+                return "pending_ledger_projection_mismatch"
+            if ledger_value.get("appended") is True:
+                return "pending_ledger_already_appended"
+            return None
+        return "pending_result_status_invalid"
+
     if state != "processed":
         return "unsupported_terminal_queue_state"
-    candidate_hash = value.get("candidate_content_sha256")
-    candidate_file_hash = value.get("candidate_file_hash")
-    if not _is_sha256(candidate_hash) or not _is_sha256(candidate_file_hash):
-        return "candidate_hash_missing_or_invalid"
-    if result_value.get("content_sha256") != candidate_hash:
-        return "result_candidate_content_hash_mismatch"
-    if result_value.get("candidate_file_hash") != candidate_file_hash:
-        return "result_candidate_file_hash_mismatch"
-    result_status = result_value.get("status")
+    candidate_error = _validate_required_candidate_hashes(value, result_value)
+    if candidate_error is not None:
+        return candidate_error
     if result_status == "no_trade_required_candidate":
         if result_value.get("fill_count") != 0:
             return "no_trade_fill_count_mismatch"
@@ -1080,6 +1311,50 @@ def _validate_queue_receipt(
     ):
         return "processed_ledger_readback_mismatch"
     return None
+
+
+def _validate_required_candidate_hashes(
+    value: Mapping[object, object],
+    result: Mapping[object, object],
+) -> str | None:
+    candidate_hash = value.get("candidate_content_sha256")
+    candidate_file_hash = value.get("candidate_file_hash")
+    if not _is_sha256(candidate_hash) or not _is_sha256(candidate_file_hash):
+        return "candidate_hash_missing_or_invalid"
+    if result.get("content_sha256") != candidate_hash:
+        return "result_candidate_content_hash_mismatch"
+    if result.get("candidate_file_hash") != candidate_file_hash:
+        return "result_candidate_file_hash_mismatch"
+    candidate_path = result.get("candidate_path")
+    if not isinstance(candidate_path, str) or not candidate_path.strip():
+        return "candidate_path_missing"
+    try:
+        candidate_raw = Path(candidate_path).expanduser().resolve().read_bytes()
+        if _sha256_bytes(candidate_raw) != candidate_file_hash:
+            return "candidate_file_changed"
+        candidate_value = json.loads(candidate_raw.decode("utf-8"))
+        if not isinstance(candidate_value, Mapping):
+            return "candidate_not_object"
+        candidate_body = dict(candidate_value)
+        candidate_declared = candidate_body.pop("content_sha256", None)
+        if candidate_declared != candidate_hash:
+            return "candidate_content_hash_mismatch"
+        if _payload_hash(candidate_body) != candidate_hash:
+            return "candidate_content_changed"
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, RuntimeError):
+        return "candidate_unreadable"
+    return None
+
+
+def _validate_optional_candidate_hashes(
+    value: Mapping[object, object],
+    result: Mapping[object, object],
+) -> str | None:
+    candidate_hash = value.get("candidate_content_sha256")
+    candidate_file_hash = value.get("candidate_file_hash")
+    if candidate_hash is None and candidate_file_hash is None:
+        return None
+    return _validate_required_candidate_hashes(value, result)
 
 
 def _ledger_readback_matches(
@@ -1148,6 +1423,76 @@ def _queue_diagnostic_reason(prefix: str, diagnostics: Sequence[str]) -> str:
     return prefix if not detail else f"{prefix}:{detail}"
 
 
+_RETRYABLE_SOURCE_ERROR_MARKERS = (
+    "paper market DB is missing",
+    "paper market read failed:",
+    "daily_prices is missing execution-date open rows:",
+    "daily_prices is missing market-reference-date close rows:",
+    "daily_prices is missing market-reference-date liquidity rows:",
+)
+_NONRETRYABLE_SOURCE_MARKERS = (
+    "future",
+    "identity",
+    "clock",
+    "timing",
+    "session was missed",
+    "recommendation was frozen",
+    "reference price does not match",
+    "same-day",
+    "same_day",
+    "decision date",
+    "decision_date",
+    "execution date mismatch",
+)
+
+
+def _is_retryable_source_blocker_text(value: str) -> bool:
+    lowered = value.casefold()
+    if any(marker in lowered for marker in _NONRETRYABLE_SOURCE_MARKERS):
+        return False
+    return any(marker.casefold() in lowered for marker in _RETRYABLE_SOURCE_ERROR_MARKERS)
+
+
+def _is_retryable_source_error(error: BaseException) -> bool:
+    """Classify only late/missing market source errors as retryable.
+
+    A malformed recommendation, a clock/session violation, a price mismatch or
+    any other contract error remains terminal.  This narrow list is what lets
+    the 15:05 failed attempt be retried at 21:00 without turning a bad source
+    into a perpetually pending queue item.
+    """
+
+    return _is_retryable_source_blocker_text(str(error))
+
+
+def _has_retryable_source_blocker(result: Mapping[object, object]) -> bool:
+    blockers = result.get("blockers")
+    if not isinstance(blockers, list) or not blockers:
+        return False
+    # Every blocker must belong to the same retryable source class.  In
+    # particular, a missing row combined with a future/identity/timing error
+    # cannot be downgraded to a pending retry by matching only one string.
+    return all(
+        isinstance(blocker, str) and _is_retryable_source_blocker_text(blocker)
+        for blocker in blockers
+    )
+
+
+def _has_retryable_waiting_blocker(result: Mapping[object, object]) -> bool:
+    blockers = result.get("blockers")
+    if not isinstance(blockers, list) or not blockers:
+        return False
+    allowed_prefixes = (
+        "paper_execution_waiting_for_next_session_open:",
+        "paper_execution_waiting_for_delayed_eod_source:",
+    )
+    return all(
+        isinstance(blocker, str)
+        and blocker.startswith(allowed_prefixes)
+        for blocker in blockers
+    )
+
+
 def _operational_queue_state(result: Mapping[str, object]) -> str:
     status = str(result.get("status") or "unknown")
     if status == "no_trade_required_candidate":
@@ -1158,7 +1503,9 @@ def _operational_queue_state(result: Mapping[str, object]) -> str:
             return "processed"
         return "candidate_only_pending_append"
     if status.startswith("waiting_"):
-        return "waiting"
+        return "pending_execution"
+    if status == "blocked" and result.get("retryable") is True:
+        return "pending_execution"
     if status == "skipped_no_pending_recommendation":
         return "skipped"
     return "failed"
@@ -1646,6 +1993,7 @@ def _apply_prior_paper_fills(
     initial_cash: Decimal,
     initial_total: Decimal,
     initial_positions: tuple[_Position, ...],
+    exclude_fill_ids: frozenset[str] = frozenset(),
 ) -> tuple[
     Decimal,
     Decimal,
@@ -1738,6 +2086,8 @@ def _apply_prior_paper_fills(
     event_ids: list[str] = []
     for row in rows:
         fill = _paper_fill_from_row(row)
+        if fill.fill_id in exclude_fill_ids:
+            continue
         if fill.source_type not in {
             PAPER_EXECUTION_SOURCE_TYPE,
             *PAPER_EXECUTION_LEGACY_SOURCE_TYPES,
@@ -1804,6 +2154,79 @@ def _apply_prior_paper_fills(
         "source_type": PAPER_EXECUTION_SOURCE_TYPE,
     }
     return cash, total, positions, tuple(event_ids), projection
+
+
+def _apply_same_day_paper_fills(
+    state: _State,
+    *,
+    ledger_db: Path | None,
+    execution_date: date,
+    exclude_fill_ids: frozenset[str],
+) -> _State:
+    """Project prior same-session fills into a retry's policy state.
+
+    The normal snapshot projection intentionally stops before the execution
+    date.  EOD policy evaluation has a stronger observation boundary: rows
+    already persisted on that same date are available.  Exact rows belonging
+    to the current recommendation are excluded by their deterministic fill
+    identity so a retry remains idempotent; every other valid row changes the
+    cash/position basis used by the next candidate.
+    """
+
+    if ledger_db is None or not ledger_db.exists():
+        return state
+    next_day = execution_date + timedelta(days=1)
+    (
+        cash,
+        total,
+        positions,
+        event_ids,
+        projection,
+    ) = _apply_prior_paper_fills(
+        ledger_db,
+        portfolio_id=state.portfolio_id,
+        after_date=execution_date,
+        before_date=next_day,
+        initial_cash=state.cash,
+        initial_total=state.total_value,
+        initial_positions=state.positions,
+        exclude_fill_ids=exclude_fill_ids,
+    )
+    if not event_ids:
+        return state
+    all_event_ids = tuple((*state.ledger_event_ids, *event_ids))
+    state_payload = {
+        "snapshot_id": state.snapshot_id,
+        "portfolio_id": state.portfolio_id,
+        "decision_date": state.decision_date.isoformat(),
+        "source_result_id": state.source_result_id,
+        "cash": str(cash),
+        "total_value": str(total),
+        "positions": [
+            {
+                "stock_code": item.stock_code,
+                "quantity": item.quantity,
+                "mark_price": str(item.mark_price),
+                "market_value": str(item.market_value),
+            }
+            for item in positions
+        ],
+        "ledger_event_ids": list(all_event_ids),
+        "same_day_projection": projection,
+    }
+    return _State(
+        snapshot_id=state.snapshot_id,
+        portfolio_id=state.portfolio_id,
+        decision_date=state.decision_date,
+        source_result_id=state.source_result_id,
+        cash=cash,
+        total_value=total,
+        positions=positions,
+        content_hash=_payload_hash(state_payload),
+        file_hash=state.file_hash,
+        ledger_event_ids=all_event_ids,
+        execution_snapshot_exists=state.execution_snapshot_exists,
+    )
 
 
 def _load_market(
@@ -1970,6 +2393,761 @@ def _load_market(
         content_hash=_payload_hash(content),
         file_hash=before_hash,
     )
+
+
+def _evaluate_policy_batch(
+    *,
+    paths: PaperExecutionPaths,
+    state: _State,
+    target: Mapping[str, int],
+    prices: Mapping[str, Decimal],
+    recommendation: _Recommendation,
+    execution_date: date,
+    calendar: OfficialTradingCalendar | None,
+    policy: PaperPortfolioPolicyConfig,
+) -> tuple[
+    dict[str, int],
+    dict[str, object],
+    PaperPortfolioPolicyContext,
+    PaperPortfolioPolicyBatchResult,
+]:
+    """在建立 fills 前以真 ledger／PIT sector／官方 calendar 評估整批 target。
+
+    ``PaperPortfolioPolicyAdapter`` 是此 producer 的唯一政策入口。被政策拒絕
+    的 target 會被固定回目前持倉，因此後續 execution builder 不會繞過
+    weekly turnover、cooldown 或 sector gate；sell proceeds 與 sector exposure
+    仍只由實際 fills 改變。
+    """
+
+    if paths.ledger_db is None:
+        raise PaperExecutionProducerError(
+            "paper policy ledger source is missing"
+        )
+    symbols = tuple(sorted(set(target) | {item.stock_code for item in state.positions}))
+    sector_by_symbol, sector_source = _load_policy_sector_mapping(
+        paths.sector_membership_path,
+        expected_file_hash=paths.sector_membership_file_hash,
+        as_of=recommendation.created_at,
+        decision_date=recommendation.decision_date,
+        symbols=symbols,
+    )
+    official_days, calendar_source = _policy_calendar_snapshot(
+        paths.market_db,
+        calendar=calendar,
+        start_date=state.decision_date,
+        end_date=execution_date,
+    )
+    current_weights = {
+        item.stock_code: _amount_to_bp(
+            item.market_value,
+            state.total_value,
+            field_name=f"current market value:{item.stock_code}",
+        )
+        for item in state.positions
+        if item.quantity > 0
+    }
+    target_weights = {
+        symbol: _amount_to_bp(
+            prices[symbol] * Decimal(quantity),
+            state.total_value,
+            field_name=f"target market value:{symbol}",
+        )
+        for symbol, quantity in target.items()
+        if quantity > 0
+    }
+    # Include zero targets so a held symbol can be explicitly evaluated as a
+    # sell and cannot evade cooldown/sector policy by disappearing from a
+    # recommendation.
+    target_weights.update(
+        {
+            symbol: 0
+            for symbol in symbols
+            if symbol not in target_weights
+        }
+    )
+    current_weights.update(
+        {
+            symbol: 0
+            for symbol in symbols
+            if symbol not in current_weights
+        }
+    )
+    if sum(target_weights.values()) > 10_000:
+        raise PaperExecutionProducerError(
+            "paper policy target weights exceed 10000 bp"
+        )
+    target_position_count = sum(1 for quantity in target.values() if quantity > 0)
+    if target_position_count > policy.max_positions:
+        raise PaperExecutionProducerError(
+            "paper policy max_positions exceeded:"
+            f"{target_position_count}>{policy.max_positions}"
+        )
+    expected_fill_ids = _expected_execution_fill_ids(
+        state=state,
+        target=target,
+        execution_date=execution_date,
+        recommendation_hash=recommendation.content_hash,
+    )
+    context = PaperPortfolioPolicyContext(
+        # EOD replay has a complete same-session ledger view.  The exact fill
+        # identities for this recommendation are excluded so a retry evaluates
+        # the same target idempotently; a different recommendation's same-day
+        # fills remain policy evidence for turnover and cooldown.
+        decision_date=execution_date,
+        current_cash_bp=_amount_to_bp(
+            state.cash,
+            state.total_value,
+            field_name="current cash",
+        ),
+        current_weights_bp=current_weights,
+        sector_by_symbol=sector_by_symbol,
+        official_trading_days=official_days,
+        ledger_history_start=state.decision_date,
+        official_calendar_coverage_start=state.decision_date,
+        official_calendar_coverage_end=execution_date,
+        official_calendar_source_hash=str(calendar_source["source_hash"]),
+        official_calendar_complete=True,
+        portfolio_id=state.portfolio_id,
+        snapshot_id=state.snapshot_id,
+        include_decision_date_rows=True,
+        ignored_fill_ids=expected_fill_ids,
+    )
+    candidates = tuple(
+        PaperPolicyCandidate(
+            stock_code=symbol,
+            current_weight_bp=current_weights[symbol],
+            target_weight_bp=target_weights[symbol],
+        )
+        for symbol in symbols
+    )
+    batch = PaperPortfolioPolicyAdapter(
+        paths.ledger_db,
+        policy,
+    ).evaluate_batch(context, candidates)
+    if batch.status != "ready" or batch.state is None:
+        blockers = ",".join(batch.blockers) or "policy_adapter_source_not_ready"
+        raise PaperExecutionProducerError(
+            f"paper policy adapter {batch.status}:{blockers}"
+        )
+    if len(batch.results) != len(candidates):
+        raise PaperExecutionProducerError(
+            "paper policy adapter returned incomplete batch results"
+        )
+    effective_target = dict(target)
+    current_quantities = {item.stock_code: item.quantity for item in state.positions}
+    for candidate, result in zip(candidates, batch.results):
+        if result.status != "ready" or result.decision is None:
+            blockers = ",".join(result.blockers) or "candidate_policy_result_not_ready"
+            raise PaperExecutionProducerError(
+                f"paper policy candidate {candidate.stock_code} {result.status}:{blockers}"
+            )
+        if result.decision.action is not PaperPortfolioAction.PAPER_TRADE_CANDIDATE:
+            # A rejected/no-trade candidate must not be turned into a fill by
+            # the lower-level liquidity/cash simulator.
+            effective_target[candidate.stock_code] = current_quantities.get(
+                candidate.stock_code,
+                0,
+            )
+    adapter_projection = {
+        "status": batch.status,
+        "enforced": True,
+        "consumer": (
+            "app_module.paper_portfolio_policy_adapter."
+            "PaperPortfolioPolicyAdapter.evaluate_batch"
+        ),
+        "decision_date": execution_date.isoformat(),
+        "recommendation_freeze_at": recommendation.created_at.isoformat(),
+        "sector_source": sector_source,
+        "calendar_source": calendar_source,
+        "ledger_source": {
+            "path": str(paths.ledger_db.expanduser().resolve()),
+            "mode": "ro/query_only",
+            "ledger_history_start": state.decision_date.isoformat(),
+            "portfolio_id": state.portfolio_id,
+        },
+        "context": {
+            "current_cash_bp": context.current_cash_bp,
+            "current_weights_bp": dict(sorted(current_weights.items())),
+            "target_weights_bp": dict(sorted(target_weights.items())),
+            "official_trading_days": [
+                item.isoformat() for item in context.official_trading_days
+            ],
+            "official_calendar_source_hash": context.official_calendar_source_hash,
+            "official_calendar_complete": context.official_calendar_complete,
+            "snapshot_id": context.snapshot_id,
+            "include_decision_date_rows": context.include_decision_date_rows,
+            "ignored_fill_ids": list(context.ignored_fill_ids),
+        },
+        "policy": _policy_config_projection(policy),
+        "cash_reservation_semantics": batch.cash_reservation_semantics,
+        "sector_reservation_semantics": batch.sector_reservation_semantics,
+        "results": [
+            _policy_result_projection(candidate, result)
+            for candidate, result in zip(candidates, batch.results)
+        ],
+        "ledger_state": {
+            "weekly_turnover_used_bp": batch.state.weekly_turnover_used_bp,
+            "future_rows_excluded": batch.state.future_rows_excluded,
+            "last_trade_date_by_symbol": {
+                symbol: item.isoformat()
+                for symbol, item in sorted(
+                    batch.state.last_trade_date_by_symbol.items()
+                )
+            },
+            "trading_days_since_last_trade_by_symbol": dict(
+                sorted(batch.state.trading_days_since_last_trade_by_symbol.items())
+            ),
+        },
+        "target_quantities_before_policy": dict(sorted(target.items())),
+        "target_quantities_after_policy": dict(sorted(effective_target.items())),
+    }
+    return effective_target, adapter_projection, context, batch
+
+
+def _expected_execution_fill_ids(
+    *,
+    state: _State,
+    target: Mapping[str, int],
+    execution_date: date,
+    recommendation_hash: str,
+) -> tuple[str, ...]:
+    """Return immutable fill identities that belong to this exact replay.
+
+    A same-day retry must not consume its own already-appended rows as a new
+    turnover/cooldown event.  The identity is derived from the same ordered
+    current/target delta used by :func:`_build_fills`; any other recommendation
+    hash therefore remains visible to the policy adapter.
+    """
+
+    current = {item.stock_code: item.quantity for item in state.positions}
+    symbols = sorted(set(current) | set(target))
+    prefix = recommendation_hash.replace("sha256:", "")[:16]
+    fill_ids: list[str] = []
+    for side in ("sell", "buy"):
+        for symbol in symbols:
+            before = current.get(symbol, 0)
+            after = target.get(symbol, 0)
+            if (side == "sell" and before <= after) or (
+                side == "buy" and after <= before
+            ):
+                continue
+            fill_ids.append(
+                f"paper-execution:{execution_date.isoformat()}:{prefix}:"
+                f"{symbol}:{side}"
+            )
+    return tuple(sorted(fill_ids))
+
+
+def _load_policy_sector_mapping(
+    path: Path | None,
+    *,
+    expected_file_hash: str | None,
+    as_of: datetime,
+    decision_date: date,
+    symbols: Sequence[str],
+) -> tuple[dict[str, str], dict[str, object]]:
+    """讀取 hash 綁定的官方 accepted sector sidecar or PIT archive.
+
+    An exact ``archive_manifest.json`` is consumed through the durable PIT
+    archive custody oracle; a canonical sidecar uses the assembler validator.
+    Rows outside the frozen recommendation instant are ignored.  A missing or
+    conflicting as-of row remains an explicit source blocker; the
+    recommendation's display ``產業`` field is never used as a fallback.
+    """
+
+    if path is None:
+        raise PaperExecutionProducerError(
+            "paper policy sector mapping source is missing"
+        )
+    resolved = path.expanduser().resolve()
+    if not resolved.is_file():
+        raise PaperExecutionProducerError(
+            f"paper policy sector mapping source is missing:{resolved}"
+        )
+    if not _is_sha256(expected_file_hash):
+        raise PaperExecutionProducerError(
+            "paper policy sector mapping file hash is missing or invalid"
+        )
+    observed_file_hash = _file_sha256(resolved)
+    if observed_file_hash != expected_file_hash:
+        raise PaperExecutionProducerError(
+            "paper policy sector mapping file hash mismatch"
+        )
+    archive_readback: dict[str, object] | None = None
+    source_mode = "official_pit_sector_sidecar_ro_hash_bound"
+    manifest_hash: str
+    if resolved.name == "archive_manifest.json":
+        # The scheduled caller passes an exact durable archive manifest.  The
+        # archive consumer is the custody oracle; do not copy its publication
+        # back to TEMP or trust producer-declared hashes as an allowlist.
+        archive_root = resolved.parents[2]
+        try:
+            from ml_module.pit_archive_consumer import (  # noqa: PLC0415
+                consume_pit_candidate_archive,
+            )
+
+            archive_readback = consume_pit_candidate_archive(
+                archive_root=archive_root,
+                manifest_path=resolved,
+                expected_manifest_file_hash=observed_file_hash,
+                decision_at=as_of,
+            )
+            raw_rows = archive_readback.get("rows")
+            if not isinstance(raw_rows, list):
+                raise PaperExecutionProducerError(
+                    "paper policy archived sector rows are missing"
+                )
+            rows = tuple(
+                item for item in raw_rows if isinstance(item, Mapping)
+            )
+            if len(rows) != len(raw_rows):
+                raise PaperExecutionProducerError(
+                    "paper policy archived sector row is invalid"
+                )
+            manifest_hash = _required_text(
+                archive_readback.get("publication_content_hash"),
+                "archive publication content hash",
+            )
+            source_mode = "official_pit_archive_manifest_ro_hash_bound"
+        except PaperExecutionProducerError:
+            raise
+        except Exception as error:  # noqa: BLE001 - source boundary is fail closed
+            raise PaperExecutionProducerError(
+                "paper policy sector archive rejected:"
+                f"{type(error).__name__}:{error}"
+            ) from error
+    else:
+        try:
+            from data_module.portfolio_ml_dataset_assembler import (  # noqa: PLC0415
+                _load_sector_membership_sidecar,
+            )
+
+            rows, manifest_hash = _load_sector_membership_sidecar(resolved)
+        except Exception as error:  # noqa: BLE001 - source boundary is fail closed
+            raise PaperExecutionProducerError(
+                "paper policy sector mapping sidecar rejected:"
+                f"{type(error).__name__}:{error}"
+            ) from error
+    if _file_sha256(resolved) != observed_file_hash:
+        raise PaperExecutionProducerError(
+            "paper policy sector mapping changed during read"
+        )
+    by_symbol: dict[str, list[tuple[datetime, date, date | None, str, str]]] = {}
+    selected_source_ids: set[str] = set()
+    freeze = _aware_datetime(as_of, "recommendation.created_at").astimezone(timezone.utc)
+    for row in rows:
+        if not isinstance(row, Mapping):  # pragma: no cover - assembler guard
+            raise PaperExecutionProducerError(
+                "paper policy sector mapping row is invalid"
+            )
+        status = row.get("status")
+        if status != "accepted":
+            raise PaperExecutionProducerError(
+                "paper policy sector mapping contains non-accepted row"
+            )
+        try:
+            symbol = _stock_code(row.get("symbol"))
+            sector = _required_text(row.get("sector_id"), "sector membership.sector_id")
+            source_id = _required_text(row.get("source_id"), "sector membership.source_id")
+            available_at = _aware_datetime(
+                row.get("available_at"),
+                "sector membership.available_at",
+            ).astimezone(timezone.utc)
+            effective_from = _strict_date(
+                row.get("effective_from"),
+                "sector membership.effective_from",
+            )
+            effective_to = _optional_date(
+                row.get("effective_to"),
+                "sector membership.effective_to",
+            )
+        except (PaperExecutionProducerError, ValueError) as error:
+            raise PaperExecutionProducerError(
+                f"paper policy sector mapping row rejected:{error}"
+            ) from error
+        # Official PIT producer identities are explicit; a free-form display
+        # industry or a historical self-description cannot authorize policy.
+        if not source_id.casefold().startswith("official:"):
+            continue
+        if available_at > freeze:
+            continue
+        if effective_from > decision_date:
+            continue
+        if effective_to is not None and effective_to < decision_date:
+            continue
+        by_symbol.setdefault(symbol, []).append(
+            (available_at, effective_from, effective_to, sector, source_id)
+        )
+    result: dict[str, str] = {}
+    for symbol in symbols:
+        candidates = by_symbol.get(symbol, [])
+        if not candidates:
+            continue
+        latest_key = max((item[0], item[1]) for item in candidates)
+        latest = [item for item in candidates if (item[0], item[1]) == latest_key]
+        sectors = {item[3] for item in latest}
+        if len(sectors) != 1:
+            raise PaperExecutionProducerError(
+                f"paper policy sector mapping is ambiguous:{symbol}"
+            )
+        result[symbol] = next(iter(sectors))
+        selected_source_ids.update(item[4] for item in latest)
+    missing = sorted(set(symbols) - set(result))
+    if missing:
+        raise PaperExecutionProducerError(
+            "paper policy sector mapping missing as-of recommendation freeze:"
+            + ",".join(missing)
+        )
+    source_projection: dict[str, object] = {
+        "path": str(resolved),
+        "mode": source_mode,
+        "file_hash": observed_file_hash,
+        "canonical_manifest_hash": manifest_hash,
+        "as_of": freeze.isoformat(),
+        "effective_date": decision_date.isoformat(),
+        "rows_read": len(rows),
+        "selected_symbols": list(sorted(result)),
+        "source_ids": sorted(selected_source_ids),
+        "official_source_required": True,
+        "display_industry_fallback_allowed": False,
+    }
+    if archive_readback is not None:
+        source_projection.update(
+            {
+                "archive_root": str(archive_root),
+                "archive_manifest_hash": archive_readback.get(
+                    "archive_manifest_hash"
+                ),
+                "archive_id": archive_readback.get("archive_id"),
+                "archive_producer_code_sha256": archive_readback.get(
+                    "producer_code_sha256"
+                ),
+                "archive_current_code_hash_match": archive_readback.get(
+                    "current_code_hash_match"
+                ),
+                "archive_code_hash_compatibility": archive_readback.get(
+                    "code_hash_compatibility"
+                ),
+                "archive_legacy_code_hash_compatibility_verified": (
+                    archive_readback.get("legacy_code_hash_compatibility_verified")
+                ),
+                "captured_at": archive_readback.get("captured_at"),
+                "available_at": archive_readback.get("available_at"),
+                "archived_at": archive_readback.get("archived_at"),
+                "archive_consumer": (
+                    "ml_module.pit_archive_consumer.consume_pit_candidate_archive"
+                ),
+                "archive_source_custody_verified": archive_readback.get(
+                    "source_custody_verified"
+                ),
+                "archive_rows_rebuilt_from_raw": archive_readback.get(
+                    "rows_rebuilt_from_raw"
+                ),
+            }
+        )
+    return result, source_projection
+
+
+def _policy_calendar_snapshot(
+    market_db: Path,
+    *,
+    calendar: OfficialTradingCalendar | None,
+    start_date: date,
+    end_date: date,
+) -> tuple[tuple[date, ...], dict[str, object]]:
+    """建立 adapter 所需的 bounded official calendar coverage。"""
+
+    if end_date < start_date:
+        raise PaperExecutionProducerError(
+            "paper policy calendar coverage range is invalid"
+        )
+    evidence_rows: list[dict[str, object]] = []
+    trading_days: list[date] = []
+    cursor = start_date
+    service = calendar or OfficialTradingCalendar(db_path=market_db)
+    while cursor <= end_date:
+        evidence, _ = _calendar_evidence(
+            market_db,
+            target_date=cursor,
+            calendar=service,
+        )
+        status = evidence.get("is_trading_day")
+        if status is None:
+            raise PaperExecutionProducerError(
+                "paper policy official calendar unknown:"
+                f"{cursor.isoformat()}"
+            )
+        if status is True:
+            trading_days.append(cursor)
+        evidence_rows.append(evidence)
+        cursor += timedelta(days=1)
+    if end_date not in trading_days:
+        raise PaperExecutionProducerError(
+            "paper policy execution date is not an official trading day:"
+            + end_date.isoformat()
+        )
+    source_hash = _payload_hash(
+        {
+            "provider": "data_module.official_trading_calendar.OfficialTradingCalendar",
+            "coverage_start": start_date.isoformat(),
+            "coverage_end": end_date.isoformat(),
+            "dates": evidence_rows,
+        }
+    )
+    return tuple(trading_days), {
+        "provider": "data_module.official_trading_calendar.OfficialTradingCalendar",
+        "mode": "bounded_official_calendar_evidence",
+        "coverage_start": start_date.isoformat(),
+        "coverage_end": end_date.isoformat(),
+        "trading_days": [item.isoformat() for item in trading_days],
+        "dates": evidence_rows,
+        "source_hash": source_hash,
+        "complete": True,
+        "lookahead_allowed": False,
+    }
+
+
+def _amount_to_bp(amount: Decimal, total_value: Decimal, *, field_name: str) -> int:
+    """將 Decimal 金額保守轉成整數 bp，不用 binary float。"""
+
+    if (
+        not isinstance(amount, Decimal)
+        or not amount.is_finite()
+        or amount < 0
+        or not isinstance(total_value, Decimal)
+        or not total_value.is_finite()
+        or total_value <= 0
+    ):
+        raise PaperExecutionProducerError(f"{field_name} cannot be converted to bp")
+    value = (amount * BPS_DENOMINATOR / total_value).to_integral_value(
+        rounding=ROUND_FLOOR
+    )
+    if value < 0 or value > BPS_DENOMINATOR:
+        raise PaperExecutionProducerError(f"{field_name} bp is outside 0..10000")
+    return int(value)
+
+
+def _policy_config_projection(policy: PaperPortfolioPolicyConfig) -> dict[str, object]:
+    payload = asdict(policy)
+    payload["initial_capital"] = str(policy.initial_capital)
+    return payload
+
+
+def _policy_result_projection(
+    candidate: PaperPolicyCandidate,
+    result: PaperPortfolioPolicyAdapterResult,
+) -> dict[str, object]:
+    decision = result.decision
+    return {
+        "stock_code": candidate.stock_code,
+        "current_weight_bp": candidate.current_weight_bp,
+        "target_weight_bp": candidate.target_weight_bp,
+        "status": result.status,
+        "blockers": list(result.blockers),
+        "action": None if decision is None else decision.action.value,
+        "weight_gap_bp": None if decision is None else decision.weight_gap_bp,
+        "estimated_round_trip_cost_bp": (
+            None if decision is None else decision.estimated_round_trip_cost_bp
+        ),
+        "reasons": [] if decision is None else list(decision.reasons),
+        "reservation_weekly_turnover_used_bp": (
+            result.reservation_weekly_turnover_used_bp
+        ),
+        "projected_sector_weight_after_bp": (
+            result.projected_sector_weight_after_bp
+        ),
+    }
+
+
+def _reconcile_policy_after_fills(
+    *,
+    state: _State,
+    target: Mapping[str, int],
+    fills: Sequence[PaperTradeFill],
+    projection: Mapping[str, object],
+    policy_context: PaperPortfolioPolicyContext,
+    policy_batch: PaperPortfolioPolicyBatchResult,
+    policy: PaperPortfolioPolicyConfig,
+) -> dict[str, object]:
+    """以實際 filled quantity 重算 policy invariants。
+
+    這個檢查發生在 liquidity/cash simulator 之後，故 partial 或 rejected
+    sell 不會釋放預期現金或 sector exposure。它同時在 candidate-only 與
+    explicit append 前執行；append 後再由 adapter 做 ledger readback。
+    """
+
+    if policy_batch.state is None:
+        raise PaperExecutionProducerError("paper policy state is missing after batch")
+    expected_cash = quantize_money(state.cash)
+    actual_turnover = 0
+    fills_by_symbol: dict[str, list[PaperTradeFill]] = {}
+    for fill in fills:
+        fills_by_symbol.setdefault(fill.stock_code, []).append(fill)
+        if fill.status in {"filled", "partially_filled"}:
+            if fill.filled_quantity <= 0 or fill.turnover_bp is None:
+                raise PaperExecutionProducerError(
+                    f"paper policy actual fill is incomplete:{fill.fill_id}"
+                )
+            actual_turnover += fill.turnover_bp
+            settlement = fill.commission + fill.tax
+            if fill.side == "sell":
+                expected_cash = quantize_money(
+                    expected_cash + fill.gross_amount - settlement
+                )
+            elif fill.side == "buy":
+                expected_cash = quantize_money(
+                    expected_cash - fill.gross_amount - settlement
+                )
+            else:  # pragma: no cover - PaperTradeFill validates this
+                raise PaperExecutionProducerError("paper policy fill side is invalid")
+        elif fill.filled_quantity != 0:
+            raise PaperExecutionProducerError(
+                f"paper policy rejected fill has quantity:{fill.fill_id}"
+            )
+    cash_after = _projection_decimal(projection, "cash_after")
+    if cash_after != expected_cash:
+        raise PaperExecutionProducerError(
+            "paper policy actual cash reconciliation mismatch"
+        )
+    reserve = quantize_money(
+        state.total_value * Decimal(policy.minimum_cash_bp) / BPS_DENOMINATOR
+    )
+    if cash_after < reserve:
+        raise PaperExecutionProducerError(
+            f"paper policy actual cash reserve not met:{cash_after}<{reserve}"
+        )
+    previous_turnover = policy_batch.state.weekly_turnover_used_bp
+    if previous_turnover + actual_turnover > policy.weekly_turnover_cap_bp:
+        raise PaperExecutionProducerError(
+            "paper policy actual weekly turnover cap exceeded:"
+            f"{previous_turnover}+{actual_turnover}>{policy.weekly_turnover_cap_bp}"
+        )
+    reported_turnover = projection.get("turnover_bp")
+    if reported_turnover != actual_turnover:
+        raise PaperExecutionProducerError(
+            "paper policy actual turnover projection mismatch"
+        )
+    raw_positions = projection.get("positions")
+    if not isinstance(raw_positions, list):
+        raise PaperExecutionProducerError("paper policy post positions are missing")
+    post_total = _projection_decimal(projection, "total_value_after_mark")
+    sector_weights: dict[str, int] = {}
+    position_rows: list[dict[str, object]] = []
+    position_total = Decimal("0.00")
+    for raw in raw_positions:
+        if not isinstance(raw, Mapping):
+            raise PaperExecutionProducerError("paper policy post position is invalid")
+        symbol = _stock_code(raw.get("stock_code"))
+        quantity = _nonnegative_int(raw.get("quantity"), "paper post quantity")
+        market_value = _finite_decimal(
+            raw.get("market_value"),
+            f"paper post market value:{symbol}",
+        )
+        if quantity <= 0 or market_value < 0:
+            raise PaperExecutionProducerError("paper policy post position is invalid")
+        position_total = quantize_money(position_total + market_value)
+        sector = policy_context.sector_by_symbol.get(symbol)
+        if not isinstance(sector, str) or not sector.strip():
+            raise PaperExecutionProducerError(
+                f"paper policy post sector mapping missing:{symbol}"
+            )
+        weight_bp = _amount_to_bp(
+            market_value,
+            post_total,
+            field_name=f"post market value:{symbol}",
+        )
+        sector_weights[sector] = sector_weights.get(sector, 0) + weight_bp
+        position_rows.append(
+            {
+                "stock_code": symbol,
+                "quantity": quantity,
+                "market_value": str(market_value),
+                "weight_bp": weight_bp,
+                "sector": sector,
+            }
+        )
+    if quantize_money(cash_after + position_total) != post_total:
+        raise PaperExecutionProducerError(
+            "paper policy post total value reconciliation mismatch"
+        )
+    if any(weight > policy.max_sector_weight_bp for weight in sector_weights.values()):
+        raise PaperExecutionProducerError(
+            "paper policy actual sector cap exceeded"
+        )
+    return {
+        "status": "passed",
+        "enforced": True,
+        "cash_before": str(state.cash),
+        "cash_after": str(cash_after),
+        "minimum_cash_reserve": str(reserve),
+        "weekly_turnover_before_bp": previous_turnover,
+        "actual_turnover_bp": actual_turnover,
+        "weekly_turnover_after_bp": previous_turnover + actual_turnover,
+        "weekly_turnover_cap_bp": policy.weekly_turnover_cap_bp,
+        "sector_weights_after_bp": dict(sorted(sector_weights.items())),
+        "max_sector_weight_bp": policy.max_sector_weight_bp,
+        "positions_after": position_rows,
+        "fills_by_symbol": {
+            symbol: [
+                {
+                    "fill_id": fill.fill_id,
+                    "side": fill.side,
+                    "status": fill.status,
+                    "requested_quantity": fill.requested_quantity,
+                    "filled_quantity": fill.filled_quantity,
+                }
+                for fill in symbol_fills
+            ]
+            for symbol, symbol_fills in sorted(fills_by_symbol.items())
+        },
+        "cash_reservation_semantics": (
+            "sell_proceeds_count_only_after_actual_fill_settlement"
+        ),
+        "sector_reservation_semantics": (
+            "sell_exposure_count_only_after_actual_fill_readback"
+        ),
+        "execution_readback_verified": False,
+        "target_quantities": dict(sorted(target.items())),
+    }
+
+
+def _projection_decimal(projection: Mapping[str, object], field_name: str) -> Decimal:
+    value = projection.get(field_name)
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError) as error:
+        raise PaperExecutionProducerError(
+            f"paper policy projection {field_name} is invalid"
+        ) from error
+    if not parsed.is_finite() or parsed < 0:
+        raise PaperExecutionProducerError(
+            f"paper policy projection {field_name} is invalid"
+        )
+    return quantize_money(parsed)
+
+
+def _verify_policy_ledger_readback(
+    path: Path,
+    *,
+    policy_context: PaperPortfolioPolicyContext,
+    policy: PaperPortfolioPolicyConfig,
+) -> dict[str, object]:
+    result = PaperPortfolioPolicyAdapter(path, policy).inspect(policy_context)
+    if result.status != "ready" or result.state is None:
+        blockers = ",".join(result.blockers) or "ledger_policy_readback_not_ready"
+        raise PaperExecutionProducerError(
+            f"paper policy ledger readback {result.status}:{blockers}"
+        )
+    return {
+        "status": result.status,
+        "path": str(path.expanduser().resolve()),
+        "mode": "ro/query_only",
+        "ledger_rows_read": result.state.ledger_rows_read,
+        "future_rows_excluded": result.state.future_rows_excluded,
+        "ledger_rows_sha256": result.state.ledger_rows_sha256,
+        "ledger_data_version": result.state.ledger_data_version,
+        "weekly_turnover_used_bp": result.state.weekly_turnover_used_bp,
+    }
 
 
 def _build_target(
@@ -2343,7 +3521,7 @@ def _policy_projection(
             "target_quantities": dict(sorted(target.items())),
             "recommendation_result_id": recommendation.result_id,
             "formal_credit": False,
-            "cooldown_policy": "not_applied_to_explicit_research_candidate",
+            "cooldown_policy": "enforced_by_paper_portfolio_policy_adapter",
         }
     )
     return {
@@ -2729,6 +3907,9 @@ __all__ = [
     "PAPER_BOARD_LOT",
     "PAPER_EXECUTION_PRODUCER_VERSION",
     "PAPER_EXECUTION_RECEIPT_SCHEMA_VERSION",
+    "PAPER_EXECUTION_PENDING_QUEUE_STATES",
+    "PAPER_EXECUTION_LEGACY_PENDING_QUEUE_STATES",
+    "PAPER_EXECUTION_TERMINAL_QUEUE_STATES",
     "PAPER_EXECUTION_SCHEMA_VERSION",
     "PAPER_EXECUTION_SOURCE_TYPE",
     "TAIWAN_EOD_REPLAY_AVAILABLE_AT",

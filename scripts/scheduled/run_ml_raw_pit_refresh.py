@@ -83,6 +83,24 @@ class _CoreFreshnessProof:
     data_update_status: str
 
 
+def _extract_source_quality_summary(
+    builder_stdout: str,
+) -> dict[str, object] | None:
+    """Extract only the bounded quality summary emitted by the builder."""
+
+    for line in reversed(builder_stdout.splitlines()):
+        try:
+            payload = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, Mapping):
+            continue
+        summary = payload.get("source_quality_summary")
+        if isinstance(summary, Mapping):
+            return dict(summary)
+    return None
+
+
 @dataclass(frozen=True)
 class _RawPublication:
     publication_id: str
@@ -100,6 +118,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--database", type=Path)
     parser.add_argument("--release-root", type=Path)
+    parser.add_argument(
+        "--daily-price-source-dir",
+        type=Path,
+        action="append",
+        dest="daily_price_source_dirs",
+        help=(
+            "repeatable canonical daily CSV roots; pass TWSE and TPEX "
+            "explicitly when overriding the data-root defaults"
+        ),
+    )
     parser.add_argument("--history-start-date", default="2014-01-01")
     parser.add_argument("--batch-size", type=int, default=2_048)
     parser.add_argument("--compression-level", type=int, default=6, choices=range(10))
@@ -490,6 +518,7 @@ def _builder_command(
     temporary_storage_budget_bytes: int | None = None,
     safety_reserve_bytes: int | None = None,
     daily_price_source_dir: Path | None = None,
+    daily_price_source_dirs: Sequence[Path] | None = None,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -524,9 +553,19 @@ def _builder_command(
         )
     if safety_reserve_bytes is not None:
         command.extend(["--safety-reserve-bytes", str(safety_reserve_bytes)])
+    source_dirs: list[Path] = []
     if daily_price_source_dir is not None:
+        source_dirs.append(daily_price_source_dir)
+    if daily_price_source_dirs is not None:
+        source_dirs.extend(daily_price_source_dirs)
+    seen_source_dirs: set[Path] = set()
+    for source_dir in source_dirs:
+        resolved_source_dir = source_dir.resolve()
+        if resolved_source_dir in seen_source_dirs:
+            continue
+        seen_source_dirs.add(resolved_source_dir)
         command.extend(
-            ["--daily-price-source-dir", str(daily_price_source_dir.resolve())]
+            ["--daily-price-source-dir", str(resolved_source_dir)]
         )
     return command
 
@@ -587,11 +626,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     status_path = args.status_path.resolve() if args.status_path else run_root / "latest_status.json"
     log_path = args.log_path.resolve() if args.log_path else run_root / "refresh.log"
     data_update_status_path = output_root / "scheduled" / "data_update_quick" / "latest_status.json"
+    daily_price_source_dirs = tuple(
+        path.resolve()
+        for path in (
+            args.daily_price_source_dirs
+            if args.daily_price_source_dirs is not None
+            else (
+                args.data_root.resolve() / "daily_price",
+                args.data_root.resolve() / "daily_price_tpex",
+            )
+        )
+    )
+    if not daily_price_source_dirs:
+        raise ValueError("at least one daily price source dir is required")
     # Raw 與 Direct/OOC 必須在同一 release root 互斥，避免兩個長鏈同時
     # 消耗同一 filesystem 的預算；raw private lock 名稱不再另開一把鎖。
     lock_path = heavy_chain_lock_path(release_root)
     started_at = scheduled_now()
     lock: MLStorageChainReservation | None = None
+    builder_returncode: int | None = None
+    builder_source_quality_summary: dict[str, object] | None = None
     inherited_env_value = os.environ.get(HEAVY_CHAIN_RESERVATION_HELD_ENV)
     _write_json(
         status_path,
@@ -604,6 +658,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             log_path=log_path,
             started_at=started_at.isoformat(timespec="seconds"),
             data_update_status_path=str(data_update_status_path),
+            daily_price_source_dirs=[str(path) for path in daily_price_source_dirs],
         ),
     )
     try:
@@ -813,7 +868,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     capacity_budget.temporary_peak_bytes_budget
                 ),
                 safety_reserve_bytes=capacity_budget.safety_reserve_bytes,
-                daily_price_source_dir=args.data_root.resolve() / "daily_price",
+                daily_price_source_dirs=daily_price_source_dirs,
             )
             # raw runner 已持有 canonical reservation；builder CLI 仍會執行
             # 自己的容量 preflight，但只接受綁定 owner sidecar、canonical
@@ -851,13 +906,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                         pass
                 raise
             builder_stdout, builder_stderr = builder_process.communicate()
+            builder_returncode = builder_process.returncode
+            builder_source_quality_summary = _extract_source_quality_summary(
+                builder_stdout
+            )
             if builder_stdout:
                 _append_log(log_path, builder_stdout)
             if builder_stderr:
                 _append_log(log_path, builder_stderr)
-            if builder_process.returncode != 0:
+            if builder_returncode != 0:
                 raise RuntimeError(
-                    f"raw_pit_builder_failed:{builder_process.returncode}"
+                    f"raw_pit_builder_failed:{builder_returncode}"
                 )
             published = _latest_raw_publication(raw_root)
             if published is None:
@@ -882,8 +941,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dataset_manifest_hash=published.dataset_manifest_hash,
                 publication_manifest_path=str(published.publication_manifest_path),
                 dataset_manifest_path=str(published.dataset_manifest_path),
-                builder_returncode=builder_process.returncode,
+                builder_returncode=builder_returncode,
                 storage_preflight=storage_preflight,
+                daily_price_source_dirs=[
+                    str(path) for path in daily_price_source_dirs
+                ],
             )
             _write_json(status_path, payload)
             return 0
@@ -902,6 +964,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             _write_json(status_path, payload)
             return 0
         except Exception as exc:  # noqa: BLE001 - preserve machine-readable failure
+            failure_fields: dict[str, object] = {
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+            if builder_returncode is not None:
+                failure_fields["builder_returncode"] = builder_returncode
+            if builder_source_quality_summary is not None:
+                failure_fields["source_quality_summary"] = (
+                    builder_source_quality_summary
+                )
             payload = _base_status(
                 status="failed",
                 output_root=output_root,
@@ -911,8 +983,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 log_path=log_path,
                 started_at=started_at.isoformat(timespec="seconds"),
                 completed_at=scheduled_now().isoformat(timespec="seconds"),
-                error_type=type(exc).__name__,
-                error=str(exc),
+                **failure_fields,
             )
             _write_json(status_path, payload)
             _append_log(log_path, f"failure: {type(exc).__name__}: {exc}")

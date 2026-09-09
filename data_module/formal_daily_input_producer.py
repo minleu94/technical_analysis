@@ -14,7 +14,7 @@ receipt 會持久保存。market SQLite 只以 read-only 開啟，且不會啟�
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_EVEN
 import hashlib
@@ -24,6 +24,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 from typing import Any, Sequence, cast
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -83,6 +84,23 @@ DAILY_FORMAL_INPUT_PUBLICATION_CONTEXT_SCHEMA_VERSION = (
 FORMAL_PAPER_SOURCE_CUSTODY_SCHEMA_VERSION = (
     "formal-paper-source-custody.v1"
 )
+PAPER_EXECUTION_EVENT_CAPTURE_SCHEMA_VERSION = (
+    "paper-execution-event-capture.v2"
+)
+PAPER_EXECUTION_EVENT_CAPTURE_PARSER_VERSION = "twse-mis-stock-info.v1"
+TWSE_MIS_STOCK_INFO_ENDPOINT = (
+    "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
+)
+PAPER_EXECUTION_SOURCE_TIME_SEMANTICS = (
+    "official_open_price_captured_at_session_open;"
+    "raw_tlong_is_quote_observation_time"
+)
+PAPER_EXECUTION_CAPTURE_WINDOW_MAX_SECONDS = 300
+PAPER_EVENT_CAPTURE_CUSTODY_SCHEMA_VERSION = "paper-event-capture-custody.v1"
+PAPER_RECEIPT_FORMAL_ELIGIBILITY_SCHEMA_VERSION = (
+    "paper-receipt-formal-eligibility.v2"
+)
+PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES = 4 * 1024 * 1024
 RULE_HMAC_KEY_ENV = "RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY"
 RULE_STORE_ID_ENV = "RULE_CHAMPION_CONTROLLED_STORE_ID"
 FORMAL_LEDGER_ENV = "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH"
@@ -104,6 +122,11 @@ class DailyFormalInputPaths:
     development_output_root: Path
     market_db: Path
     clock_manifest: Path | None = None
+    # Daily Rule source clock and cumulative Paper portfolio clock are
+    # intentionally separate.  The former versions the current decision
+    # universe; the latter keeps the already accumulated state interval alive
+    # across natural days and must not reset at every Rule capture.
+    portfolio_clock_manifest: Path | None = None
     universe_symbols: Path | None = None
     owner_acceptance: Path | None = None
     formal_ledger_path: Path | None = None
@@ -111,6 +134,11 @@ class DailyFormalInputPaths:
     formal_sector_path: Path | None = None
     paper_snapshot_db_path: Path | None = None
     paper_trade_ledger_db_path: Path | None = None
+    # A same-run Paper ledger candidate is only a Formal-ready input after the
+    # actual Paper execution receipt has been read back.  The caller supplies
+    # the exact immutable receipt root; this module never falls back to D or
+    # chooses a latest receipt by timestamp.
+    paper_execution_receipt_root: Path | None = None
     publication_root: Path | None = None
     # PIT 的獨立 denominator 不沿用 Rule universe；缺少時 handoff 只能
     # 保存 custody candidate，不能把 current source union 當正式歷史範圍。
@@ -125,6 +153,13 @@ class DailyFormalInputPaths:
     # cache 只讀，缺失或過期仍由 OfficialTradingCalendar 回報 unknown。
     official_calendar_cache_path: Path | None = None
     official_temporary_closure_path: Path | None = None
+    # The common identity is written only after all three exact formal
+    # consumers have passed.  Receipt paths are supplied by the producer
+    # boundary; this module never searches a publication directory for a
+    # convenient ``receipt.json``.
+    common_identity_manifest_path: Path | None = None
+    formal_source_receipt_paths: Mapping[str, Path] | None = None
+    daily_rule_lineage: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -398,6 +433,7 @@ def run_daily_formal_input_producer(
                 clock=clock,
                 now=observed_utc.astimezone(TAIPEI),
                 publication_root=paths.publication_root,
+                daily_rule_lineage=paths.daily_rule_lineage,
             )
             result_inputs["rule_candidate"] = rule_result
         except Exception as error:  # noqa: BLE001 - persist a bounded blocker
@@ -559,9 +595,30 @@ def run_daily_formal_input_producer(
                 ],
             }
 
+    # A same-run Rule/ledger publication is an exact producer result, so it
+    # may become the source consumed below.  This is deliberately different
+    # from scanning for a latest file: only the path emitted by this
+    # invocation can fill a previously absent source slot, and an explicitly
+    # configured path is never replaced.
+    effective_paths = _bind_same_run_formal_sources(paths, result_inputs)
+    ledger_candidate = result_inputs.get("formal_ledger_candidate")
+    same_run_ledger_candidate = (
+        paths.formal_ledger_path is None
+        and effective_paths.formal_ledger_path is not None
+        and isinstance(ledger_candidate, Mapping)
+        and bool(str(ledger_candidate.get("manifest_path", "")).strip())
+        and Path(str(ledger_candidate["manifest_path"])).expanduser().resolve()
+        == effective_paths.formal_ledger_path.expanduser().resolve()
+    )
+    paper_execution_receipt_verified = (
+        isinstance(ledger_candidate, Mapping)
+        and ledger_candidate.get("paper_execution_receipt_verified") is True
+    )
     formal_results, formal_blockers = _readback_explicit_formal_sources(
-        paths,
+        effective_paths,
         training_as_of=observed_utc.isoformat(),
+        same_run_ledger_candidate=same_run_ledger_candidate,
+        paper_execution_receipt_verified=paper_execution_receipt_verified,
     )
     result_inputs.update(formal_results)
     blockers.extend(formal_blockers)
@@ -581,8 +638,50 @@ def run_daily_formal_input_producer(
         in {"machine_verified", "machine_verified_candidate", "published_candidate"}
         for value in result_inputs.values()
     )
-    if formal_ready_count == 3:
+    # Build the common identity before declaring the top-level run ready.  A
+    # three-way consumer count only proves that each source can be read in
+    # isolation; it does not prove that their receipts share one fixed clock,
+    # portfolio/universe identity and daily Rule lineage.  In particular, an
+    # explicitly configured identity path that fails must not leave the
+    # misleading ``formal_inputs_machine_verified`` status behind.
+    identity_result: dict[str, object] | None = None
+    if effective_paths.common_identity_manifest_path is not None:
+        identity_result = _produce_common_identity_candidate(
+            paths=effective_paths,
+            result_inputs=result_inputs,
+            formal_results=formal_results,
+            formal_ready_count=formal_ready_count,
+            compatible_count=compatible_count,
+            observed=observed_utc,
+        )
+        result_inputs["common_identity_manifest"] = identity_result
+        if identity_result.get("status") == "blocked":
+            blockers.extend(_text_list(identity_result.get("blockers")))
+    elif formal_ready_count == 3:
+        # A direct library caller may omit the output path for an isolated
+        # consumer diagnostic, but the daily Formal boundary must not turn
+        # that omission into an overall-ready result.  Keep the distinction
+        # explicit so operators can see that all three inputs were individually
+        # readable while the required cross-source identity was never built.
+        identity_result = {
+            "status": "blocked",
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "candidate_only": True,
+            "blockers": ["common_identity_manifest_required"],
+        }
+        result_inputs["common_identity_manifest"] = identity_result
+        blockers.extend(_text_list(identity_result["blockers"]))
+
+    identity_verified = (
+        identity_result is not None
+        and identity_result.get("formal_ready") is True
+        and identity_result.get("formal_consumer_compatible") is True
+    )
+    if formal_ready_count == 3 and identity_verified:
         status = "formal_inputs_machine_verified"
+    elif formal_ready_count == 3 and effective_paths.common_identity_manifest_path is None:
+        status = "individual_sources_verified"
     elif candidate_count:
         status = "candidate_only"
     else:
@@ -626,6 +725,7 @@ def _produce_rule_candidate(
     clock: ProspectiveFormalClock,
     now: datetime,
     publication_root: Path | None = None,
+    daily_rule_lineage: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     if paths.universe_symbols is None or paths.owner_acceptance is None:
         raise FormalDailyInputProducerError("Rule source inputs are incomplete")
@@ -643,6 +743,52 @@ def _produce_rule_candidate(
                 publication_run_dir,
                 observed=now,
             )
+    # The scheduled predecessor supplies the exact machine bundle that was
+    # validated for this natural day.  Derive no alternative bundle by
+    # directory ordering: if a lineage is present, its path must agree with
+    # the clock manifest already pinned in ``paths``.  Direct legacy callers
+    # with a machine clock also get the bundle source when its receipt exists;
+    # owner-only clocks keep the original live-window path.
+    source_window: Any | None = None
+    source_window_bundle: Path | None = None
+    if daily_rule_lineage is not None:
+        configured_bundle = daily_rule_lineage.get("source_bundle_path")
+        if not isinstance(configured_bundle, str) or not configured_bundle.strip():
+            raise FormalDailyInputProducerError(
+                "daily Rule lineage source bundle path is missing"
+            )
+        source_window_bundle = Path(configured_bundle).expanduser().resolve()
+    elif paths.clock_manifest is not None:
+        inferred_bundle = paths.clock_manifest.expanduser().resolve().parent.parent
+        if (inferred_bundle / "metadata" / "machine_revalidation_receipt.json").is_file():
+            source_window_bundle = inferred_bundle
+    if source_window_bundle is not None:
+        if paths.clock_manifest is None:
+            raise FormalDailyInputProducerError(
+                "machine Rule source clock manifest is missing"
+            )
+        expected_clock_path = (
+            source_window_bundle / "clock" / "manifest.json"
+        ).resolve()
+        if paths.clock_manifest.expanduser().resolve() != expected_clock_path:
+            raise FormalDailyInputProducerError(
+                "daily Rule source bundle clock path does not match pinned clock"
+            )
+        from data_module.formal_rule_source_producer import (  # noqa: PLC0415
+            load_verified_rule_source_window,
+        )
+
+        source_window = load_verified_rule_source_window(
+            source_window_bundle,
+            market_db=paths.market_db,
+            observed=now,
+        )
+        if daily_rule_lineage is not None:
+            expected_source_hash = daily_rule_lineage.get("source_window_hash")
+            if source_window.source_hash != expected_source_hash:
+                raise FormalDailyInputProducerError(
+                    "daily Rule source window does not match predecessor lineage"
+                )
     source = produce_prospective_rule_only_decision(
         development_output_root=paths.development_output_root,
         market_db=paths.market_db,
@@ -651,7 +797,26 @@ def _produce_rule_candidate(
         owner_acceptance_json=paths.owner_acceptance,
         now=now,
         allow_post_activation=True,
+        source_window=source_window,
     )
+    if daily_rule_lineage is not None:
+        expected_lineage = {
+            "clock_id": clock.clock_id,
+            "clock_manifest_hash": clock.manifest_hash,
+            "activation_trading_day": clock.activation_trading_day.isoformat(),
+            "universe_hash": clock.payload.get("universe_hash"),
+            "policy_hash": clock.payload.get("policy_hash"),
+        }
+        for field, expected in expected_lineage.items():
+            if daily_rule_lineage.get(field) != expected:
+                raise FormalDailyInputProducerError(
+                    f"daily Rule lineage {field} does not match produced clock"
+                )
+        source_window_hash = daily_rule_lineage.get("source_window_hash")
+        if not _is_sha256(source_window_hash):
+            raise FormalDailyInputProducerError(
+                "daily Rule lineage source_window_hash is invalid"
+            )
     requests = _read_rule_requests(Path(str(source["requests_json"])))
     artifacts = JsonPersistedFormalArtifactLoader(
         Path(str(source["artifacts_json"]))
@@ -723,8 +888,11 @@ def _produce_rule_candidate(
         "producer_version": "prospective-rule-only-source.v1",
         "source_run_id": source.get("run_id"),
         "source_lineage_hash": source.get("source_lineage_hash"),
+        "selected_symbol": source.get("symbol"),
         "clock_id": clock.clock_id,
         "clock_manifest_hash": clock.manifest_hash,
+        "activation_trading_day": clock.activation_trading_day.isoformat(),
+        "policy_hash": clock.payload.get("policy_hash"),
         "strategy_version": snapshot.strategy_version,
         "policy_version": snapshot.policy_version,
         "universe_hash": snapshot.universe_hash,
@@ -761,6 +929,37 @@ def _produce_rule_candidate(
         "promotion_eligible": False,
         "broker_order_allowed": False,
     }
+    if source_window is not None:
+        result.update(
+            {
+                "decision_source_window_mode": "immutable_captured_window",
+                "decision_source_window_hash": source_window.source_hash,
+                "decision_source_window_bundle": str(
+                    source_window_bundle.resolve()
+                )
+                if source_window_bundle is not None
+                else None,
+            }
+        )
+    else:
+        source_versions = (
+            cast(Mapping[str, object], source.get("source_versions"))
+            if isinstance(source.get("source_versions"), Mapping)
+            else {}
+        )
+        result.update(
+            {
+                "decision_source_window_mode": "legacy_live_window",
+                "decision_source_window_hash": source_versions.get("daily_prices"),
+                "decision_source_window_bundle": None,
+            }
+        )
+    if daily_rule_lineage is not None:
+        # Bind this receipt to the exact predecessor source window selected by
+        # the scheduler.  The common identity reader compares these values
+        # instead of rediscovering a newer bundle from a directory scan.
+        result["source_window_hash"] = daily_rule_lineage.get("source_window_hash")
+        result["daily_rule_lineage"] = dict(daily_rule_lineage)
     receipt_path, receipt_hash, receipt_file_hash = _write_input_receipt(
         output_path=rule_dir / "receipt.json",
         input_name="formal_rule_champion_snapshot_history",
@@ -1324,6 +1523,178 @@ def _load_rule_publication_retry(
     return result
 
 
+def _publication_child_path(
+    run_dir: Path,
+    value: object,
+    role: str,
+) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise FormalDailyInputProducerError(
+            f"paper event custody {role} path is missing"
+        )
+    candidate = Path(value).expanduser().resolve()
+    root = run_dir.expanduser().resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise FormalDailyInputProducerError(
+            f"paper event custody {role} path escapes publication"
+        ) from error
+    if candidate == root or candidate.is_symlink() or not candidate.is_file():
+        raise FormalDailyInputProducerError(
+            f"paper event custody {role} file is missing"
+        )
+    return candidate
+
+
+def _revalidate_paper_event_capture_retry(
+    *,
+    run_dir: Path,
+    result: Mapping[str, object],
+    projection: Mapping[str, object],
+    observed: datetime,
+) -> tuple[bool, str]:
+    """重試時重新驗證 publication 內的 v2 raw capture，不信任舊布林值。"""
+
+    custody_value = projection.get("paper_event_capture_custody")
+    if not isinstance(custody_value, Mapping):
+        return False, "paper_execution_capture_custody_missing_for_retry"
+    custody = {str(key): value for key, value in custody_value.items()}
+    try:
+        metadata_path = _publication_child_path(
+            run_dir,
+            custody.get("custody_metadata_path"),
+            "metadata",
+        )
+    except FormalDailyInputProducerError as error:
+        return False, str(error)
+    metadata_hash = custody.get("custody_metadata_file_hash")
+    metadata_raw = _read_bounded_paper_capture_file(metadata_path, "custody metadata")
+    if not _is_sha256(metadata_hash) or _sha256_bytes(metadata_raw) != metadata_hash:
+        return False, "paper_execution_capture_custody_metadata_hash_mismatch"
+    try:
+        metadata_value = json.loads(metadata_raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return False, "paper_execution_capture_custody_metadata_invalid"
+    if not isinstance(metadata_value, Mapping):
+        return False, "paper_execution_capture_custody_metadata_invalid"
+    metadata = {str(key): value for key, value in metadata_value.items()}
+    if metadata.get("schema_version") != PAPER_EVENT_CAPTURE_CUSTODY_SCHEMA_VERSION:
+        return False, "paper_execution_capture_custody_schema_invalid"
+    supplied_custody_hash = metadata.get("custody_hash")
+    metadata_body = dict(metadata)
+    metadata_body.pop("custody_hash", None)
+    if _payload_hash(metadata_body) != supplied_custody_hash:
+        return False, "paper_execution_capture_custody_hash_mismatch"
+    if metadata.get("custody_hash") != custody.get("custody_hash"):
+        return False, "paper_execution_capture_custody_projection_mismatch"
+    for field in (
+        "capture_path",
+        "capture_file_hash",
+        "raw_response_path",
+        "raw_response_file_hash",
+        "source_metadata",
+    ):
+        if metadata.get(field) != custody.get(field):
+            return False, f"paper_execution_capture_custody_projection_{field}_mismatch"
+
+    try:
+        capture_path = _publication_child_path(
+            run_dir,
+            metadata.get("capture_path"),
+            "capture",
+        )
+        raw_path = _publication_child_path(
+            run_dir,
+            metadata.get("raw_response_path"),
+            "raw response",
+        )
+    except FormalDailyInputProducerError as error:
+        return False, str(error)
+    capture_hash = metadata.get("capture_file_hash")
+    raw_hash = metadata.get("raw_response_file_hash")
+    capture_raw = _read_bounded_paper_capture_file(capture_path, "capture envelope")
+    raw_response = _read_bounded_paper_capture_file(raw_path, "raw response")
+    if not _is_sha256(capture_hash) or _sha256_bytes(capture_raw) != capture_hash:
+        return False, "paper_execution_capture_custody_capture_hash_mismatch"
+    if not _is_sha256(raw_hash) or _sha256_bytes(raw_response) != raw_hash:
+        return False, "paper_execution_capture_custody_raw_hash_mismatch"
+
+    source_value = metadata.get("source_metadata")
+    if not isinstance(source_value, Mapping):
+        return False, "paper_execution_capture_custody_source_metadata_missing"
+    source = {str(key): value for key, value in source_value.items()}
+    source["execution_source_capture_path"] = str(capture_path)
+    source["execution_source_capture_file_hash"] = capture_hash
+    source["execution_source_raw_response_path"] = str(raw_path)
+    source["execution_source_raw_response_hash"] = raw_hash
+
+    matched_value = projection.get("receipts")
+    if not isinstance(matched_value, list) or len(matched_value) != 1:
+        return False, "paper_execution_capture_custody_receipt_binding_missing"
+    matched = matched_value[0]
+    if not isinstance(matched, Mapping):
+        return False, "paper_execution_capture_custody_receipt_binding_invalid"
+    execution_date_value = source.get("execution_date")
+    if not isinstance(execution_date_value, str):
+        return False, "paper_execution_capture_custody_execution_date_missing"
+    try:
+        execution_date = date.fromisoformat(execution_date_value)
+        recorded_at = _aware_datetime(
+            matched.get("recorded_at"),
+            "paper event custody recorded_at",
+        )
+    except (TypeError, ValueError, FormalDailyInputProducerError):
+        return False, "paper_execution_capture_custody_timestamp_invalid"
+
+    try:
+        fill_custody_path = _publication_child_path(
+            run_dir,
+            result.get("fill_source_custody_path"),
+            "fill source custody",
+        )
+    except FormalDailyInputProducerError as error:
+        return False, str(error)
+    try:
+        fill_payload = _read_json_object(fill_custody_path)
+        _validate_paper_source_custody_payload(
+            fill_payload,
+            expected_kind="paper_fills",
+            input_name="paper fill source custody",
+        )
+    except (FormalDailyInputProducerError, OSError, UnicodeError, json.JSONDecodeError):
+        return False, "paper_execution_capture_custody_fill_source_invalid"
+    fill_rows_value = fill_payload.get("rows")
+    if not isinstance(fill_rows_value, list):
+        return False, "paper_execution_capture_custody_fill_rows_missing"
+    fills: list[Mapping[str, object]] = []
+    for row in fill_rows_value:
+        if not isinstance(row, Mapping):
+            return False, "paper_execution_capture_custody_fill_row_invalid"
+        fills.append({"fill": dict(row)})
+    validation_result: dict[str, object] = {
+        "execution_event_time_proven": True,
+        "formal_consumer_compatible": True,
+        "execution_replay_mode": "same_session_event_time_capture",
+        "market_source": source,
+    }
+    try:
+        eligible, reason = _paper_receipt_formal_eligibility(
+            validation_result,
+            fills=fills,
+            execution_date=execution_date,
+            recorded_at=recorded_at,
+            observed=observed,
+        )
+    except (FormalDailyInputProducerError, OSError, ValueError, TypeError) as error:
+        return False, f"paper_execution_capture_custody_revalidation_failed:{_safe_error(error)}"
+    if not eligible:
+        return False, (
+            reason or "paper_execution_capture_custody_revalidation_failed"
+        )
+    return True, "paper_execution_capture_custody_revalidated"
+
+
 def _load_ledger_publication_retry(
     run_dir: Path,
     *,
@@ -1405,6 +1776,55 @@ def _load_ledger_publication_retry(
             "causal ledger publication sqlite hash changed during retry"
         )
     result = dict(result)
+    # Publication retry must not inherit a historical boolean that was once
+    # derived from fill-ID coverage alone.  The immutable publication context
+    # may predate the event-time eligibility fields; such a context remains
+    # usable as custody evidence, but it is never allowed to become a Formal
+    # input merely because ``paper_execution_receipt_verified`` was true in an
+    # older schema.
+    stored_projection = result.get("paper_execution_receipt_projection")
+    retry_eligibility_reason = (
+        "paper_execution_receipt_formal_eligibility_not_proven_for_retry"
+    )
+    stored_formal_eligible = False
+    if isinstance(stored_projection, Mapping):
+        projection_schema = stored_projection.get(
+            "formal_eligibility_schema_version"
+        )
+        if projection_schema != PAPER_RECEIPT_FORMAL_ELIGIBILITY_SCHEMA_VERSION:
+            retry_eligibility_reason = (
+                "paper_execution_receipt_legacy_schema_not_retryable"
+            )
+        elif (
+            stored_projection.get("formal_eligible") is True
+            and stored_projection.get("verified") is True
+            and stored_projection.get("formal_ready") is True
+        ):
+            try:
+                stored_formal_eligible, retry_eligibility_reason = (
+                    _revalidate_paper_event_capture_retry(
+                        run_dir=run_dir,
+                        result=result,
+                        projection=stored_projection,
+                        observed=observed,
+                    )
+                )
+            except FormalDailyInputProducerError as error:
+                stored_formal_eligible = False
+                retry_eligibility_reason = (
+                    "paper_execution_capture_custody_revalidation_failed:"
+                    + _safe_error(error)
+                )
+    if isinstance(stored_projection, Mapping):
+        normalized_projection = dict(stored_projection)
+        normalized_projection["formal_eligible"] = stored_formal_eligible
+        normalized_projection["verified"] = stored_formal_eligible
+        normalized_projection["formal_ready"] = stored_formal_eligible
+        if not stored_formal_eligible:
+            normalized_projection["status"] = "custody_verified_formal_ineligible"
+            normalized_projection["reason"] = retry_eligibility_reason
+        result["paper_execution_receipt_projection"] = normalized_projection
+    result["paper_execution_receipt_verified"] = stored_formal_eligible
     if receipt_missing and recover_missing_receipt:
         recovery_result = dict(result)
         recovery_result.update(
@@ -2746,6 +3166,239 @@ def _write_immutable_bytes_or_match(path: Path, raw: bytes, role: str) -> None:
         ) from error
 
 
+def _write_immutable_bytes_atomic(path: Path, raw: bytes, role: str) -> None:
+    """以 fsync 後的 create-only hard-link 發布 immutable bytes。"""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        try:
+            existing = path.read_bytes()
+        except OSError as error:
+            raise FormalDailyInputProducerError(
+                f"immutable bytes cannot be read:{role}"
+            ) from error
+        if existing == raw:
+            return
+        raise FormalDailyInputProducerError(
+            f"immutable bytes differ:{role}"
+        )
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.stem[:24]}.",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    temporary = Path(temporary_name)
+    descriptor_open = True
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor_open = False
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            try:
+                existing = path.read_bytes()
+            except OSError as error:
+                raise FormalDailyInputProducerError(
+                    f"immutable bytes cannot be read after race:{role}"
+                ) from error
+            if existing != raw:
+                raise FormalDailyInputProducerError(
+                    f"immutable bytes differ after race:{role}"
+                )
+    except OSError as error:
+        raise FormalDailyInputProducerError(
+            f"immutable bytes publication failed:{role}"
+        ) from error
+    finally:
+        if descriptor_open:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            raise FormalDailyInputProducerError(
+                f"immutable bytes temporary cleanup failed:{role}"
+            ) from error
+
+
+def _read_bounded_paper_capture_file(path: Path, role: str) -> bytes:
+    resolved = path.expanduser().resolve()
+    if resolved.is_symlink() or not resolved.is_file():
+        raise FormalDailyInputProducerError(f"paper capture file missing:{role}")
+    try:
+        with resolved.open("rb") as stream:
+            raw = stream.read(PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES + 1)
+    except OSError as error:
+        raise FormalDailyInputProducerError(
+            f"paper capture file unreadable:{role}"
+        ) from error
+    if len(raw) > PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES:
+        raise FormalDailyInputProducerError(f"paper capture file too large:{role}")
+    return raw
+
+
+def _persist_paper_event_capture_custody(
+    *,
+    projection: dict[str, object],
+    run_dir: Path,
+) -> dict[str, object]:
+    """把已取得 Formal eligibility 的官方 capture 複製進 publication。
+
+    Causal ledger 的 durable retry 不能依賴可被清理的 TEMP source。這個 helper
+    只在 receipt projection 已通過完整 Formal eligibility 時執行；若 source
+    capture 無法以原 bytes 保存，整筆 publication 失敗關閉，不把布林旗標留下來
+    當成可重播證據。
+    """
+
+    if projection.get("formal_eligible") is not True:
+        return projection
+    receipts_value = projection.get("receipts")
+    if not isinstance(receipts_value, list) or len(receipts_value) != 1:
+        raise FormalDailyInputProducerError(
+            "formal Paper capture custody requires one matching receipt"
+        )
+    receipt = receipts_value[0]
+    if not isinstance(receipt, Mapping):
+        raise FormalDailyInputProducerError(
+            "formal Paper capture custody receipt is invalid"
+        )
+    source_value = receipt.get("market_source")
+    if not isinstance(source_value, Mapping):
+        raise FormalDailyInputProducerError(
+            "formal Paper capture source metadata is missing"
+        )
+    source = dict(source_value)
+    capture_value = source.get("execution_source_capture_path")
+    raw_value = source.get("execution_source_raw_response_path")
+    capture_hash = source.get("execution_source_capture_file_hash")
+    raw_hash = source.get("execution_source_raw_response_hash")
+    if (
+        not isinstance(capture_value, str)
+        or not capture_value.strip()
+        or not isinstance(raw_value, str)
+        or not raw_value.strip()
+        or not _is_sha256(capture_hash)
+        or not _is_sha256(raw_hash)
+    ):
+        raise FormalDailyInputProducerError(
+            "formal Paper capture custody source hashes are missing"
+        )
+    capture_raw = _read_bounded_paper_capture_file(
+        Path(capture_value), "capture envelope"
+    )
+    raw_response = _read_bounded_paper_capture_file(
+        Path(raw_value), "raw response"
+    )
+    if _sha256_bytes(capture_raw) != capture_hash:
+        raise FormalDailyInputProducerError(
+            "formal Paper capture envelope changed before custody copy"
+        )
+    if _sha256_bytes(raw_response) != raw_hash:
+        raise FormalDailyInputProducerError(
+            "formal Paper raw response changed before custody copy"
+        )
+
+    custody_root = run_dir / "paper_event_capture_custody"
+    custody_root.mkdir(parents=True, exist_ok=True)
+    durable_capture = custody_root / "capture.json"
+    durable_raw = custody_root / "raw_response.bin"
+    _write_immutable_bytes_atomic(
+        durable_raw,
+        raw_response,
+        "Paper event raw response",
+    )
+    _write_immutable_bytes_atomic(
+        durable_capture,
+        capture_raw,
+        "Paper event capture envelope",
+    )
+    durable_capture_hash = _file_hash_or_none(durable_capture)
+    durable_raw_hash = _file_hash_or_none(durable_raw)
+    if durable_capture_hash is None or durable_raw_hash is None:
+        raise FormalDailyInputProducerError(
+            "formal Paper capture custody hashes are unavailable"
+        )
+    if durable_capture_hash != capture_hash or durable_raw_hash != raw_hash:
+        raise FormalDailyInputProducerError(
+            "formal Paper capture custody copy hash mismatch"
+        )
+
+    source_metadata: dict[str, object] = {
+        str(key): value
+        for key, value in source.items()
+        if key
+        in {
+            "execution_event_time_proven",
+            "execution_source_capture_at_proven",
+            "intraday_open_availability_proven",
+            "execution_source_kind",
+            "execution_data_availability",
+            "execution_source_time_semantics",
+            "execution_date",
+            "execution_source_capture_schema_version",
+            "execution_source_parser_version",
+            "execution_source_authority",
+            "execution_source_url",
+            "execution_source_request_url",
+            "execution_source_capture_content_hash",
+            "execution_source_capture_row_count",
+            "execution_event_at",
+            "execution_source_capture_at",
+        }
+    }
+    source_metadata.update(
+        {
+            "execution_source_capture_path": str(durable_capture.resolve()),
+            "execution_source_capture_file_hash": durable_capture_hash,
+            "execution_source_raw_response_path": str(durable_raw.resolve()),
+            "execution_source_raw_response_hash": durable_raw_hash,
+        }
+    )
+    custody_body: dict[str, object] = {
+        "schema_version": PAPER_EVENT_CAPTURE_CUSTODY_SCHEMA_VERSION,
+        "capture_path": str(durable_capture.resolve()),
+        "capture_file_hash": durable_capture_hash,
+        "raw_response_path": str(durable_raw.resolve()),
+        "raw_response_file_hash": durable_raw_hash,
+        "source_metadata": source_metadata,
+    }
+    custody_payload = {
+        **custody_body,
+        "custody_hash": _payload_hash(custody_body),
+    }
+    custody_metadata_path = custody_root / "custody.json"
+    custody_metadata_raw = (
+        _canonical_json(custody_payload) + "\n"
+    ).encode("utf-8")
+    _write_immutable_bytes_atomic(
+        custody_metadata_path,
+        custody_metadata_raw,
+        "Paper event custody metadata",
+    )
+    custody_metadata_hash = _file_hash_or_none(custody_metadata_path)
+    if custody_metadata_hash is None:
+        raise FormalDailyInputProducerError(
+            "formal Paper capture custody metadata hash is unavailable"
+        )
+    durable_projection = dict(projection)
+    durable_projection["paper_event_capture_custody"] = {
+        **custody_payload,
+        "custody_metadata_path": str(custody_metadata_path.resolve()),
+        "custody_metadata_file_hash": custody_metadata_hash,
+    }
+    durable_receipt = dict(receipt)
+    durable_receipt["market_source"] = source_metadata
+    durable_projection["receipts"] = [durable_receipt]
+    return durable_projection
+
+
 def _sha256_bytes(raw: bytes) -> str:
     return "sha256:" + hashlib.sha256(raw).hexdigest()
 
@@ -2896,10 +3549,36 @@ def _produce_formal_ledger_candidate(
         raise FormalDailyInputProducerError(
             "paper fill source is required for formal ledger candidate"
         )
-    clock = _load_clock_from_preflight(paths.clock_manifest, observed)
+    rule_clock = _load_clock_from_preflight(paths.clock_manifest, observed)
+    if paths.portfolio_clock_manifest is not None and rule_clock is None:
+        # A formal caller with a separately pinned cumulative clock must also
+        # prove today's Rule source.  The optional single-clock form remains
+        # available to isolated ledger diagnostics only.
+        raise FormalDailyInputProducerError(
+            "daily Rule clock is required when using cumulative portfolio clock"
+        )
+    portfolio_clock_path = paths.portfolio_clock_manifest or paths.clock_manifest
+    clock = _load_clock_from_preflight(portfolio_clock_path, observed)
     if clock is None:
         raise FormalDailyInputProducerError(
-            "formal ledger candidate requires a validated Rule clock policy"
+            "formal ledger candidate requires a validated portfolio clock policy"
+        )
+    if (
+        rule_clock is not None
+        and paths.portfolio_clock_manifest is not None
+        and rule_clock.payload.get("policy_hash")
+        != clock.payload.get("policy_hash")
+    ):
+        raise FormalDailyInputProducerError(
+            "daily Rule and cumulative portfolio clocks use different policy identities"
+        )
+    if (
+        rule_clock is not None
+        and paths.portfolio_clock_manifest is not None
+        and rule_clock.activation_trading_day < clock.activation_trading_day
+    ):
+        raise FormalDailyInputProducerError(
+            "daily Rule clock activation precedes cumulative portfolio clock"
         )
     if publication_root is not None and (
         not paths.paper_snapshot_db_path.expanduser().resolve().is_file()
@@ -2944,6 +3623,10 @@ def _produce_formal_ledger_candidate(
         raise FormalDailyInputProducerError(
             "paper fills contain current or future event dates"
         )
+    # ``portfolio_clock_path`` is known to be non-null after the validated
+    # clock branch above; keep this assertion explicit for type checkers and
+    # for reviewers checking that a fallback cannot select an old default.
+    assert portfolio_clock_path is not None
     activation_day = clock.activation_trading_day
     # The current day's preopen boundary may already exist when this producer
     # runs, but the date-only formal loader can only consume transitions whose
@@ -2957,7 +3640,7 @@ def _produce_formal_ledger_candidate(
         <= _record_date(item, "decision_date", "paper snapshot")
         < observed_taipei.date()
     ]
-    fills = [
+    eligible_fills = [
         item
         for item in source_fills
         if _record_date(item, "event_date", "paper fill") >= activation_day
@@ -2968,10 +3651,26 @@ def _produce_formal_ledger_candidate(
         )
     first_date = _record_date(snapshots[0], "decision_date", "paper snapshot")
     last_date = _record_date(snapshots[-1], "decision_date", "paper snapshot")
+    # A fill dated on the last available snapshot boundary belongs to the
+    # still-open interval [last_date, next_snapshot_date).  Keep it in source
+    # custody and leave it pending for the next natural run; rejecting it here
+    # made a continuous daily chain fail forever whenever the EOD fill arrived
+    # before the following pre-open snapshot.  Rows before the first boundary
+    # remain invalid because there is no snapshot interval that can consume
+    # them.  Future rows were rejected above before this split.
+    pending_tail_fills = [
+        item
+        for item in eligible_fills
+        if _record_date(item, "event_date", "paper fill") >= last_date
+    ]
+    fills = [
+        item
+        for item in eligible_fills
+        if _record_date(item, "event_date", "paper fill") < last_date
+    ]
     if any(
         _record_date(item, "event_date", "paper fill") < first_date
-        or _record_date(item, "event_date", "paper fill") >= last_date
-        for item in fills
+        for item in eligible_fills
     ):
         raise FormalDailyInputProducerError(
             "paper fills do not fit the [start, end) snapshot intervals"
@@ -2979,6 +3678,13 @@ def _produce_formal_ledger_candidate(
     service = calendar or OfficialTradingCalendar(db_path=paths.market_db)
     _validate_snapshot_calendar_adjacency(snapshots, service)
     _validate_paper_fill_calendar_days(fills, service)
+    paper_execution_receipts = _paper_execution_receipt_projection(
+        receipt_root=paths.paper_execution_receipt_root,
+        snapshot_path=paths.paper_snapshot_db_path,
+        fill_path=paths.paper_trade_ledger_db_path,
+        fills=eligible_fills,
+        observed=observed,
+    )
 
     from data_module.formal_portfolio_ledger import (  # noqa: PLC0415
         FORMAL_PORTFOLIO_LEDGER_SCHEMA_VERSION,
@@ -3192,6 +3898,11 @@ def _produce_formal_ledger_candidate(
                 "causal ledger publication run appeared during capture"
             ) from error
         candidate_dir = publication_run_dir
+    if publication_run_dir is not None:
+        paper_execution_receipts = _persist_paper_event_capture_custody(
+            projection=paper_execution_receipts,
+            run_dir=publication_run_dir,
+        )
     source_custody: dict[str, object] = {}
     if publication_run_dir is not None:
         source_custody = _write_paper_source_custody(
@@ -3255,6 +3966,37 @@ def _produce_formal_ledger_candidate(
         "snapshot_source_content_hash": source_snapshot_hash,
         "snapshot_source_hash": source_snapshot_hash,
         "snapshot_source_hash_semantics": "validated_rows_in_sqlite_read_transaction",
+        "daily_rule_clock_manifest": (
+            str(paths.clock_manifest.expanduser().resolve())
+            if paths.clock_manifest is not None
+            else None
+        ),
+        "daily_rule_clock_id": (
+            rule_clock.clock_id if rule_clock is not None else None
+        ),
+        "daily_rule_clock_activation_trading_day": (
+            rule_clock.activation_trading_day.isoformat()
+            if rule_clock is not None
+            else None
+        ),
+        "daily_rule_universe_hash": (
+            rule_clock.payload.get("universe_hash")
+            if rule_clock is not None
+            else None
+        ),
+        "portfolio_clock_manifest": str(portfolio_clock_path.expanduser().resolve()),
+        "portfolio_clock_file_hash": _file_hash_or_none(portfolio_clock_path),
+        "portfolio_clock_id": clock.clock_id,
+        "portfolio_clock_manifest_hash": clock.manifest_hash,
+        "portfolio_clock_activation_trading_day": clock.activation_trading_day.isoformat(),
+        "portfolio_clock_policy_hash": clock.payload.get("policy_hash"),
+        "portfolio_clock_universe_hash": clock.payload.get("universe_hash"),
+        "portfolio_clock_scope": "cumulative_paper_portfolio_state",
+        "daily_rule_scope": "natural_day_rule_source_version",
+        "universe_version_binding": (
+            "daily Rule universe is effective on its own activation trading day; "
+            "portfolio state remains bound to cumulative clock and is never reset"
+        ),
         "snapshot_rows_read": len(source_snapshots),
         "snapshot_rows_used": len(snapshots),
         "pre_activation_snapshot_rows_excluded": (
@@ -3266,9 +4008,21 @@ def _produce_formal_ledger_candidate(
         "fill_source_hash_semantics": "validated_rows_in_sqlite_read_transaction",
         "fill_rows_read": len(source_fills),
         "fill_rows_used": len(fills),
-        "pre_activation_fill_rows_excluded": len(source_fills) - len(fills),
+        "pending_tail_fill_rows": len(pending_tail_fills),
+        "pending_tail_fill_dates": sorted(
+            {
+                _record_date(item, "event_date", "paper fill").isoformat()
+                for item in pending_tail_fills
+            }
+        ),
+        "pre_activation_fill_rows_excluded": len(source_fills) - len(eligible_fills),
         "activation_filter": "post_activation_sources_only",
         "source_read_consistency": "sqlite_read_transaction",
+        "paper_execution_receipt_projection": paper_execution_receipts,
+        "paper_execution_receipt_verified": paper_execution_receipts.get(
+            "formal_eligible"
+        )
+        is True,
         "manifest_path": str(manifest_path),
         "manifest_file_hash": _file_hash_or_none(manifest_path),
         "manifest_hash": formal_replay["manifest_hash"],
@@ -3644,7 +4398,13 @@ def _read_paper_fills(path: Path) -> list[dict[str, object]]:
             turnover = _required_nonnegative_int(
                 row["turnover_bp"], "paper fill turnover_bp"
             )
-            execution_gap = _required_integer(row["execution_gap_bp"], "paper fill execution_gap_bp")
+            execution_gap = (
+                None
+                if row["execution_gap_bp"] is None
+                else _required_integer(
+                    row["execution_gap_bp"], "paper fill execution_gap_bp"
+                )
+            )
             research_only = _strict_sqlite_bool(
                 row["research_only"], "paper fill research_only"
             )
@@ -3735,6 +4495,1120 @@ def _read_paper_fills(path: Path) -> list[dict[str, object]]:
         return result
     finally:
         connection.close()
+
+
+def _paper_execution_receipt_projection(
+    *,
+    receipt_root: Path | None,
+    snapshot_path: Path,
+    fill_path: Path,
+    fills: Sequence[Mapping[str, object]],
+    observed: datetime,
+) -> dict[str, object]:
+    """Verify the Paper producer receipt that backs a causal-ledger candidate.
+
+    A valid ledger SQLite is not enough to establish that its rows came from
+    the governed Paper execution writer.  This read-only projection binds the
+    candidate fill ids to processed operational receipts, the exact snapshot
+    and fill database paths, and a real recorded time.  It deliberately does
+    not require the mutable database byte hash to remain unchanged: a later
+    pre-open snapshot or append-only fill is allowed to extend the source.
+    """
+
+    expected_fill_ids: set[str] = set()
+    expected_portfolios: set[str] = set()
+    for item in fills:
+        raw_fill = item.get("fill")
+        fill_id = getattr(raw_fill, "fill_id", item.get("fill_id"))
+        portfolio_id = getattr(raw_fill, "portfolio_id", item.get("portfolio_id"))
+        if isinstance(fill_id, str) and fill_id.strip():
+            expected_fill_ids.add(fill_id)
+        if isinstance(portfolio_id, str) and portfolio_id.strip():
+            expected_portfolios.add(portfolio_id)
+
+    projection: dict[str, object] = {
+        "formal_eligibility_schema_version": (
+            PAPER_RECEIPT_FORMAL_ELIGIBILITY_SCHEMA_VERSION
+        ),
+        "configured": receipt_root is not None,
+        "root": (
+            str(receipt_root.expanduser().resolve())
+            if receipt_root is not None
+            else None
+        ),
+        "status": "unavailable",
+        "verified": False,
+        "custody_verified": False,
+        "formal_eligible": False,
+        "expected_fill_count": len(expected_fill_ids),
+        "covered_fill_count": 0,
+        "eligible_fill_count": 0,
+        "eligible_fill_ids": [],
+        "missing_fill_ids": sorted(expected_fill_ids),
+        "receipt_paths": [],
+        "receipt_file_hashes": [],
+        "receipts": [],
+        "rejected_receipts": [],
+        "formal_ineligible_reasons": [],
+        "paper_event_capture_custody": None,
+        "formal_credit": False,
+        "formal_ready": False,
+        "execution_event_time_proven": False,
+        "reason": "paper_execution_receipt_root_not_configured",
+    }
+    if receipt_root is None:
+        return projection
+    resolved_root = receipt_root.expanduser().resolve()
+    if resolved_root.is_symlink() or not resolved_root.is_dir():
+        projection["status"] = "missing"
+        projection["reason"] = "paper_execution_receipt_root_missing"
+        return projection
+    if not expected_fill_ids:
+        projection["status"] = "invalid"
+        projection["reason"] = "paper_execution_receipt_expected_fill_ids_missing"
+        return projection
+
+    try:
+        receipt_paths = sorted(resolved_root.glob("*.json"), key=lambda path: path.name)
+    except OSError as error:
+        projection["status"] = "invalid"
+        projection["reason"] = (
+            "paper_execution_receipt_root_unreadable:"
+            f"{type(error).__name__}"
+        )
+        return projection
+    if not receipt_paths:
+        projection["status"] = "missing"
+        projection["reason"] = "paper_execution_receipt_not_found"
+        return projection
+
+    from data_module.paper_daily_execution_producer import (  # noqa: PLC0415
+        PAPER_EXECUTION_RECEIPT_SCHEMA_VERSION,
+        _validate_queue_receipt,
+    )
+
+    observed_value = _aware_datetime(observed, "observed").astimezone(timezone.utc)
+    expected_snapshot_path = snapshot_path.expanduser().resolve()
+    expected_fill_path = fill_path.expanduser().resolve()
+    covered_fill_ids: set[str] = set()
+    eligible_fill_ids: set[str] = set()
+    formal_ineligible_reasons: list[str] = []
+    matched: list[dict[str, object]] = []
+    rejected: list[str] = []
+    for receipt_path in receipt_paths:
+        try:
+            raw = receipt_path.read_bytes()
+            payload_value = json.loads(raw.decode("utf-8"))
+            if not isinstance(payload_value, Mapping):
+                continue
+            payload = {str(key): value for key, value in payload_value.items()}
+            if payload.get("schema_version") != PAPER_EXECUTION_RECEIPT_SCHEMA_VERSION:
+                continue
+            if payload.get("queue_state") != "processed":
+                continue
+            validation_error = _validate_queue_receipt(
+                receipt_path,
+                cast(Mapping[object, object], payload),
+            )
+            if validation_error is not None:
+                rejected.append(f"{receipt_path.name}:{validation_error}")
+                continue
+            result = payload.get("result")
+            ledger = payload.get("ledger")
+            result_ledger = (
+                result.get("ledger") if isinstance(result, Mapping) else None
+            )
+            if not isinstance(result, Mapping) or not isinstance(ledger, Mapping):
+                rejected.append(f"{receipt_path.name}:receipt_result_or_ledger_missing")
+                continue
+            if not isinstance(result_ledger, Mapping) or dict(ledger) != dict(result_ledger):
+                rejected.append(f"{receipt_path.name}:receipt_ledger_projection_mismatch")
+                continue
+            ledger_path_value = ledger.get("path")
+            if not isinstance(ledger_path_value, str) or not ledger_path_value.strip():
+                rejected.append(f"{receipt_path.name}:receipt_ledger_path_missing")
+                continue
+            if Path(ledger_path_value).expanduser().resolve() != expected_fill_path:
+                continue
+            fill_ids_value = ledger.get("fill_ids")
+            if not isinstance(fill_ids_value, list) or any(
+                not isinstance(value, str) or not value.strip()
+                for value in fill_ids_value
+            ):
+                rejected.append(f"{receipt_path.name}:receipt_fill_ids_invalid")
+                continue
+            receipt_fill_ids = {str(value) for value in fill_ids_value}
+            covered_by_receipt = receipt_fill_ids & expected_fill_ids
+            if not covered_by_receipt:
+                continue
+            # A terminal receipt is the custody boundary for the complete
+            # Paper candidate.  Unioning a few IDs from unrelated receipts
+            # would allow a self-consistent but incomplete result to appear
+            # complete, so one receipt must enumerate exactly this candidate's
+            # fill set before its rows can be used below.
+            if receipt_fill_ids != expected_fill_ids:
+                rejected.append(
+                    f"{receipt_path.name}:receipt_fill_ids_do_not_match_candidate"
+                )
+                continue
+            state_source = result.get("state_source")
+            if not isinstance(state_source, Mapping):
+                rejected.append(f"{receipt_path.name}:receipt_state_source_missing")
+                continue
+            state_path_value = state_source.get("path")
+            if not isinstance(state_path_value, str) or not state_path_value.strip():
+                rejected.append(f"{receipt_path.name}:receipt_state_path_missing")
+                continue
+            if Path(state_path_value).expanduser().resolve() != expected_snapshot_path:
+                rejected.append(f"{receipt_path.name}:receipt_state_path_mismatch")
+                continue
+            portfolio_id = payload.get("portfolio_id")
+            if expected_portfolios and portfolio_id not in expected_portfolios:
+                rejected.append(f"{receipt_path.name}:receipt_portfolio_id_mismatch")
+                continue
+            execution_value = result.get("execution_date")
+            decision_value = result.get("decision_date")
+            if not isinstance(execution_value, str) or not isinstance(decision_value, str):
+                rejected.append(f"{receipt_path.name}:receipt_date_missing")
+                continue
+            try:
+                execution_day = date.fromisoformat(execution_value)
+                decision_day = date.fromisoformat(decision_value)
+            except ValueError:
+                rejected.append(f"{receipt_path.name}:receipt_date_invalid")
+                continue
+            if execution_day.isoformat() != execution_value or decision_day.isoformat() != decision_value:
+                rejected.append(f"{receipt_path.name}:receipt_date_noncanonical")
+                continue
+            if decision_day >= execution_day or execution_day > observed_value.astimezone(TAIPEI).date():
+                rejected.append(f"{receipt_path.name}:receipt_date_outside_observed_window")
+                continue
+            try:
+                recorded_at = _aware_datetime(
+                    payload.get("recorded_at"),
+                    f"{receipt_path.name}.recorded_at",
+                ).astimezone(timezone.utc)
+            except (TypeError, ValueError, FormalDailyInputProducerError):
+                rejected.append(f"{receipt_path.name}:receipt_recorded_at_invalid")
+                continue
+            if recorded_at > observed_value:
+                rejected.append(f"{receipt_path.name}:receipt_recorded_at_in_future")
+                continue
+            safe_flags = (
+                ("research_only", True),
+                ("formal_credit", False),
+                ("formal_ready", False),
+                ("broker_execution", False),
+                ("broker_order_allowed", False),
+                ("auto_rebalance_allowed", False),
+                ("writes_formal_controlled_paths", False),
+                ("writes_market_database", False),
+            )
+            if any(result.get(field) is not expected for field, expected in safe_flags):
+                rejected.append(f"{receipt_path.name}:receipt_safety_flags_invalid")
+                continue
+            custody_error = _validate_paper_receipt_candidate_and_ledger_rows(
+                payload=payload,
+                result=result,
+                ledger=ledger,
+                expected_fill_ids=expected_fill_ids,
+                expected_portfolio_id=str(portfolio_id),
+                execution_date=execution_value,
+                fill_path=expected_fill_path,
+            )
+            if custody_error is not None:
+                rejected.append(f"{receipt_path.name}:{custody_error}")
+                continue
+            formal_eligible, formal_reason = _paper_receipt_formal_eligibility(
+                result,
+                fills=fills,
+                execution_date=execution_day,
+                recorded_at=recorded_at,
+                observed=observed_value,
+            )
+            if not formal_eligible and formal_reason is not None:
+                formal_ineligible_reasons.append(
+                    f"{receipt_path.name}:{formal_reason}"
+                )
+            matched.append(
+                {
+                    "path": str(receipt_path.resolve()),
+                    "file_hash": _sha256_bytes(raw),
+                    "content_hash": payload.get("content_sha256"),
+                    "source_result_id": payload.get("source_result_id"),
+                    "decision_date": decision_value,
+                    "execution_date": execution_value,
+                    "recorded_at": recorded_at.isoformat(),
+                    "fill_ids": sorted(covered_by_receipt),
+                    "all_receipt_fill_ids": sorted(receipt_fill_ids),
+                    "custody_verified": True,
+                    "formal_eligible": formal_eligible,
+                    "execution_event_time_proven": result.get(
+                        "execution_event_time_proven"
+                    ) is True,
+                    "formal_consumer_compatible": result.get(
+                        "formal_consumer_compatible"
+                    ) is True,
+                    "market_source": (
+                        dict(source)
+                        if isinstance(source := result.get("market_source"), Mapping)
+                        else None
+                    ),
+                }
+            )
+            covered_fill_ids.update(covered_by_receipt)
+            if formal_eligible:
+                eligible_fill_ids.update(covered_by_receipt)
+        except (OSError, UnicodeError, json.JSONDecodeError, ValueError, RuntimeError) as error:
+            rejected.append(f"{receipt_path.name}:{type(error).__name__}")
+
+    projection["receipts"] = matched
+    projection["rejected_receipts"] = rejected[:20]
+    projection["receipt_paths"] = [str(item["path"]) for item in matched]
+    projection["receipt_file_hashes"] = [str(item["file_hash"]) for item in matched]
+    projection["covered_fill_count"] = len(covered_fill_ids)
+    projection["eligible_fill_count"] = len(eligible_fill_ids)
+    projection["eligible_fill_ids"] = sorted(eligible_fill_ids)
+    projection["formal_ineligible_reasons"] = formal_ineligible_reasons[:20]
+    custody_verified = covered_fill_ids == expected_fill_ids
+    if len(matched) > 1:
+        # Two terminal receipts for the same complete candidate make the
+        # source selection ambiguous (for example, a delayed replay plus a
+        # later timestamped capture).  Do not union their IDs or let the
+        # eligible one mask the other; the producer must explicitly resolve
+        # the duplicate before this candidate can be consumed.
+        projection["custody_verified"] = False
+        projection["formal_eligible"] = False
+        projection["verified"] = False
+        projection["formal_ready"] = False
+        projection["reason"] = "paper_execution_receipt_multiple_matching_candidates"
+        return projection
+    formal_eligible = (
+        custody_verified
+        and eligible_fill_ids == expected_fill_ids
+        and bool(matched)
+        and all(item.get("formal_eligible") is True for item in matched)
+    )
+    projection["custody_verified"] = custody_verified
+    projection["formal_eligible"] = formal_eligible
+    projection["missing_fill_ids"] = sorted(expected_fill_ids - covered_fill_ids)
+    projection["execution_event_time_proven"] = bool(matched) and all(
+        item.get("execution_event_time_proven") is True for item in matched
+    )
+    if formal_eligible:
+        projection["status"] = "verified"
+        projection["verified"] = True
+        projection["formal_ready"] = True
+        projection["reason"] = "paper_execution_receipts_bind_all_candidate_fills"
+    elif custody_verified:
+        # A delayed EOD receipt can prove which immutable rows were committed,
+        # but it cannot prove that the execution event was observable at its
+        # claimed session time.  Preserve that custody evidence without
+        # allowing it to satisfy the Formal-ready gate.
+        projection["status"] = "custody_verified_formal_ineligible"
+        projection["reason"] = (
+            formal_ineligible_reasons[0]
+            if formal_ineligible_reasons
+            else "paper_execution_receipt_formal_eligibility_missing"
+        )
+    elif covered_fill_ids:
+        projection["status"] = "partial"
+        projection["reason"] = "paper_execution_receipts_do_not_cover_all_candidate_fills"
+    else:
+        projection["status"] = "invalid" if rejected else "missing"
+        projection["reason"] = (
+            "paper_execution_receipt_candidates_rejected"
+            if rejected
+            else "paper_execution_receipt_for_candidate_fills_not_found"
+        )
+    return projection
+
+
+def _validate_paper_receipt_candidate_and_ledger_rows(
+    *,
+    payload: Mapping[str, object],
+    result: Mapping[str, object],
+    ledger: Mapping[str, object],
+    expected_fill_ids: set[str],
+    expected_portfolio_id: str,
+    execution_date: str,
+    fill_path: Path,
+) -> str | None:
+    """Bind receipt result/candidate rows to the committed SQLite rows.
+
+    The queue receipt validator proves hashes and basic ledger identity, but a
+    hash-bound receipt can still be made self-consistent while its ``fills``
+    projection disagrees with the rows in SQLite.  This read-only check
+    compares every persisted fill column that affects quantity, price, cash,
+    fees, tax and source identity before Formal can consume it.
+    """
+
+    candidate_path_value = result.get("candidate_path")
+    candidate_path = (
+        Path(candidate_path_value).expanduser().resolve()
+        if isinstance(candidate_path_value, str) and candidate_path_value.strip()
+        else None
+    )
+    if candidate_path is None or not candidate_path.is_file():
+        return "paper_candidate_path_missing"
+    try:
+        candidate_value = json.loads(candidate_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return "paper_candidate_unreadable"
+    if not isinstance(candidate_value, Mapping):
+        return "paper_candidate_not_object"
+    candidate_fills = candidate_value.get("fills")
+    result_fills = result.get("fills")
+    if not isinstance(candidate_fills, list) or not isinstance(result_fills, list):
+        return "paper_candidate_or_result_fills_missing"
+    if candidate_fills != result_fills:
+        return "paper_candidate_result_fills_mismatch"
+    candidate_ledger = candidate_value.get("ledger")
+    if not isinstance(candidate_ledger, Mapping) or dict(candidate_ledger) != dict(ledger):
+        return "paper_candidate_result_ledger_mismatch"
+    result_fill_map: dict[str, Mapping[str, object]] = {}
+    for raw_fill in result_fills:
+        if not isinstance(raw_fill, Mapping):
+            return "paper_result_fill_row_invalid"
+        fill_id = raw_fill.get("fill_id")
+        if not isinstance(fill_id, str) or not fill_id.strip() or fill_id in result_fill_map:
+            return "paper_result_fill_identity_invalid"
+        result_fill_map[fill_id] = {
+            str(key): value for key, value in raw_fill.items()
+        }
+    if set(result_fill_map) != expected_fill_ids:
+        return "paper_result_fill_ids_mismatch"
+    ledger_fill_ids = ledger.get("fill_ids")
+    if (
+        not isinstance(ledger_fill_ids, list)
+        or any(not isinstance(value, str) or not value.strip() for value in ledger_fill_ids)
+        or len(set(ledger_fill_ids)) != len(ledger_fill_ids)
+        or set(ledger_fill_ids) != expected_fill_ids
+    ):
+        return "paper_result_ledger_fill_ids_mismatch"
+
+    resolved_fill_path = fill_path.expanduser().resolve()
+    if resolved_fill_path.is_symlink() or not resolved_fill_path.is_file():
+        return "paper_fill_ledger_missing"
+    connection: sqlite3.Connection | None = None
+    try:
+        uri = f"file:{resolved_fill_path.as_posix()}?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA query_only=ON")
+        placeholders = ",".join("?" for _ in expected_fill_ids)
+        rows = connection.execute(
+            "SELECT schema_version, fill_id, order_id, portfolio_id, event_date, "
+            "stock_code, side, requested_quantity, filled_quantity, "
+            "reference_price, fill_price, commission, tax, slippage_cost, "
+            "turnover_bp, execution_gap_bp, status, source_event_id, "
+            "override_reason, source_type, research_only, "
+            "broker_order_allowed, auto_rebalance_allowed "
+            "FROM paper_trade_ledger WHERE fill_id IN ("
+            + placeholders
+            + ")",
+            tuple(sorted(expected_fill_ids)),
+        ).fetchall()
+        if len(rows) != len(expected_fill_ids):
+            return "paper_ledger_rows_missing"
+        by_id = {str(row["fill_id"]): row for row in rows}
+        if set(by_id) != expected_fill_ids:
+            return "paper_ledger_fill_ids_mismatch"
+        text_fields = (
+            "schema_version",
+            "fill_id",
+            "order_id",
+            "portfolio_id",
+            "event_date",
+            "stock_code",
+            "side",
+            "status",
+            "source_event_id",
+            "override_reason",
+            "source_type",
+        )
+        decimal_fields = (
+            "reference_price",
+            "fill_price",
+            "commission",
+            "tax",
+            "slippage_cost",
+        )
+        integer_fields = (
+            "requested_quantity",
+            "filled_quantity",
+            "turnover_bp",
+            "execution_gap_bp",
+        )
+        boolean_fields = (
+            "research_only",
+            "broker_order_allowed",
+            "auto_rebalance_allowed",
+        )
+        for fill_id, expected in result_fill_map.items():
+            row = by_id[fill_id]
+            if str(expected.get("portfolio_id")) != expected_portfolio_id:
+                return f"paper_result_portfolio_id_mismatch:{fill_id}"
+            if str(expected.get("event_date")) != execution_date:
+                return f"paper_result_event_date_mismatch:{fill_id}"
+            for field in text_fields:
+                expected_value = expected.get(field)
+                actual_value = row[field]
+                if expected_value is None or actual_value is None:
+                    if expected_value is not None or actual_value is not None:
+                        return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+                elif str(expected_value) != str(actual_value):
+                    return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+            for field in decimal_fields:
+                expected_value = expected.get(field)
+                actual_value = row[field]
+                if expected_value is None or actual_value is None:
+                    if expected_value is not None or actual_value is not None:
+                        return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+                    continue
+                if isinstance(expected_value, (bool, float)):
+                    return f"paper_ledger_row_invalid:{fill_id}:{field}"
+                try:
+                    if Decimal(str(expected_value)) != Decimal(str(actual_value)):
+                        return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+                except (InvalidOperation, ValueError, TypeError):
+                    return f"paper_ledger_row_invalid:{fill_id}:{field}"
+            for field in integer_fields:
+                expected_value = expected.get(field)
+                actual_value = row[field]
+                if expected_value is None or actual_value is None:
+                    if expected_value is not None or actual_value is not None:
+                        return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+                    continue
+                if (
+                    isinstance(expected_value, bool)
+                    or not isinstance(expected_value, int)
+                    or isinstance(actual_value, bool)
+                    or not isinstance(actual_value, int)
+                ):
+                    return f"paper_ledger_row_invalid:{fill_id}:{field}"
+                if expected_value != actual_value:
+                    return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+            for field in boolean_fields:
+                expected_value = expected.get(field)
+                if not isinstance(expected_value, bool):
+                    return f"paper_ledger_row_invalid:{fill_id}:{field}"
+                actual_value = row[field]
+                if isinstance(actual_value, bool) or not isinstance(actual_value, int):
+                    return f"paper_ledger_row_invalid:{fill_id}:{field}"
+                expected_bool = expected_value
+                if actual_value not in (0, 1):
+                    return f"paper_ledger_row_invalid:{fill_id}:{field}"
+                actual_bool = actual_value == 1
+                if expected_bool != actual_bool:
+                    return f"paper_ledger_row_mismatch:{fill_id}:{field}"
+    except (OSError, RuntimeError, sqlite3.Error, ValueError, TypeError):
+        return "paper_ledger_readback_failed"
+    finally:
+        if connection is not None:
+            connection.close()
+    return None
+
+
+def _paper_receipt_formal_eligibility(
+    result: Mapping[str, object],
+    *,
+    fills: Sequence[Mapping[str, object]],
+    execution_date: date,
+    recorded_at: datetime,
+    observed: datetime,
+) -> tuple[bool, str | None]:
+    """Prove event-time source availability before declaring Formal eligibility.
+
+    The Paper receipt itself is only a custody assertion.  Formal eligibility
+    additionally requires a producer-owned, structured exchange capture.  A
+    source path and a hash are insufficient because an arbitrary self-authored
+    JSON file could otherwise claim an event timestamp while omitting the
+    symbols, prices and persisted fill rows that the receipt represents.
+    """
+
+    if result.get("execution_event_time_proven") is not True:
+        return False, "execution_event_time_not_proven"
+    if result.get("formal_consumer_compatible") is not True:
+        return False, "paper_result_formal_consumer_incompatible"
+    if result.get("execution_replay_mode") not in {
+        "same_session_event_time_capture",
+        "live_session_capture",
+    }:
+        return False, "paper_execution_replay_mode_not_event_time_eligible"
+    source = result.get("market_source")
+    if not isinstance(source, Mapping):
+        return False, "paper_execution_market_source_missing"
+    if source.get("execution_event_time_proven") is not True:
+        return False, "market_source_execution_event_time_not_proven"
+    if source.get("execution_source_capture_at_proven") is not True:
+        return False, "market_source_capture_time_not_proven"
+    if source.get("intraday_open_availability_proven") is not True:
+        return False, "market_source_intraday_availability_not_proven"
+    if source.get("execution_source_kind") not in {
+        "official_intraday_execution_capture",
+        "official_session_open_capture",
+    }:
+        return False, "market_source_kind_not_event_time_eligible"
+    if source.get("execution_data_availability") == (
+        "delayed_eod_replay_after_session_close"
+    ):
+        return False, "paper_execution_delayed_eod_not_formal_eligible"
+    if source.get("execution_data_availability") not in {
+        "same_session_intraday_capture",
+        "official_intraday_execution_capture",
+        "official_session_open_capture",
+    }:
+        return False, "market_source_intraday_availability_semantics_missing"
+    if source.get("execution_source_time_semantics") == (
+        "daily_prices_eod_row_has_no_intraday_capture_timestamp"
+    ):
+        return False, "market_source_has_no_intraday_capture_timestamp"
+    if source.get("execution_source_time_semantics") != (
+        PAPER_EXECUTION_SOURCE_TIME_SEMANTICS
+    ):
+        return False, "market_source_time_semantics_not_bound"
+    capture_path_value = source.get("execution_source_capture_path")
+    capture_hash = source.get("execution_source_capture_file_hash")
+    if not isinstance(capture_path_value, str) or not capture_path_value.strip():
+        return False, "market_source_capture_path_missing"
+    if not _is_sha256(capture_hash):
+        return False, "market_source_capture_file_hash_missing"
+    capture_path = Path(capture_path_value).expanduser().resolve()
+    if capture_path.is_symlink() or not capture_path.is_file():
+        return False, "market_source_capture_file_missing"
+    try:
+        with capture_path.open("rb") as stream:
+            capture_raw = stream.read(PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES + 1)
+    except OSError:
+        return False, "market_source_capture_unreadable"
+    if len(capture_raw) > PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES:
+        return False, "market_source_capture_too_large"
+    if _sha256_bytes(capture_raw) != capture_hash:
+        return False, "market_source_capture_file_hash_mismatch"
+    try:
+        event_at = _aware_datetime(
+            source.get("execution_event_at"),
+            "market_source.execution_event_at",
+        ).astimezone(timezone.utc)
+        capture_at = _aware_datetime(
+            source.get("execution_source_capture_at"),
+            "market_source.execution_source_capture_at",
+        ).astimezone(timezone.utc)
+    except (TypeError, ValueError, FormalDailyInputProducerError):
+        return False, "market_source_event_or_capture_time_invalid"
+    observed_utc = observed.astimezone(timezone.utc)
+    recorded_utc = recorded_at.astimezone(timezone.utc)
+    if event_at.astimezone(TAIPEI).date() != execution_date:
+        return False, "market_source_event_date_mismatch"
+    if event_at > observed_utc or event_at > recorded_utc:
+        return False, "market_source_event_time_after_observed"
+    if capture_at > observed_utc or capture_at > recorded_utc:
+        return False, "market_source_capture_time_after_observed"
+    if capture_at < event_at:
+        return False, "market_source_capture_time_before_event"
+    return _validate_paper_event_capture_payload(
+        capture_path=capture_path,
+        capture_raw=capture_raw,
+        source=source,
+        fills=fills,
+        execution_date=execution_date,
+        event_at=event_at,
+        capture_at=capture_at,
+        recorded_at=recorded_utc,
+        observed=observed_utc,
+    )
+
+
+def _validate_paper_event_capture_payload(
+    *,
+    capture_path: Path,
+    capture_raw: bytes,
+    source: Mapping[str, object],
+    fills: Sequence[Mapping[str, object]],
+    execution_date: date,
+    event_at: datetime,
+    capture_at: datetime,
+    recorded_at: datetime,
+    observed: datetime,
+) -> tuple[bool, str | None]:
+    """Validate an immutable official HTTP capture and its Paper binding.
+
+    The envelope is only metadata.  The source rows are rebuilt from the
+    sibling ``raw_response.bin`` using the fixed TWSE MIS parser and endpoint
+    contract; a self-authored ``raw_rows`` array is deliberately not accepted.
+    Each persisted fill must then match one rebuilt quote by stock, reference
+    price and event timestamp.  Its actual fill price is checked against the
+    already validated Paper ledger row, so the source cannot silently replace
+    the financial value with an unrelated quote.
+    """
+
+    try:
+        payload_value = json.loads(capture_raw.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return False, "market_source_capture_payload_invalid"
+    if not isinstance(payload_value, Mapping):
+        return False, "market_source_capture_payload_not_object"
+    payload = {str(key): value for key, value in payload_value.items()}
+
+    if payload.get("schema_version") != PAPER_EXECUTION_EVENT_CAPTURE_SCHEMA_VERSION:
+        return False, "market_source_capture_schema_invalid"
+    declared_content_hash = payload.get("content_sha256")
+    if not _is_sha256(declared_content_hash):
+        return False, "market_source_capture_content_hash_missing"
+    payload_without_hash = dict(payload)
+    payload_without_hash.pop("content_sha256", None)
+    if _payload_hash(payload_without_hash) != declared_content_hash:
+        return False, "market_source_capture_content_hash_mismatch"
+
+    authority = payload.get("source_authority")
+    if authority != "twse":
+        return False, "market_source_capture_authority_invalid"
+    source_url = payload.get("source_url")
+    if source_url != TWSE_MIS_STOCK_INFO_ENDPOINT:
+        return False, "market_source_capture_endpoint_not_supported"
+    try:
+        parsed_url = urlparse(source_url)
+        host = parsed_url.hostname
+        parsed_port = parsed_url.port
+    except ValueError:
+        return False, "market_source_capture_url_invalid"
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+        or parsed_port is not None
+        or host != "mis.twse.com.tw"
+        or parsed_url.path != "/stock/api/getStockInfo.jsp"
+        or parsed_url.query
+    ):
+        return False, "market_source_capture_url_not_official"
+    if source.get("execution_source_url") != source_url:
+        return False, "market_source_capture_url_not_bound"
+    if payload.get("source_kind") != "official_session_open_capture":
+        return False, "market_source_capture_kind_invalid"
+    if payload.get("parser") != PAPER_EXECUTION_EVENT_CAPTURE_PARSER_VERSION:
+        return False, "market_source_capture_parser_invalid"
+    if payload.get("source_time_semantics") != (
+        PAPER_EXECUTION_SOURCE_TIME_SEMANTICS
+    ):
+        return False, "market_source_capture_time_semantics_invalid"
+
+    execution_date_text = execution_date.isoformat()
+    if payload.get("execution_date") != execution_date_text:
+        return False, "market_source_capture_execution_date_mismatch"
+    if source.get("execution_date") != execution_date_text:
+        return False, "market_source_metadata_execution_date_mismatch"
+    if source.get("execution_source_capture_schema_version") != (
+        PAPER_EXECUTION_EVENT_CAPTURE_SCHEMA_VERSION
+    ):
+        return False, "market_source_capture_schema_not_bound"
+    if source.get("execution_source_authority") != authority:
+        return False, "market_source_capture_authority_not_bound"
+    if source.get("execution_source_parser_version") != (
+        PAPER_EXECUTION_EVENT_CAPTURE_PARSER_VERSION
+    ):
+        return False, "market_source_capture_parser_not_bound"
+    if source.get("execution_source_time_semantics") != (
+        PAPER_EXECUTION_SOURCE_TIME_SEMANTICS
+    ):
+        return False, "market_source_capture_time_semantics_not_bound"
+    if source.get("execution_source_capture_content_hash") != declared_content_hash:
+        return False, "market_source_capture_content_hash_not_bound"
+
+    payload_event_value = payload.get("execution_event_at")
+    payload_capture_value = payload.get("captured_at")
+    try:
+        payload_event_at = _aware_datetime(
+            payload_event_value,
+            "paper_capture.execution_event_at",
+        ).astimezone(timezone.utc)
+        payload_capture_at = _aware_datetime(
+            payload_capture_value,
+            "paper_capture.captured_at",
+        ).astimezone(timezone.utc)
+    except (TypeError, ValueError, FormalDailyInputProducerError):
+        return False, "market_source_capture_timestamp_invalid"
+    if payload_event_at != event_at:
+        return False, "market_source_capture_event_time_not_bound"
+    if payload_capture_at != capture_at:
+        return False, "market_source_capture_capture_time_not_bound"
+    if payload_capture_at.astimezone(TAIPEI).date() != execution_date:
+        return False, "market_source_capture_not_same_trading_session"
+    if payload_event_at.astimezone(TAIPEI).date() != execution_date:
+        return False, "market_source_capture_event_date_mismatch"
+    event_local_time = payload_event_at.astimezone(TAIPEI).time().replace(tzinfo=None)
+    capture_local_time = payload_capture_at.astimezone(TAIPEI).time().replace(
+        tzinfo=None
+    )
+    if not RULE_SESSION_OPEN <= event_local_time < RULE_SESSION_CLOSE:
+        return False, "market_source_capture_event_outside_session"
+    if not RULE_SESSION_OPEN <= capture_local_time < RULE_SESSION_CLOSE:
+        return False, "market_source_capture_not_same_session"
+    if payload_event_at > payload_capture_at:
+        return False, "market_source_capture_event_after_capture"
+    if (
+        payload_capture_at - payload_event_at
+    ).total_seconds() > PAPER_EXECUTION_CAPTURE_WINDOW_MAX_SECONDS:
+        return False, "market_source_capture_window_too_wide"
+    if payload_capture_at > recorded_at or payload_capture_at > observed:
+        return False, "market_source_capture_time_after_receipt"
+
+    capture_window = payload.get("capture_window")
+    if not isinstance(capture_window, Mapping):
+        return False, "market_source_capture_window_missing"
+    try:
+        window_start = _aware_datetime(
+            capture_window.get("start_at"),
+            "paper_capture.capture_window.start_at",
+        ).astimezone(timezone.utc)
+        window_end = _aware_datetime(
+            capture_window.get("end_at"),
+            "paper_capture.capture_window.end_at",
+        ).astimezone(timezone.utc)
+    except (TypeError, ValueError, FormalDailyInputProducerError):
+        return False, "market_source_capture_window_invalid"
+    if window_start != payload_event_at or window_end != payload_capture_at:
+        return False, "market_source_capture_window_not_bound"
+    if window_start > window_end:
+        return False, "market_source_capture_window_order_invalid"
+
+    source_event_at_value = source.get("execution_event_at")
+    source_capture_at_value = source.get("execution_source_capture_at")
+    try:
+        source_event_at = _aware_datetime(
+            source_event_at_value,
+            "market_source.execution_event_at",
+        ).astimezone(timezone.utc)
+        source_capture_at = _aware_datetime(
+            source_capture_at_value,
+            "market_source.execution_source_capture_at",
+        ).astimezone(timezone.utc)
+    except (TypeError, ValueError, FormalDailyInputProducerError):
+        return False, "market_source_event_or_capture_time_invalid"
+    if source_event_at != payload_event_at or source_capture_at != payload_capture_at:
+        return False, "market_source_capture_metadata_time_mismatch"
+
+    raw_response_path_value = payload.get("raw_response_path")
+    if not isinstance(raw_response_path_value, str) or not raw_response_path_value.strip():
+        return False, "market_source_capture_raw_response_path_missing"
+    raw_response_path = Path(raw_response_path_value)
+    if raw_response_path.is_absolute():
+        return False, "market_source_capture_raw_response_path_not_relative"
+    capture_root = capture_path.parent.resolve()
+    resolved_raw_response = (capture_root / raw_response_path).resolve()
+    try:
+        resolved_raw_response.relative_to(capture_root)
+    except ValueError:
+        return False, "market_source_capture_raw_response_path_escape"
+    if resolved_raw_response.is_symlink() or not resolved_raw_response.is_file():
+        return False, "market_source_capture_raw_response_missing"
+    try:
+        with resolved_raw_response.open("rb") as stream:
+            raw_response = stream.read(PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES + 1)
+    except OSError:
+        return False, "market_source_capture_raw_response_unreadable"
+    if len(raw_response) > PAPER_EXECUTION_EVENT_CAPTURE_MAX_BYTES:
+        return False, "market_source_capture_raw_response_too_large"
+    raw_response_hash = _sha256_bytes(raw_response)
+    if raw_response_hash != payload.get("raw_response_sha256"):
+        return False, "market_source_capture_raw_response_hash_mismatch"
+    raw_response_bytes = payload.get("raw_response_bytes")
+    if (
+        isinstance(raw_response_bytes, bool)
+        or not isinstance(raw_response_bytes, int)
+        or raw_response_bytes != len(raw_response)
+        or raw_response_bytes <= 0
+    ):
+        return False, "market_source_capture_raw_response_size_invalid"
+    if source.get("execution_source_raw_response_hash") != raw_response_hash:
+        return False, "market_source_capture_raw_response_hash_not_bound"
+    source_raw_path_value = source.get("execution_source_raw_response_path")
+    if not isinstance(source_raw_path_value, str) or (
+        Path(source_raw_path_value).expanduser().resolve() != resolved_raw_response
+    ):
+        return False, "market_source_capture_raw_response_path_not_bound"
+
+    response_metadata = payload.get("response")
+    if not isinstance(response_metadata, Mapping):
+        return False, "market_source_capture_response_metadata_missing"
+    if response_metadata.get("http_status") != 200:
+        return False, "market_source_capture_response_status_invalid"
+    final_url = response_metadata.get("final_url")
+    request = payload.get("request")
+    if not isinstance(request, Mapping):
+        return False, "market_source_capture_request_missing"
+    request_channels = request.get("ex_ch")
+    if (
+        request.get("json") != "1"
+        or request.get("delay") != "0"
+        or not isinstance(request_channels, str)
+        or not request_channels.strip()
+    ):
+        return False, "market_source_capture_request_invalid"
+    expected_request_url = _twse_mis_request_url(request_channels)
+    if final_url != expected_request_url:
+        return False, "market_source_capture_final_url_not_bound"
+    if source.get("execution_source_request_url") != expected_request_url:
+        return False, "market_source_capture_request_url_not_bound"
+    if response_metadata.get("content_encoding") not in {None, "", "identity"}:
+        return False, "market_source_capture_content_encoding_unsupported"
+
+    parsed_rows, parse_reason = _parse_twse_mis_raw_rows(
+        raw_response,
+        request_channels=request_channels,
+        execution_date=execution_date,
+        captured_at=payload_capture_at,
+    )
+    if parse_reason is not None:
+        return False, parse_reason
+    raw_row_count = payload.get("raw_row_count")
+    if (
+        isinstance(raw_row_count, bool)
+        or not isinstance(raw_row_count, int)
+        or raw_row_count != len(parsed_rows)
+        or raw_row_count <= 0
+    ):
+        return False, "market_source_capture_raw_row_count_invalid"
+    if source.get("execution_source_capture_row_count") != raw_row_count:
+        return False, "market_source_capture_raw_row_count_not_bound"
+    if not parsed_rows:
+        return False, "market_source_capture_raw_rows_missing"
+    raw_rows_by_stock: dict[str, Mapping[str, object]] = {}
+    for row in parsed_rows:
+        stock_code = row.get("stock_code")
+        if not isinstance(stock_code, str) or stock_code in raw_rows_by_stock:
+            return False, "market_source_capture_raw_stock_ambiguous"
+        raw_rows_by_stock[stock_code] = row
+
+    expected_fills: dict[str, dict[str, object]] = {}
+    for item in fills:
+        raw_fill = item.get("fill")
+        expected: dict[str, object] = {}
+        for field in (
+            "fill_id",
+            "order_id",
+            "source_event_id",
+            "stock_code",
+            "side",
+            "event_date",
+            "filled_quantity",
+            "status",
+            "reference_price",
+            "fill_price",
+        ):
+            value = _paper_fill_contract_value(raw_fill, item, field)
+            if value is _PAPER_CAPTURE_MISSING:
+                return False, "paper_capture_expected_fill_fields_missing"
+            expected[field] = value
+        fill_id = expected["fill_id"]
+        if (
+            not isinstance(fill_id, str)
+            or not fill_id.strip()
+            or fill_id in expected_fills
+        ):
+            return False, "paper_capture_expected_fill_identity_invalid"
+        for field in ("order_id", "source_event_id", "stock_code", "side", "status"):
+            if not isinstance(expected[field], str) or not str(expected[field]).strip():
+                return False, "paper_capture_expected_fill_fields_invalid"
+        if expected["event_date"] != execution_date_text:
+            return False, "paper_capture_expected_fill_date_mismatch"
+        quantity = expected["filled_quantity"]
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 0:
+            return False, "paper_capture_expected_fill_quantity_invalid"
+        try:
+            reference_price = _capture_decimal(
+                expected["reference_price"],
+                allow_none=False,
+            )
+            fill_price = _capture_decimal(expected["fill_price"], allow_none=True)
+        except (TypeError, ValueError, FormalDailyInputProducerError):
+            return False, "paper_capture_expected_fill_price_invalid"
+        if reference_price is None or reference_price <= 0:
+            return False, "paper_capture_expected_fill_reference_price_invalid"
+        if fill_price is not None and fill_price <= 0:
+            return False, "paper_capture_expected_fill_price_invalid"
+        expected["reference_price_decimal"] = reference_price
+        expected["fill_price_decimal"] = fill_price
+        expected_fills[fill_id] = expected
+
+    if not expected_fills:
+        return False, "paper_capture_expected_fill_rows_missing"
+    seen_stocks: set[str] = set()
+    for expected in expected_fills.values():
+        stock_code = expected["stock_code"]
+        if not isinstance(stock_code, str) or stock_code in seen_stocks:
+            return False, "paper_capture_expected_fill_stock_ambiguous"
+        seen_stocks.add(stock_code)
+        raw_row = raw_rows_by_stock.get(stock_code)
+        if raw_row is None:
+            return False, "market_source_capture_fill_stock_not_captured"
+        try:
+            raw_price = _capture_decimal(raw_row.get("price"), allow_none=False)
+        except (TypeError, ValueError, FormalDailyInputProducerError):
+            return False, "market_source_capture_raw_row_price_invalid"
+        if raw_price != expected["reference_price_decimal"]:
+            return False, "market_source_capture_source_price_mismatch"
+        raw_event_value = raw_row.get("observed_at")
+        try:
+            raw_observed_at = _aware_datetime(
+                raw_event_value,
+                "paper_capture.raw_rows.observed_at",
+            ).astimezone(timezone.utc)
+        except (TypeError, ValueError, FormalDailyInputProducerError):
+            return False, "market_source_capture_raw_row_event_time_invalid"
+        if not window_start <= raw_observed_at <= window_end:
+            return False, "market_source_capture_raw_row_outside_capture_window"
+        fill_price_value = expected.get("fill_price_decimal")
+        quantity_value = expected.get("filled_quantity")
+        if fill_price_value is not None and not isinstance(fill_price_value, Decimal):
+            return False, "paper_capture_expected_fill_price_invalid"
+        if (
+            isinstance(quantity_value, bool)
+            or not isinstance(quantity_value, int)
+            or quantity_value < 0
+        ):
+            return False, "paper_capture_expected_fill_quantity_invalid"
+        if quantity_value > 0 and fill_price_value is None:
+            return False, "market_source_capture_fill_price_missing"
+        if quantity_value == 0 and fill_price_value is not None:
+            return False, "market_source_capture_zero_fill_price_invalid"
+    return True, None
+
+
+def _twse_mis_request_url(request_channels: str) -> str:
+    return TWSE_MIS_STOCK_INFO_ENDPOINT + "?" + urlencode(
+        {"ex_ch": request_channels, "json": "1", "delay": "0"}
+    )
+
+
+def _parse_twse_mis_raw_rows(
+    raw_response: bytes,
+    *,
+    request_channels: str,
+    execution_date: date,
+    captured_at: datetime,
+) -> tuple[list[dict[str, object]], str | None]:
+    """Rebuild quote rows from the fixed TWSE MIS wire response contract."""
+
+    try:
+        payload_value = json.loads(raw_response.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return [], "market_source_capture_raw_response_json_invalid"
+    if not isinstance(payload_value, Mapping):
+        return [], "market_source_capture_raw_response_not_object"
+    if payload_value.get("rtcode") not in {"000", "0"}:
+        return [], "market_source_capture_raw_response_status_invalid"
+    if payload_value.get("rtmessage") != "OK":
+        return [], "market_source_capture_raw_response_message_invalid"
+    messages = payload_value.get("msgArray")
+    if not isinstance(messages, list) or not messages:
+        return [], "market_source_capture_raw_response_rows_missing"
+    requested_codes: list[str] = []
+    for channel in request_channels.split("|"):
+        if not channel.startswith("tse_") or not channel.endswith(".tw"):
+            return [], "market_source_capture_request_channel_invalid"
+        code = channel[4:-3]
+        if len(code) != 4 or not code.isdigit() or code in requested_codes:
+            return [], "market_source_capture_request_channel_invalid"
+        requested_codes.append(code)
+    requested = set(requested_codes)
+    rows: list[dict[str, object]] = []
+    seen_codes: set[str] = set()
+    for message in messages:
+        if not isinstance(message, Mapping):
+            return [], "market_source_capture_raw_response_row_invalid"
+        stock_code = message.get("c")
+        if not isinstance(stock_code, str) or stock_code not in requested:
+            return [], "market_source_capture_raw_response_symbol_mismatch"
+        if message.get("ex") != "tse" or stock_code in seen_codes:
+            return [], "market_source_capture_raw_response_symbol_invalid"
+        trade_date = message.get("d")
+        if not isinstance(trade_date, str) or trade_date != execution_date.strftime("%Y%m%d"):
+            return [], "market_source_capture_raw_response_date_mismatch"
+        tlong = message.get("tlong")
+        if not isinstance(tlong, str) or not tlong.isdigit():
+            return [], "market_source_capture_raw_response_timestamp_invalid"
+        timestamp_millis = int(tlong)
+        seconds, milliseconds = divmod(timestamp_millis, 1000)
+        try:
+            row_event_at = (
+                datetime.fromtimestamp(seconds, tz=timezone.utc)
+                + timedelta(milliseconds=milliseconds)
+            )
+        except (OverflowError, OSError, ValueError):
+            return [], "market_source_capture_raw_response_timestamp_invalid"
+        row_event_local = row_event_at.astimezone(TAIPEI)
+        if row_event_local.date() != execution_date:
+            return [], "market_source_capture_raw_response_event_date_mismatch"
+        if not RULE_SESSION_OPEN <= row_event_local.time().replace(tzinfo=None) < RULE_SESSION_CLOSE:
+            return [], "market_source_capture_raw_response_event_outside_session"
+        if row_event_at > captured_at:
+            return [], "market_source_capture_raw_response_event_after_capture"
+        trade_time = message.get("t")
+        if not isinstance(trade_time, str) or trade_time != row_event_local.strftime("%H:%M:%S"):
+            return [], "market_source_capture_raw_response_time_field_mismatch"
+        try:
+            open_price = _capture_decimal(message.get("o"), allow_none=False)
+        except (TypeError, ValueError, FormalDailyInputProducerError):
+            return [], "market_source_capture_raw_response_open_price_invalid"
+        if open_price is None or open_price <= 0:
+            return [], "market_source_capture_raw_response_open_price_invalid"
+        seen_codes.add(stock_code)
+        rows.append(
+            {
+                "raw_row_id": f"tse:{stock_code}:{tlong}",
+                "stock_code": stock_code,
+                "execution_date": execution_date.isoformat(),
+                "observed_at": row_event_at.isoformat(),
+                "price": format(open_price, "f"),
+                "exchange": "tse",
+                "tlong": tlong,
+            }
+        )
+    if seen_codes != requested:
+        return [], "market_source_capture_raw_response_requested_symbol_missing"
+    return rows, None
+
+
+_PAPER_CAPTURE_MISSING = object()
+
+
+def _paper_fill_contract_value(
+    raw_fill: object,
+    item: Mapping[str, object],
+    field: str,
+) -> object:
+    """Read a persisted fill field without treating ``None`` as absent."""
+
+    if isinstance(raw_fill, Mapping) and field in raw_fill:
+        return raw_fill[field]
+    if raw_fill is not None and hasattr(raw_fill, field):
+        return getattr(raw_fill, field)
+    if field in item:
+        return item[field]
+    return _PAPER_CAPTURE_MISSING
+
+
+def _capture_decimal(value: object, *, allow_none: bool) -> Decimal | None:
+    if value is None and allow_none:
+        return None
+    # Captured wire rows are canonical strings, while the read-only Paper
+    # ledger reader deliberately exposes validated ``Decimal`` values from
+    # ``PaperTradeFill``.  Accept both representations without ever coercing
+    # a binary float (which could hide a price mismatch).
+    if isinstance(value, Decimal):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = Decimal(value)
+        except InvalidOperation as error:
+            raise ValueError("capture Decimal is invalid") from error
+    else:
+        raise ValueError("capture Decimal must be a canonical string or Decimal")
+    if not parsed.is_finite():
+        raise ValueError("capture Decimal must be finite")
+    return parsed
 
 
 def _validate_snapshot_calendar_adjacency(
@@ -4197,10 +6071,237 @@ def _decimal_object(value: object, field_name: str) -> Decimal:
     return value
 
 
+def _bind_same_run_formal_sources(
+    paths: DailyFormalInputPaths,
+    result_inputs: Mapping[str, object],
+) -> DailyFormalInputPaths:
+    """只把本輪 producer 明確回傳的 manifest 接到 consumer。
+
+    Rule 與 causal ledger 可能在本輪才首次完成 durable publication。若
+    呼叫端沒有先 pin source path，可以使用 producer result 的 exact
+    ``formal_manifest_path``／``manifest_path``；不能用目錄排序或 latest
+    探索替代。PIT formal sidecar 沒有在此輪自動產生，仍必須由呼叫端
+    傳入明確 path。
+    """
+
+    updates: dict[str, Path | None] = {}
+    if paths.formal_ledger_path is None:
+        ledger = _mapping(
+            result_inputs.get("formal_ledger_candidate"),
+            "formal_ledger_candidate",
+        ) if isinstance(result_inputs.get("formal_ledger_candidate"), Mapping) else {}
+        value = ledger.get("manifest_path")
+        if isinstance(value, str) and value.strip() and Path(value).expanduser().resolve().is_file():
+            updates["formal_ledger_path"] = Path(value).expanduser().resolve()
+    if paths.formal_rule_history_path is None:
+        rule = _mapping(
+            result_inputs.get("rule_candidate"),
+            "rule_candidate",
+        ) if isinstance(result_inputs.get("rule_candidate"), Mapping) else {}
+        value = rule.get("formal_manifest_path")
+        if isinstance(value, str) and value.strip() and Path(value).expanduser().resolve().is_file():
+            updates["formal_rule_history_path"] = Path(value).expanduser().resolve()
+    if not updates:
+        return paths
+    return replace(
+        paths,
+        formal_ledger_path=updates.get(
+            "formal_ledger_path", paths.formal_ledger_path
+        ),
+        formal_rule_history_path=updates.get(
+            "formal_rule_history_path", paths.formal_rule_history_path
+        ),
+    )
+
+
+def _produce_common_identity_candidate(
+    *,
+    paths: DailyFormalInputPaths,
+    result_inputs: Mapping[str, object],
+    formal_results: Mapping[str, Mapping[str, object]],
+    formal_ready_count: int,
+    compatible_count: int,
+    observed: datetime,
+) -> dict[str, object]:
+    """在每日 producer 邊界建立 common identity；缺件只留下 blocker。"""
+
+    if formal_ready_count != 3 or compatible_count != 3:
+        return {
+            "status": "blocked",
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "candidate_only": True,
+            "blockers": [
+                "common_identity_requires_three_formal_consumer_readbacks"
+            ],
+        }
+    receipt_paths = _identity_receipt_paths(paths, result_inputs)
+    if receipt_paths is None:
+        return {
+            "status": "blocked",
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "candidate_only": True,
+            "blockers": ["common_identity_source_receipt_paths_missing"],
+        }
+    portfolio_clock_manifest = paths.portfolio_clock_manifest
+    if portfolio_clock_manifest is None:
+        return {
+            "status": "blocked",
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "candidate_only": True,
+            "blockers": ["common_identity_portfolio_clock_missing"],
+        }
+    lineage = paths.daily_rule_lineage or _daily_rule_lineage_from_result(
+        result_inputs.get("rule_candidate")
+    )
+    if lineage is None:
+        return {
+            "status": "blocked",
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "candidate_only": True,
+            "blockers": ["common_identity_daily_rule_lineage_missing"],
+        }
+    try:
+        from data_module.formal_common_identity import (  # noqa: PLC0415
+            build_formal_common_identity_manifest,
+            write_immutable_formal_common_identity_manifest,
+        )
+
+        source_paths = {
+            FORMAL_LEDGER_ENV: paths.formal_ledger_path,
+            FORMAL_RULE_ENV: paths.formal_rule_history_path,
+            FORMAL_SECTOR_ENV: paths.formal_sector_path,
+        }
+        if any(value is None for value in source_paths.values()):
+            raise FormalDailyInputProducerError(
+                "common identity source paths are incomplete"
+            )
+        manifest = build_formal_common_identity_manifest(
+            source_paths=cast(dict[str, Path], source_paths),
+            source_receipt_paths=receipt_paths,
+            portfolio_clock_manifest=portfolio_clock_manifest,
+            market_db=paths.market_db,
+            output_root=paths.output_root,
+            development_output_root=paths.development_output_root,
+            training_as_of=observed.astimezone(timezone.utc).isoformat(),
+            observed=observed,
+            daily_rule_lineage=lineage,
+        )
+        common_identity_path = paths.common_identity_manifest_path
+        if common_identity_path is None:  # pragma: no cover - caller guard
+            raise FormalDailyInputProducerError(
+                "common identity output path is missing"
+            )
+        output = common_identity_path.expanduser().resolve()
+        file_hash = write_immutable_formal_common_identity_manifest(output, manifest)
+    except Exception as error:  # noqa: BLE001 - preserve bounded blocker
+        return {
+            "status": "blocked",
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "candidate_only": True,
+            "blockers": [
+                "common_identity_publication_failed:" + _safe_error(error)
+            ],
+        }
+    return {
+        "status": "machine_verified_candidate",
+        "formal_ready": True,
+        "formal_consumer_compatible": True,
+        "candidate_only": True,
+        "identity_manifest_path": str(output),
+        "identity_manifest_file_hash": file_hash,
+        "identity_hash": manifest["identity_hash"],
+        "common_clock_id": cast(dict[str, object], manifest["common_portfolio_clock"])[
+            "clock_id"
+        ],
+        "daily_rule_lineage_hash": _payload_hash(lineage),
+        "consumer_verified": True,
+        "formal_oos_allowed": False,
+        "promotion_eligible": False,
+        "broker_order_allowed": False,
+    }
+
+
+def _identity_receipt_paths(
+    paths: DailyFormalInputPaths,
+    result_inputs: Mapping[str, object],
+) -> dict[str, Path] | None:
+    """合併呼叫端 pin 與本輪 producer result 的 exact receipt paths。"""
+
+    supplied = paths.formal_source_receipt_paths or {}
+    if set(supplied) - {FORMAL_LEDGER_ENV, FORMAL_RULE_ENV, FORMAL_SECTOR_ENV}:
+        return None
+    result: dict[str, Path] = {}
+    for environment_name, result_key, fields in (
+        (FORMAL_LEDGER_ENV, "formal_ledger_candidate", ("publication_receipt_path", "receipt_path")),
+        (FORMAL_RULE_ENV, "rule_candidate", ("publication_receipt_path", "receipt_path")),
+        (FORMAL_SECTOR_ENV, "pit_candidate", ("receipt_path",)),
+    ):
+        supplied_value = supplied.get(environment_name)
+        if supplied_value is not None:
+            result[environment_name] = Path(supplied_value).expanduser().resolve()
+            continue
+        raw_result = result_inputs.get(result_key)
+        candidate = _mapping(raw_result, result_key) if isinstance(raw_result, Mapping) else {}
+        chosen: Path | None = None
+        for field in fields:
+            value = candidate.get(field)
+            if isinstance(value, str) and value.strip():
+                path = Path(value).expanduser().resolve()
+                if path.is_file():
+                    chosen = path
+                    break
+        if chosen is None:
+            return None
+        result[environment_name] = chosen
+    return result
+
+
+def _daily_rule_lineage_from_result(value: object) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+    embedded = value.get("daily_rule_lineage")
+    if isinstance(embedded, Mapping):
+        candidate = {str(key): item for key, item in embedded.items()}
+        required = (
+            "clock_id",
+            "clock_manifest_hash",
+            "activation_trading_day",
+            "universe_hash",
+            "source_window_hash",
+        )
+        if all(
+            isinstance(candidate.get(field), str)
+            and bool(str(candidate[field]).strip())
+            for field in required
+        ):
+            return candidate
+    fields = {
+        "clock_id": value.get("clock_id"),
+        "clock_manifest_hash": value.get("clock_manifest_hash"),
+        "activation_trading_day": value.get(
+            "daily_rule_clock_activation_trading_day"
+        )
+        or value.get("activation_trading_day"),
+        "universe_hash": value.get("universe_hash")
+        or value.get("daily_rule_universe_hash"),
+        "source_window_hash": value.get("source_window_hash"),
+    }
+    if any(not isinstance(item, str) or not item.strip() for item in fields.values()):
+        return None
+    return {str(key): item for key, item in fields.items()}
+
+
 def _readback_explicit_formal_sources(
     paths: DailyFormalInputPaths,
     *,
     training_as_of: str,
+    same_run_ledger_candidate: bool = False,
+    paper_execution_receipt_verified: bool = False,
 ) -> tuple[dict[str, dict[str, object]], list[str]]:
     results: dict[str, dict[str, object]] = {}
     blockers: list[str] = []
@@ -4247,7 +6348,27 @@ def _readback_explicit_formal_sources(
             continue
         try:
             if input_name == "causal_non_cash_portfolio_ledger":
-                results[input_name] = _readback_formal_ledger(resolved, training_as_of)
+                readback = _readback_formal_ledger(resolved, training_as_of)
+                if same_run_ledger_candidate:
+                    readback["same_run_candidate"] = True
+                    readback["paper_execution_receipt_verified"] = (
+                        paper_execution_receipt_verified
+                    )
+                    if not paper_execution_receipt_verified:
+                        reason = (
+                            "formal_ledger_candidate_paper_execution_receipt_unverified"
+                        )
+                        readback.update(
+                            {
+                                "state": "candidate_only",
+                                "formal_ready": False,
+                                "formal_consumer_compatible": False,
+                                "candidate_only": True,
+                                "reason": reason,
+                            }
+                        )
+                        blockers.append(reason)
+                results[input_name] = readback
             elif input_name == "formal_rule_champion_snapshot_history":
                 results[input_name] = _readback_formal_rule(resolved, training_as_of)
             else:
@@ -4286,6 +6407,7 @@ def _readback_formal_ledger(path: Path, training_as_of: str) -> dict[str, object
         "formal_ready": True,
         "formal_consumer_compatible": True,
         "candidate_only": False,
+        "consumer_verified": True,
         "path": str(path),
         "file_hash": _file_hash_or_none(path),
         "manifest_hash": replay.ledger_manifest_hash,
@@ -4310,6 +6432,7 @@ def _readback_formal_rule(path: Path, training_as_of: str) -> dict[str, object]:
         "formal_ready": True,
         "formal_consumer_compatible": True,
         "candidate_only": False,
+        "consumer_verified": True,
         "path": str(path),
         "file_hash": _file_hash_or_none(path),
         "manifest_hash": history.manifest_hash,
@@ -4346,6 +6469,7 @@ def _readback_formal_sector(path: Path, training_as_of: str) -> dict[str, object
         "formal_ready": True,
         "formal_consumer_compatible": True,
         "candidate_only": False,
+        "consumer_verified": True,
         "path": str(path),
         "file_hash": _file_hash_or_none(path),
         "manifest_hash": manifest_hash,

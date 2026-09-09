@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta, timezone
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -31,6 +32,15 @@ from data_module.formal_daily_input_producer import (  # noqa: E402
 DAILY_FORMAL_INPUT_PRODUCER_SCHEMA_VERSION,
     DailyFormalInputPaths,
     run_daily_formal_input_producer,
+)
+from data_module.formal_runtime_config import (  # noqa: E402
+    FORMAL_RUNTIME_CONFIG_ENV,
+    FormalRuntimeConfigError,
+    load_optional_formal_runtime_config,
+)
+from data_module.prospective_formal_clock import (  # noqa: E402
+    file_sha256,
+    load_clock_manifest_for_capture,
 )
 from data_module.formal_pit_sector_publisher import (  # noqa: E402
     read_formal_pit_sector_receipt,
@@ -140,13 +150,38 @@ def _rule_source_error_detail(error: BaseException) -> str:
     return f"{type(error).__name__}:{detail[:220]}"
 
 
+def _validate_exact_rule_source_bundle(
+    bundle_path: Path,
+    *,
+    market_db: Path,
+    observed: datetime,
+) -> dict[str, object]:
+    """重跑 machine Rule consumer，避免把 scheduler status 當成來源證明。"""
+
+    from data_module.formal_rule_source_producer import (  # noqa: PLC0415
+        validate_machine_revalidation_bundle,
+    )
+
+    return validate_machine_revalidation_bundle(
+        bundle_path,
+        market_db=market_db,
+        observed=observed,
+    )
+
+
 def _validate_rule_universe_against_market_db(
     *,
     identity_payload: dict[str, object],
     symbols: list[str],
     market_db: Path | None,
+    bundle_root: Path | None = None,
 ) -> None:
-    """用既有唯讀 Rule producer 重算 frozen universe 的 score hash。"""
+    """用 exact bundle source 重算 frozen universe 的 score hash。
+
+    v3 的 source rows 已經是 immutable custody；只有 legacy v2 才從
+    SQLite 重讀 T-1。這個分流避免 auto-discovery 的驗證再次把 mutated
+    live rows 偷渡進正式決策。
+    """
 
     if market_db is None:
         raise ValueError("rule market database is not configured")
@@ -173,10 +208,23 @@ def _validate_rule_universe_against_market_db(
         rank_rule_only_candidates,
     )
 
-    window = load_read_only_daily_price_window(
-        db_path,
-        decision_session=data_as_of + timedelta(days=1),
-    )
+    if identity_payload.get("source_window_persisted") is True:
+        if bundle_root is None:
+            raise ValueError("persisted rule source bundle path is missing")
+        from data_module.formal_rule_source_producer import (  # noqa: PLC0415
+            load_verified_rule_source_window,
+        )
+
+        window = load_verified_rule_source_window(
+            bundle_root,
+            market_db=db_path,
+            observed=datetime.now(timezone.utc),
+        )
+    else:
+        window = load_read_only_daily_price_window(
+            db_path,
+            decision_session=data_as_of + timedelta(days=1),
+        )
     if list(window.session_dates) != session_dates:
         raise ValueError("rule source window sessions do not match universe identity")
     source_window_hash = identity_payload.get("source_window_hash")
@@ -427,6 +475,7 @@ def _discover_latest_rule_source_paths(
                 identity_payload=identity,
                 symbols=symbols,
                 market_db=market_db,
+                bundle_root=Path(path_text).parent.parent,
             )
         except Exception as error:  # noqa: BLE001 - 繼續嘗試下一個 immutable bundle
             failed_revalidation_keys.add(revalidation_key)
@@ -489,7 +538,9 @@ def _rule_source_configuration(
 ) -> dict[str, object]:
     explicit = [name for name in _REQUIRED_SOURCE_ENV if _env_path(name) is not None]
     configured_root = _env_path(_RULE_SOURCE_ROOT_ENV)
-    if not missing and len(explicit) == len(_REQUIRED_SOURCE_ENV):
+    if discovery_reason == "predecessor_exact_status_paths" and not missing:
+        mode = "predecessor_exact_status_paths"
+    elif not missing and len(explicit) == len(_REQUIRED_SOURCE_ENV):
         mode = "explicit_environment_paths"
     elif not missing and configured_root is not None:
         mode = "auto_discovered_latest_verified_bundle"
@@ -618,6 +669,15 @@ def _default_official_calendar_cache_root() -> Path:
         / "paper_execution_eod_replay"
         / "calendar_cache"
     ).resolve()
+
+
+def _default_portfolio_clock_manifest_path() -> Path:
+    """9/9 durable cumulative Paper clock; daily Rule clock is separate."""
+
+    return (ROOT / "output" / "formal_daily_publications" / "clock_candidate_archive"
+            / "2026-09-09"
+            / "d9852b1985ef89f60479110c1ef7974d7a06ea718c7ceddaf777d5284af571e1"
+            / "clock" / "manifest.json").resolve()
 
 
 def _find_current_verified_pit_denominator(
@@ -767,6 +827,8 @@ def _build_paths(
     source_paths: dict[str, Path],
     publication_root: Path,
     observed: datetime | None = None,
+    runtime_config: Mapping[str, object] | None = None,
+    daily_rule_lineage: Mapping[str, object] | None = None,
 ) -> DailyFormalInputPaths:
     data_root = _data_root().expanduser().resolve()
     output_root = _output_root(data_root).expanduser().resolve()
@@ -783,11 +845,32 @@ def _build_paths(
         "FORMAL_DAILY_FORMAL_LEDGER_PATH",
         "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH",
     )
+    runtime_publications = (
+        runtime_config.get("publication_paths")
+        if isinstance(runtime_config, Mapping)
+        else None
+    )
+    runtime_publications = (
+        runtime_publications if isinstance(runtime_publications, Mapping) else {}
+    )
+    # The active date-scoped config carries exact Rule/PIT publication targets.
+    # They are allowed to be absent before the producer runs, but they must not
+    # be replaced by a latest-file search.  The causal ledger is intentionally
+    # left unset until this invocation emits its hash-scoped run directory.
+    if runtime_config is not None:
+        if formal_rule_history_path is None:
+            value = runtime_publications.get("rule_history_manifest")
+            if isinstance(value, str) and value.strip():
+                formal_rule_history_path = Path(value).expanduser().resolve()
+        if formal_sector_path is None:
+            value = runtime_publications.get("pit_sidecar")
+            if isinstance(value, str) and value.strip():
+                formal_sector_path = Path(value).expanduser().resolve()
     pit_expected_universe_path = _formal_source_path(
         "FORMAL_DAILY_PIT_EXPECTED_UNIVERSE",
         "BALDR_ML_PIT_EXPECTED_UNIVERSE_PATH",
     )
-    if observed is not None:
+    if observed is not None and runtime_config is None:
         if pit_expected_universe_path is None:
             pit_expected_universe_path, _ = _find_current_verified_pit_denominator(
                 publication_root,
@@ -816,6 +899,45 @@ def _build_paths(
         configured_paper_trade_ledger
         or _default_isolated_paper_trade_ledger_path()
     )
+    paper_execution_receipt_root = _env_path("FORMAL_DAILY_PAPER_RECEIPT_ROOT")
+    if paper_execution_receipt_root is None:
+        receipt_root_value = runtime_publications.get("paper_eod_receipt_root")
+        if isinstance(receipt_root_value, str) and receipt_root_value.strip():
+            paper_execution_receipt_root = Path(receipt_root_value).expanduser().resolve()
+    common_identity_path: Path | None = None
+    identity_value = runtime_publications.get("common_identity_manifest")
+    if isinstance(identity_value, str) and identity_value.strip():
+        common_identity_path = Path(identity_value).expanduser().resolve()
+    receipt_paths: dict[str, Path] = {}
+    for environment_name, explicit_name in (
+        (
+            "BALDR_ML_FORMAL_PORTFOLIO_LEDGER_PATH",
+            "FORMAL_DAILY_FORMAL_LEDGER_RECEIPT_PATH",
+        ),
+        (
+            "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH",
+            "FORMAL_DAILY_FORMAL_RULE_HISTORY_RECEIPT_PATH",
+        ),
+        (
+            "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH",
+            "FORMAL_DAILY_FORMAL_SECTOR_RECEIPT_PATH",
+        ),
+    ):
+        explicit_receipt = _env_path(explicit_name)
+        if explicit_receipt is not None:
+            receipt_paths[environment_name] = explicit_receipt.expanduser().resolve()
+    # Rule/PIT publishers use a deterministic sibling receipt next to the
+    # exact configured manifest.  This is a contract path from runtime config,
+    # not a directory scan; if the file is not there the identity producer
+    # remains blocked until the publisher has completed.
+    if formal_rule_history_path is not None and "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH" not in receipt_paths:
+        receipt_paths[
+            "BALDR_ML_FORMAL_RULE_CHAMPION_HISTORY_PATH"
+        ] = formal_rule_history_path.parent / "receipt.json"
+    if formal_sector_path is not None and "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH" not in receipt_paths:
+        receipt_paths[
+            "BALDR_ML_PIT_SECTOR_MEMBERSHIP_PATH"
+        ] = formal_sector_path.parent / "receipt.json"
     return DailyFormalInputPaths(
         output_root=candidate_root,
         development_output_root=development_root,
@@ -824,6 +946,10 @@ def _build_paths(
             or data_root / "sqlite" / "twstock.db"
         ),
         clock_manifest=source_paths.get("FORMAL_DAILY_CLOCK_MANIFEST"),
+        portfolio_clock_manifest=(
+            _env_path("FORMAL_DAILY_PORTFOLIO_CLOCK_MANIFEST")
+            or _default_portfolio_clock_manifest_path()
+        ),
         universe_symbols=source_paths.get("FORMAL_DAILY_UNIVERSE_SYMBOLS"),
         owner_acceptance=source_paths.get("FORMAL_DAILY_OWNER_ACCEPTANCE"),
         formal_ledger_path=formal_ledger_path,
@@ -835,6 +961,7 @@ def _build_paths(
         )
         or _default_paper_snapshot_path(),
         paper_trade_ledger_db_path=paper_trade_ledger,
+        paper_execution_receipt_root=paper_execution_receipt_root,
         publication_root=publication_root,
         pit_expected_universe_path=pit_expected_universe_path,
         pit_history_coverage_start=_env_date(
@@ -851,6 +978,9 @@ def _build_paths(
             "FORMAL_DAILY_CALENDAR_CACHE_ROOT"
         )
         or _default_official_calendar_cache_root(),
+        common_identity_manifest_path=common_identity_path,
+        formal_source_receipt_paths=receipt_paths or None,
+        daily_rule_lineage=daily_rule_lineage,
     )
 
 
@@ -908,6 +1038,198 @@ def _runtime_projection() -> dict[str, object]:
     }
 
 
+def _validate_rule_source_predecessor(
+    runtime_config: Mapping[str, object] | None,
+    *,
+    observed: datetime,
+) -> dict[str, object] | None:
+    """確認 21:25 consumer 確實接到同日 Rule producer predecessor。"""
+
+    if runtime_config is None:
+        return None
+    role_contract = runtime_config.get("role_contract")
+    if not isinstance(role_contract, Mapping):
+        raise FormalRuntimeConfigError("formal_input_role_contract_missing")
+    dependency = role_contract.get("rule_source_predecessor")
+    if not isinstance(dependency, Mapping):
+        raise FormalRuntimeConfigError("rule_source_predecessor_contract_missing")
+    status_path_value = dependency.get("required_status_path")
+    if not isinstance(status_path_value, str) or not status_path_value.strip():
+        raise FormalRuntimeConfigError("rule_source_predecessor_status_path_missing")
+    status_path = Path(status_path_value).expanduser().resolve()
+    try:
+        # Parse and hash the exact same immutable byte snapshot.  Reading text
+        # and then hashing the path separately could accept a status payload
+        # from one scheduler attempt while reporting the hash of a later one.
+        status_bytes = status_path.read_bytes()
+        payload = json.loads(status_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise FormalRuntimeConfigError(
+            f"rule_source_predecessor_status_unreadable:{type(error).__name__}"
+        ) from error
+    if not isinstance(payload, Mapping):
+        raise FormalRuntimeConfigError("rule_source_predecessor_status_invalid")
+    local_date = observed.astimezone(TAIPEI).date().isoformat()
+    if payload.get("taipei_date") != local_date:
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_status_natural_day_mismatch"
+        )
+    raw_exit_code = payload.get("exit_code")
+    if isinstance(raw_exit_code, bool):
+        raise FormalRuntimeConfigError("rule_source_predecessor_exit_code_invalid")
+    if isinstance(raw_exit_code, int):
+        exit_code = raw_exit_code
+    elif isinstance(raw_exit_code, str):
+        try:
+            exit_code = int(raw_exit_code)
+        except ValueError as error:
+            raise FormalRuntimeConfigError(
+                "rule_source_predecessor_exit_code_invalid"
+            ) from error
+    else:
+        raise FormalRuntimeConfigError("rule_source_predecessor_exit_code_invalid")
+    if exit_code != dependency.get("required_exit_code", 0):
+        raise FormalRuntimeConfigError("rule_source_predecessor_exit_code_not_zero")
+    accepted = dependency.get("accepted_statuses")
+    if not isinstance(accepted, list) or payload.get("status") not in accepted:
+        raise FormalRuntimeConfigError("rule_source_predecessor_status_not_accepted")
+    bundle_root = payload.get("bundle_root")
+    if not isinstance(bundle_root, str) or not bundle_root.strip():
+        raise FormalRuntimeConfigError("rule_source_predecessor_bundle_missing")
+    bundle_path = Path(bundle_root).expanduser().resolve()
+    configured_root_value = dependency.get("source_root")
+    configured_root = (
+        Path(configured_root_value).expanduser().resolve()
+        if isinstance(configured_root_value, str) and configured_root_value.strip()
+        else _env_path(_RULE_SOURCE_ROOT_ENV)
+    )
+    if configured_root is not None:
+        try:
+            bundle_path.relative_to(configured_root)
+        except ValueError as error:
+            raise FormalRuntimeConfigError(
+                "rule_source_predecessor_bundle_outside_configured_root"
+            ) from error
+    source_paths: dict[str, str] = {}
+    for name, field in (
+        ("FORMAL_DAILY_CLOCK_MANIFEST", "clock_manifest"),
+        ("FORMAL_DAILY_UNIVERSE_SYMBOLS", "universe_symbols"),
+        ("FORMAL_DAILY_OWNER_ACCEPTANCE", "owner_acceptance"),
+    ):
+        value = payload.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise FormalRuntimeConfigError(
+                f"rule_source_predecessor_{field}_missing"
+            )
+        path = Path(value).expanduser().resolve()
+        try:
+            path.relative_to(bundle_path)
+        except ValueError as error:
+            raise FormalRuntimeConfigError(
+                f"rule_source_predecessor_{field}_outside_bundle"
+            ) from error
+        if not path.is_file():
+            raise FormalRuntimeConfigError(
+                f"rule_source_predecessor_{field}_file_missing"
+            )
+        source_paths[name] = str(path)
+    market_db = _env_path("FORMAL_DAILY_MARKET_DB")
+    if market_db is None:
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_market_db_environment_missing"
+        )
+    try:
+        consumer_validation = _validate_exact_rule_source_bundle(
+            bundle_path,
+            market_db=market_db,
+            observed=observed,
+        )
+    except Exception as error:  # noqa: BLE001 - scheduler boundary is fail closed
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_consumer_rejected:"
+            f"{_rule_source_error_detail(error)}"
+        ) from error
+    consumer_source_hash = consumer_validation.get("source_window_hash")
+    status_source_hash = payload.get("source_window_hash")
+    if not isinstance(consumer_source_hash, str):
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_consumer_source_window_hash_missing"
+        )
+    if status_source_hash != consumer_source_hash:
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_source_window_hash_mismatch"
+        )
+    return {
+        "task": dependency.get("task"),
+        "status_path": str(status_path),
+        "status_file_hash": "sha256:" + hashlib.sha256(status_bytes).hexdigest(),
+        "status": payload.get("status"),
+        "exit_code": exit_code,
+        "taipei_date": payload.get("taipei_date"),
+        "bundle_root": str(bundle_path),
+        "source_paths": source_paths,
+        "source_window_hash": consumer_source_hash,
+        "source_window_hash_verified_against_market_db": True,
+        "source_window_persisted": consumer_validation.get(
+            "source_window_persisted"
+        )
+        is True,
+        "source_window_path": consumer_validation.get("source_window_path"),
+        "consumer_validation_status": consumer_validation.get("status"),
+    }
+
+
+def _daily_rule_lineage_from_predecessor(
+    predecessor: Mapping[str, object] | None,
+    *,
+    observed: datetime,
+) -> dict[str, object] | None:
+    """由已驗證 predecessor 的 exact clock／window 建立 daily Rule lineage。"""
+
+    if predecessor is None:
+        return None
+    source_paths = predecessor.get("source_paths")
+    if not isinstance(source_paths, Mapping):
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_lineage_paths_missing"
+        )
+    clock_value = source_paths.get("FORMAL_DAILY_CLOCK_MANIFEST")
+    if not isinstance(clock_value, str) or not clock_value.strip():
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_lineage_clock_missing"
+        )
+    clock_path = Path(clock_value).expanduser().resolve()
+    try:
+        clock = load_clock_manifest_for_capture(clock_path, now=observed)
+    except Exception as error:  # noqa: BLE001 - wrapper remains fail closed
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_lineage_clock_rejected:"
+            + _rule_source_error_detail(error)
+        ) from error
+    source_window_hash = predecessor.get("source_window_hash")
+    if not isinstance(source_window_hash, str) or not source_window_hash.strip():
+        raise FormalRuntimeConfigError(
+            "rule_source_predecessor_lineage_source_window_missing"
+        )
+    return {
+        "clock_id": clock.clock_id,
+        "clock_manifest_hash": clock.manifest_hash,
+        "activation_trading_day": clock.activation_trading_day.isoformat(),
+        "universe_hash": clock.payload.get("universe_hash"),
+        "source_window_hash": source_window_hash,
+        "policy_hash": clock.payload.get("policy_hash"),
+        "source_bundle_path": predecessor.get("bundle_root"),
+        "source_bundle_status_file_hash": predecessor.get("status_file_hash"),
+        "source_window_verified_against_market_db": predecessor.get(
+            "source_window_hash_verified_against_market_db"
+        )
+        is True,
+        "source_window_persisted": predecessor.get("source_window_persisted")
+        is True,
+        "source_window_path": predecessor.get("source_window_path"),
+    }
+
+
 def _append_attempt_log(path: Path, payload: dict[str, object]) -> None:
     """以 append-only JSONL 保存每次排程結果與 exit code。"""
 
@@ -926,17 +1248,79 @@ def run_from_environment(
 ) -> tuple[dict[str, object], int]:
     observed = datetime.now(timezone.utc)
     observed_at = observed.isoformat()
-    source_paths, missing, discovery_reason = _resolve_required_source_paths(
-        observed=observed
-    )
+    runtime_config: dict[str, object] | None = None
+    runtime_config_error: str | None = None
+    try:
+        runtime_config = load_optional_formal_runtime_config(
+            role="formal_input_wrapper",
+            observed=observed,
+        )
+    except FormalRuntimeConfigError as error:
+        runtime_config_error = str(error)
+    source_paths: dict[str, Path] = {}
+    missing: list[str] = list(_REQUIRED_SOURCE_ENV)
+    discovery_reason: str | None = "not_attempted"
     status_path = status_root / "latest_status.json"
     attempt_log_path = status_root / "attempts.jsonl"
     runtime = _runtime_projection()
+    runtime["formal_runtime_config"] = (
+        runtime_config
+        if runtime_config is not None
+        else {
+            "status": "absent" if runtime_config_error is None else "invalid",
+            "environment_variable": FORMAL_RUNTIME_CONFIG_ENV,
+            "error": runtime_config_error,
+        }
+    )
+    rule_source_predecessor: dict[str, object] | None = None
     try:
+        if runtime_config_error is not None:
+            raise FormalRuntimeConfigError(runtime_config_error)
+        if (
+            runtime_config is not None
+            and runtime_config.get("activation_status") != "active"
+        ):
+            raise FormalRuntimeConfigError(
+                "runtime_config_waiting_for_activation:"
+                f"{runtime_config.get('activation_trading_day')}"
+            )
+        rule_source_predecessor = _validate_rule_source_predecessor(
+            runtime_config,
+            observed=observed,
+        )
+        if rule_source_predecessor is not None:
+            raw_source_paths = rule_source_predecessor.get("source_paths")
+            if not isinstance(raw_source_paths, Mapping):
+                raise FormalRuntimeConfigError(
+                    "rule_source_predecessor_source_paths_missing"
+                )
+            source_paths = {
+                name: Path(value).expanduser().resolve()
+                for name, value in raw_source_paths.items()
+                if name in _REQUIRED_SOURCE_ENV and isinstance(value, str)
+            }
+            missing = [
+                name for name in _REQUIRED_SOURCE_ENV if name not in source_paths
+            ]
+            if missing:
+                raise FormalRuntimeConfigError(
+                    "rule_source_predecessor_source_paths_partial"
+                )
+            discovery_reason = "predecessor_exact_status_paths"
+        else:
+            source_paths, missing, discovery_reason = _resolve_required_source_paths(
+                observed=observed
+            )
+        daily_rule_lineage = _daily_rule_lineage_from_predecessor(
+            rule_source_predecessor,
+            observed=observed,
+        )
         paths = _build_paths(
             source_paths=source_paths,
             publication_root=publication_root,
             observed=observed,
+            runtime_config=runtime_config,
+            daily_rule_lineage=daily_rule_lineage,
         )
         result = run_daily_formal_input_producer(paths)
         status = {
@@ -1018,6 +1402,7 @@ def run_from_environment(
                         else "missing_current_day_verified_sidecar"
                     )
                 ),
+                "rule_source_predecessor": rule_source_predecessor,
             },
             "schedule_exit_policy": (
                 "zero_only_for_formal_inputs_machine_verified;"
@@ -1083,6 +1468,7 @@ def run_from_environment(
                 ),
                 "pit_expected_universe_resolution": "unavailable_due_to_runner_error",
                 "formal_pit_sidecar_resolution": "unavailable_due_to_runner_error",
+                "rule_source_predecessor": rule_source_predecessor,
             },
             "schedule_exit_policy": (
                 "zero_only_for_formal_inputs_machine_verified;"

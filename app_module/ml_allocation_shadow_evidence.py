@@ -18,7 +18,7 @@ sklearn 等模型內部浮點邊界不在本模組內；所有持久化金融數
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_EVEN, ROUND_HALF_UP
 import hashlib
 import json
@@ -76,6 +76,42 @@ def _payload_hash(payload: object) -> str:
     return "sha256:" + hashlib.sha256(
         _canonical_json(payload).encode("utf-8")
     ).hexdigest()
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _normalize_deadline(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("natural forward deadline must contain a timezone")
+    return value.astimezone(timezone.utc)
+
+
+def _normalize_availability_cutoff(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("availability cutoff must contain a timezone")
+    return value.astimezone(timezone.utc)
+
+
+def _available_by(
+    value: str,
+    *,
+    cutoff: datetime | None,
+) -> bool:
+    if cutoff is None:
+        return True
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("market row available_at is invalid") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("market row available_at must contain a timezone")
+    return parsed.astimezone(timezone.utc) <= cutoff
 
 
 def _file_hash(path: Path) -> str:
@@ -1297,10 +1333,16 @@ def _signal_from_payload(raw: Mapping[str, Any]) -> MLAllocationSignalRow:
 class ShadowEvidenceRepository:
     """INSERT-only sidecar；records 以內容 hash 為主鍵。"""
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        *,
+        ensure_schema: bool = True,
+    ) -> None:
         self.path = database_path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._ensure_schema()
+        if ensure_schema:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._ensure_schema()
 
     def append_observation(
         self,
@@ -1308,9 +1350,20 @@ class ShadowEvidenceRepository:
         decision_date: str,
         custody_hash: str,
         payload: Mapping[str, object],
+        natural_forward_deadline_at: datetime | None = None,
     ) -> tuple[dict[str, object], bool]:
+        deadline = _normalize_deadline(natural_forward_deadline_at)
+        if deadline is not None and _utc_now() > deadline:
+            raise TimeoutError(
+                "natural forward observation append deadline has passed"
+            )
         with sqlite3.connect(self.path) as connection:
             connection.row_factory = sqlite3.Row
+            if deadline is not None:
+                # Hold the write lock while checking the deadline and inserting
+                # the row.  A post-insert check below causes the context manager
+                # to rollback if the real emission crosses the cutoff.
+                connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """
                 SELECT payload_json
@@ -1348,6 +1401,10 @@ class ShadowEvidenceRepository:
                 **body,
                 "record_hash": _payload_hash(body),
             }
+            if deadline is not None and _utc_now() > deadline:
+                raise TimeoutError(
+                    "natural forward observation append deadline has passed"
+                )
             try:
                 connection.execute(
                     """
@@ -1363,6 +1420,10 @@ class ShadowEvidenceRepository:
                         _canonical_json(record),
                     ),
                 )
+                if deadline is not None and _utc_now() > deadline:
+                    raise TimeoutError(
+                        "natural forward observation emission crossed deadline"
+                    )
             except sqlite3.IntegrityError:
                 existing = connection.execute(
                     """
@@ -1652,7 +1713,7 @@ class MLAllocationShadowCollector:
         self,
         *,
         market_database_path: Path,
-        paper_state_db_path: Path,
+        paper_state_db_path: Path | None,
         sidecar_database_path: Path,
         artifact_root: Path,
         portfolio_id: str = "paper-main",
@@ -1660,6 +1721,7 @@ class MLAllocationShadowCollector:
         promotion_reference_path: Path | None = None,
         promotion_reference_file_hash: str | None = None,
         official_market_event_pointer_path: Path | None = None,
+        ensure_sidecar_schema: bool = True,
     ) -> None:
         if (promotion_reference_path is None) != (
             promotion_reference_file_hash is None
@@ -1669,7 +1731,10 @@ class MLAllocationShadowCollector:
             )
         self._market = SQLiteTMinusOneMarketReader(market_database_path)
         self._paper_state_db_path = paper_state_db_path
-        self._repository = ShadowEvidenceRepository(sidecar_database_path)
+        self._repository = ShadowEvidenceRepository(
+            sidecar_database_path,
+            ensure_schema=ensure_sidecar_schema,
+        )
         self._artifact_root = artifact_root
         self._portfolio_id = portfolio_id
         self._policy = policy or PaperPortfolioPolicyConfig()
@@ -1696,6 +1761,33 @@ class MLAllocationShadowCollector:
             )
         )
 
+    @classmethod
+    def for_maturity_refresh(
+        cls,
+        *,
+        market_database_path: Path,
+        sidecar_database_path: Path,
+        artifact_root: Path,
+        official_market_event_pointer_path: Path | None = None,
+    ) -> "MLAllocationShadowCollector":
+        """建立只做既有 outcome 成熟評估的 collector。
+
+        成熟回填不需要 Paper ledger，也不得藉此建立新的 observation。
+        將 ``paper_state_db_path`` 固定為 ``None`` 讓這個邊界由型別與
+        ``record_and_mature`` 的明確檢查共同守住。
+        """
+
+        return cls(
+            market_database_path=market_database_path,
+            paper_state_db_path=None,
+            sidecar_database_path=sidecar_database_path,
+            artifact_root=artifact_root,
+            official_market_event_pointer_path=(
+                official_market_event_pointer_path
+            ),
+            ensure_sidecar_schema=False,
+        )
+
     def record_and_mature(
         self,
         *,
@@ -1713,7 +1805,12 @@ class MLAllocationShadowCollector:
         model_artifact_path: Path | None = None,
         post_freeze_rows: Sequence[PortfolioMLDatasetRow] = (),
         post_freeze_input_hash: str | None = None,
+        natural_forward_deadline_at: datetime | None = None,
+        available_at_cutoff: datetime | None = None,
     ) -> dict[str, object]:
+        natural_forward_deadline = _normalize_deadline(
+            natural_forward_deadline_at
+        )
         if strict_t_minus_one >= decision_date:
             raise ValueError("market context must be strictly before decision_date")
         if _file_hash(proposal_path) != proposal_file_hash:
@@ -1753,8 +1850,13 @@ class MLAllocationShadowCollector:
             raise ValueError(
                 "post-freeze promotion inputs require a frozen reference"
             )
+        paper_state_db_path = self._paper_state_db_path
+        if paper_state_db_path is None:
+            raise RuntimeError(
+                "paper state db is required for observation recording"
+            )
         ledger = load_t_minus_one_paper_ledger(
-            state_db_path=self._paper_state_db_path,
+            state_db_path=paper_state_db_path,
             portfolio_id=self._portfolio_id,
             decision_date=decision_date,
         )
@@ -1916,6 +2018,13 @@ class MLAllocationShadowCollector:
                 else None
             ),
         }
+        emitted_at: datetime | None = None
+        if natural_forward_deadline is not None:
+            emitted_at = _utc_now()
+            if emitted_at > natural_forward_deadline:
+                raise TimeoutError(
+                    "natural forward observation append deadline has passed"
+                )
         custody_hash = _payload_hash(custody_payload)
         observation_payload: dict[str, object] = {
             "decision_at": f"{decision_date.isoformat()}T08:30:00+08:00",
@@ -2011,18 +2120,41 @@ class MLAllocationShadowCollector:
                 for lane in lanes
             ),
         }
+        if emitted_at is not None:
+            observation_payload["emitted_at"] = emitted_at.isoformat(
+                timespec="microseconds"
+            )
         record, idempotent = self._repository.append_observation(
             decision_date=decision_date.isoformat(),
             custody_hash=custody_hash,
             payload=observation_payload,
+            natural_forward_deadline_at=natural_forward_deadline,
         )
         observation_path = self._write_immutable_record(
             record,
             prefix="observation",
         )
-        evidence = self.mature_and_summarize(
-            cutoff_date=strict_t_minus_one
+        maturity_availability_cutoff = _normalize_availability_cutoff(
+            available_at_cutoff
         )
+        if maturity_availability_cutoff is None:
+            maturity_availability_cutoff = _utc_now()
+        if natural_forward_deadline is not None:
+            # A forward observation has a hard emission deadline.  Keep the
+            # post-append outcome scan out of that critical path; the common
+            # orchestration status exit performs the same maturity refresh
+            # with the real completion clock after the observation is safely
+            # emitted.
+            evidence = self._write_evidence(
+                self._aggregate_evidence(cutoff_date=strict_t_minus_one)
+            )
+            maturity_deferred_for_forward_deadline = True
+        else:
+            evidence = self.mature_and_summarize(
+                cutoff_date=strict_t_minus_one,
+                available_at_cutoff=maturity_availability_cutoff,
+            )
+            maturity_deferred_for_forward_deadline = False
         recorded_lanes = _require_sequence(record["lanes"], "record.lanes")
         rule_lane = _require_mapping(recorded_lanes[0], "record.lanes[0]")
         rule_advice = _require_mapping(
@@ -2060,6 +2192,18 @@ class MLAllocationShadowCollector:
             "observation_revision": record["revision"],
             "observation_hash": record["record_hash"],
             "observation_path": str(observation_path.resolve()),
+            "observation_emitted_at": record.get("emitted_at"),
+            "natural_forward_deadline_at": (
+                natural_forward_deadline.isoformat(timespec="microseconds")
+                if natural_forward_deadline is not None
+                else None
+            ),
+            "maturity_available_at_cutoff": evidence.get(
+                "available_at_cutoff"
+            ),
+            "maturity_deferred_for_forward_deadline": (
+                maturity_deferred_for_forward_deadline
+            ),
             "sidecar_database_path": str(self._repository.path.resolve()),
             "lane_count": len(lanes),
             "lane_alphas_bp": list(SHADOW_ALPHA_LANES_BP),
@@ -2111,7 +2255,12 @@ class MLAllocationShadowCollector:
         self,
         *,
         cutoff_date: date,
+        available_at_cutoff: datetime | None = None,
     ) -> dict[str, object]:
+        normalized_availability_cutoff = _normalize_availability_cutoff(
+            available_at_cutoff
+        )
+        outcome_record_count_before = len(self._repository.outcomes())
         corporate_action_custody = _load_official_market_event_custody(
             self._official_market_event_pointer_path
         )
@@ -2124,6 +2273,7 @@ class MLAllocationShadowCollector:
                 observation=observation,
                 cutoff_date=cutoff_date,
                 corporate_action_custody=corporate_action_custody,
+                available_at_cutoff=normalized_availability_cutoff,
             )
             if outcome is None:
                 continue
@@ -2144,7 +2294,21 @@ class MLAllocationShadowCollector:
             )
             self._write_immutable_record(record, prefix="outcome")
         summary = self._aggregate_evidence(cutoff_date=cutoff_date)
-        return self._write_evidence(summary)
+        evidence = self._write_evidence(summary)
+        outcome_record_count_after = len(self._repository.outcomes())
+        return {
+            **evidence,
+            "outcome_record_count_before": outcome_record_count_before,
+            "outcome_record_count_after": outcome_record_count_after,
+            "outcome_records_appended": (
+                outcome_record_count_after - outcome_record_count_before
+            ),
+            "available_at_cutoff": (
+                normalized_availability_cutoff.isoformat()
+                if normalized_availability_cutoff is not None
+                else None
+            ),
+        }
 
     def _mature_one(
         self,
@@ -2152,6 +2316,7 @@ class MLAllocationShadowCollector:
         observation: Mapping[str, object],
         cutoff_date: date,
         corporate_action_custody: OfficialMarketEventCustody,
+        available_at_cutoff: datetime | None = None,
     ) -> dict[str, object] | None:
         decision_date = date.fromisoformat(
             _require_text(
@@ -2201,6 +2366,14 @@ class MLAllocationShadowCollector:
                     cutoff_date=cutoff_date,
                     limit=max(PROMOTION_HORIZONS),
                 )
+                sessions = tuple(
+                    row
+                    for row in sessions
+                    if _available_by(
+                        row.available_at,
+                        cutoff=available_at_cutoff,
+                    )
+                )
                 if not sessions:
                     blockers.append(f"{symbol}:stock_session_calendar_missing")
                     continue
@@ -2215,6 +2388,14 @@ class MLAllocationShadowCollector:
                 benchmark_rows = self._market.read_taiex_rows(
                     observed_dates=required_benchmark_dates
                 )
+                benchmark_rows = {
+                    observed_date: row
+                    for observed_date, row in benchmark_rows.items()
+                    if _available_by(
+                        row.available_at,
+                        cutoff=available_at_cutoff,
+                    )
+                }
                 for horizon in PROMOTION_HORIZONS:
                     if len(sessions) < horizon:
                         blockers.append(

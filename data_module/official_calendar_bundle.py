@@ -9,6 +9,7 @@ writes market data.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -41,13 +42,20 @@ class OfficialCalendarBundleError(ValueError):
 
 @dataclass(frozen=True)
 class CapturedCalendarResponse:
-    """One immutable raw response and its provenance fingerprint."""
+    """One immutable response and the fingerprint of its captured raw bytes.
+
+    ``raw_bytes`` is optional for compatibility with older in-memory callers,
+    but every network capture and fixture loaded by this module supplies it.
+    A response hash is never reconstructed from a decoded/re-encoded payload.
+    """
 
     kind: str
     key: str
     source: str
     source_hash: str
     payload: object
+    raw_bytes: bytes | None = None
+    metadata: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in {"twse", "tpex"}:
@@ -60,6 +68,17 @@ class CapturedCalendarResponse:
             raise OfficialCalendarBundleError(
                 "response source_hash must be sha256: plus 64 lowercase hex"
             )
+        if self.raw_bytes is not None:
+            if not isinstance(self.raw_bytes, bytes) or not self.raw_bytes:
+                raise OfficialCalendarBundleError(
+                    "response raw_bytes must be non-empty bytes"
+                )
+            if hash_response_bytes(self.raw_bytes) != self.source_hash:
+                raise OfficialCalendarBundleError(
+                    "response source_hash does not match captured raw_bytes"
+                )
+        if self.metadata is not None and not isinstance(self.metadata, Mapping):
+            raise OfficialCalendarBundleError("response metadata must be an object")
 
 
 def hash_response_bytes(raw: bytes) -> str:
@@ -191,19 +210,11 @@ def build_official_calendar_bundle(
         "formal_clock_created": False,
         "source_responses": {
             "twse": [
-                {
-                    "year": year,
-                    "source": response.source,
-                    "source_hash": response.source_hash,
-                }
+                _response_source_record(response, identity_field="year", identity=year)
                 for year, response in sorted(twse_responses.items())
             ],
             "tpex": [
-                {
-                    "month": month,
-                    "source": response.source,
-                    "source_hash": response.source_hash,
-                }
+                _response_source_record(response, identity_field="month", identity=month)
                 for month, response in sorted(tpex_responses.items())
             ],
         },
@@ -255,6 +266,11 @@ def load_fixture_response(path: Path, *, kind: str) -> CapturedCalendarResponse:
         source=f"{source} (fixture:{resolved})",
         source_hash=hash_response_bytes(raw),
         payload=payload,
+        raw_bytes=raw,
+        metadata={
+            "capture_mode": "fixture_only",
+            "fixture_path": str(resolved),
+        },
     )
 
 
@@ -286,6 +302,145 @@ def write_candidate_bundle(path: Path, bundle: Mapping[str, object]) -> str:
             "candidate bundle output already exists; choose a new path"
         ) from error
     return hash_response_bytes(encoded)
+
+
+def write_raw_response_evidence(
+    root: Path,
+    responses: Mapping[str, CapturedCalendarResponse],
+) -> dict[str, object]:
+    """Persist the exact response bytes and metadata in a create-only bundle.
+
+    The raw files are written byte-for-byte from ``CapturedCalendarResponse``.
+    This function intentionally has no payload serialization fallback, and it
+    is restricted to the operating-system TEMP directory like the candidate
+    bundle writer.  The returned manifest can be bound into the candidate
+    bundle after all sidecars have been written.
+    """
+
+    resolved = root.expanduser().resolve()
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    try:
+        resolved.relative_to(temp_root)
+    except ValueError as error:
+        raise OfficialCalendarBundleError(
+            "raw response evidence output must be under the operating-system TEMP directory"
+        ) from error
+    if not resolved.parent.exists():
+        raise OfficialCalendarBundleError(
+            "raw response evidence parent directory must already exist"
+        )
+    if resolved.exists():
+        raise OfficialCalendarBundleError(
+            "raw response evidence output already exists; choose a new path"
+        )
+    if not isinstance(responses, Mapping) or not responses:
+        raise OfficialCalendarBundleError("raw response evidence responses must be non-empty")
+
+    try:
+        resolved.mkdir()
+    except FileExistsError as error:
+        raise OfficialCalendarBundleError(
+            "raw response evidence output already exists; choose a new path"
+        ) from error
+
+    entries: list[dict[str, object]] = []
+    for label, response in sorted(responses.items(), key=lambda item: str(item[0])):
+        if not isinstance(response, CapturedCalendarResponse):
+            raise OfficialCalendarBundleError(
+                f"raw response evidence {label} has invalid response type"
+            )
+        raw = response.raw_bytes
+        if raw is None:
+            raise OfficialCalendarBundleError(
+                f"raw response evidence {label} lacks captured raw bytes"
+            )
+        raw_hash = hash_response_bytes(raw)
+        if raw_hash != response.source_hash:
+            raise OfficialCalendarBundleError(
+                f"raw response evidence {label} hash does not match source_hash"
+            )
+        safe_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", response.key)
+        raw_name = f"{response.kind}_{safe_key}.response.bin"
+        metadata_name = f"{response.kind}_{safe_key}.metadata.json"
+        raw_path = resolved / raw_name
+        metadata_path = resolved / metadata_name
+        metadata = {
+            "schema_version": "official-calendar-raw-response.v1",
+            "kind": response.kind,
+            "key": response.key,
+            "source": response.source,
+            "source_hash": response.source_hash,
+            "raw_file": raw_name,
+            "raw_size_bytes": len(raw),
+            "metadata": _json_safe_mapping(response.metadata),
+            "read_only": True,
+            "formal_clock_created": False,
+            "formal_oos_allowed": False,
+            "production_scheduler_allowed": False,
+            "broker_order_allowed": False,
+        }
+        try:
+            with raw_path.open("xb") as handle:
+                handle.write(raw)
+            metadata_bytes = (
+                json.dumps(metadata, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            with metadata_path.open("xb") as handle:
+                handle.write(metadata_bytes)
+        except FileExistsError as error:
+            raise OfficialCalendarBundleError(
+                "raw response evidence file already exists; choose a new path"
+            ) from error
+        entries.append(
+            {
+                "label": str(label),
+                "kind": response.kind,
+                "key": response.key,
+                "source": response.source,
+                "source_hash": response.source_hash,
+                "raw_file": raw_name,
+                "raw_file_hash": hash_response_bytes(raw),
+                "raw_size_bytes": len(raw),
+                "metadata_file": metadata_name,
+                "metadata_file_hash": hash_response_bytes(metadata_bytes),
+            }
+        )
+
+    manifest: dict[str, object] = {
+        "schema_version": "official-calendar-raw-evidence-manifest.v1",
+        "entries": entries,
+        "entry_count": len(entries),
+        "safety": {
+            "read_only": True,
+            "market_db_written": False,
+            "formal_paths_written": False,
+            "formal_clock_created": False,
+            "formal_oos_allowed": False,
+            "production_scheduler_allowed": False,
+            "broker_order_allowed": False,
+            "secret_values_emitted": False,
+        },
+    }
+    manifest["manifest_hash"] = payload_hash(manifest)
+    manifest_path = resolved / "manifest.json"
+    encoded = (
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    try:
+        with manifest_path.open("xb") as handle:
+            handle.write(encoded)
+    except FileExistsError as error:
+        raise OfficialCalendarBundleError(
+            "raw response evidence manifest already exists; choose a new path"
+        ) from error
+    return {
+        "schema_version": str(manifest["schema_version"]),
+        "manifest_path": str(manifest_path),
+        "manifest_file_hash": hash_response_bytes(encoded),
+        "manifest_hash": str(manifest["manifest_hash"]),
+        "entry_count": len(entries),
+        "entries": entries,
+    }
 
 
 def fetch_network_responses(
@@ -320,6 +475,12 @@ def fetch_network_responses(
             source=f"{TWSE_HOLIDAY_SCHEDULE_URL}?queryYear={roc_year}",
             source_hash=hash_response_bytes(raw),
             payload=payload,
+            raw_bytes=raw,
+            metadata=_response_metadata(
+                response,
+                source=f"{TWSE_HOLIDAY_SCHEDULE_URL}?queryYear={roc_year}",
+                params={"queryYear": str(roc_year)},
+            ),
         )
 
     tpex: dict[str, CapturedCalendarResponse] = {}
@@ -343,6 +504,12 @@ def fetch_network_responses(
             source=f"{TPEX_MARKET_CALENDAR_URL}?ym={month}&lang=zh-tw",
             source_hash=hash_response_bytes(raw),
             payload=payload,
+            raw_bytes=raw,
+            metadata=_response_metadata(
+                response,
+                source=f"{TPEX_MARKET_CALENDAR_URL}?ym={month}&lang=zh-tw",
+                params={"ym": month, "lang": "zh-tw"},
+            ),
         )
     return twse, tpex
 
@@ -489,9 +656,105 @@ def _response_bytes(response: Any, payload: object) -> bytes:
     raw = getattr(response, "content", None)
     if isinstance(raw, bytes) and raw:
         return raw
-    return json.dumps(
-        payload,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    # ``payload`` is intentionally unused.  Re-serializing a decoded object
+    # changes whitespace/key order/encoding and cannot prove custody of the
+    # bytes returned by the official endpoint.
+    del payload
+    raise OfficialCalendarBundleError(
+        "official response content bytes are unavailable; raw custody cannot be proven"
+    )
+
+
+def _response_source_record(
+    response: CapturedCalendarResponse,
+    *,
+    identity_field: str,
+    identity: int | str,
+) -> dict[str, object]:
+    record: dict[str, object] = {
+        identity_field: identity,
+        "source": response.source,
+        "source_hash": response.source_hash,
+    }
+    raw = response.raw_bytes
+    if raw is not None:
+        raw_hash = hash_response_bytes(raw)
+        if raw_hash != response.source_hash:
+            raise OfficialCalendarBundleError(
+                f"{response.kind} {response.key} raw bytes do not match source_hash"
+            )
+        record["raw_response"] = {
+            "encoding": "base64",
+            "sha256": raw_hash,
+            "size_bytes": len(raw),
+            "content_base64": base64.b64encode(raw).decode("ascii"),
+            "metadata": _json_safe_mapping(response.metadata),
+        }
+    return record
+
+
+def _json_safe_mapping(value: Mapping[str, object] | None) -> dict[str, object]:
+    """Keep response metadata JSON-safe without copying response bodies."""
+
+    if value is None:
+        return {}
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        name = str(key)
+        if item is None or isinstance(item, (str, int, float, bool)):
+            result[name] = item
+        elif isinstance(item, Mapping):
+            result[name] = _json_safe_mapping(item)
+        elif isinstance(item, (list, tuple)):
+            result[name] = [
+                _json_safe_value(entry)
+                for entry in item
+            ]
+        else:
+            result[name] = str(item)
+    return result
+
+
+def _json_safe_value(value: object) -> object:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return _json_safe_mapping(value)
+    if isinstance(value, (list, tuple)):
+        return [_json_safe_value(item) for item in value]
+    return str(value)
+
+
+def _response_metadata(
+    response: Any,
+    *,
+    source: str,
+    params: Mapping[str, str],
+) -> dict[str, object]:
+    """Capture non-secret HTTP provenance beside the exact raw response."""
+
+    headers = getattr(response, "headers", None)
+    selected_headers: dict[str, str] = {}
+    if isinstance(headers, Mapping):
+        allowed = {
+            "content-type",
+            "content-length",
+            "date",
+            "etag",
+            "last-modified",
+            "server",
+        }
+        for key, value in headers.items():
+            if str(key).casefold() in allowed:
+                selected_headers[str(key).lower()] = str(value)
+    response_url = getattr(response, "url", None)
+    captured_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "provider": "TWSE" if "twse" in source.casefold() else "TPEX",
+        "endpoint": source.split("?", 1)[0],
+        "request_params": {str(key): str(value) for key, value in params.items()},
+        "request_url": str(response_url) if response_url else source,
+        "http_status": getattr(response, "status_code", None),
+        "response_headers": selected_headers,
+        "captured_at_utc": captured_at,
+    }

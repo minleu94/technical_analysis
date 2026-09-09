@@ -14,6 +14,15 @@ sys.path.append(str(project_root))
 
 from data_module.config import TWStockConfig
 from data_module.data_loader import DataLoader
+from data_module.official_trading_calendar import (
+    OfficialTradingCalendar,
+    OfficialTradingCalendarError,
+)
+
+
+def _default_calendar_cache_path() -> Path | None:
+    cache = project_root / "output" / "paper_execution_eod_replay" / "calendar_cache"
+    return cache if cache.is_dir() else None
 
 
 def _format_update_diagnostic(diagnostic: dict[str, object]) -> str:
@@ -33,12 +42,25 @@ def setup_logging():
     )
     return logging.getLogger(__name__)
 
-def is_trading_day(date: datetime) -> bool:
-    """檢查是否為交易日（排除週末）"""
-    # 週一=0, 週日=6
-    return date.weekday() < 5  # 週一到週五
+def is_trading_day(
+    value: datetime,
+    *,
+    calendar: OfficialTradingCalendar | None = None,
+) -> bool:
+    """以官方日曆判定交易日；日曆未知時維持 fail-closed。"""
 
-def get_trading_days(start_date: str, end_date: str = None) -> list:
+    resolver = calendar or OfficialTradingCalendar(
+        calendar_cache_path=_default_calendar_cache_path(),
+    )
+    result, _reason = resolver.is_official_trading_day(value.date())
+    return result is True
+
+def get_trading_days(
+    start_date: str,
+    end_date: str = None,
+    *,
+    calendar: OfficialTradingCalendar | None = None,
+) -> list[str]:
     """獲取交易日列表
     
     Args:
@@ -51,18 +73,28 @@ def get_trading_days(start_date: str, end_date: str = None) -> list:
     start = datetime.strptime(start_date, '%Y-%m-%d')
     end = datetime.strptime(end_date, '%Y-%m-%d')
     
+    resolver = calendar or OfficialTradingCalendar(
+        calendar_cache_path=_default_calendar_cache_path(),
+    )
+    records = resolver.require_trading_days_in_range(
+        start.date(),
+        end.date(),
+        allow_online_probe=True,
+    )
     trading_days = []
-    current = start
-    
-    while current <= end:
-        if is_trading_day(current):
-            trading_days.append(current.strftime('%Y-%m-%d'))
-        current += timedelta(days=1)
+    for record in records:
+        if record.get("is_trading_day") is True:
+            trading_days.append(str(record["date_str"]))
     
     return trading_days
 
-def batch_update_daily_data(start_date: str, end_date: str = None, 
-                            delay_min: float = 4.0, delay_max: float = 4.0):
+def batch_update_daily_data(
+    start_date: str,
+    end_date: str = None,
+    delay_min: float = 4.0,
+    delay_max: float = 4.0,
+    config: TWStockConfig | None = None,
+):
     """批量更新每日股票數據
     
     Args:
@@ -72,11 +104,23 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
         delay_max: 最大延遲時間（秒）
     """
     logger = setup_logging()
-    config = TWStockConfig()
+    config = config or TWStockConfig()
     loader = DataLoader(config)
     
     # 獲取交易日列表
-    trading_days = get_trading_days(start_date, end_date)
+    try:
+        trading_days = get_trading_days(
+            start_date,
+            end_date,
+            calendar=OfficialTradingCalendar(
+                db_path=config.db_file,
+                calendar_cache_path=_default_calendar_cache_path(),
+            ),
+        )
+    except OfficialTradingCalendarError as exc:
+        logger.error("官方交易日曆無法解析，停止批次更新：%s", exc)
+        print(f"[UPDATE_SUMMARY] SUCCESS: 0 days, SKIPPED_NO_DATA: 0 days, FAILED: 1 days", flush=True)
+        return False
     
     if not trading_days:
         logger.warning("沒有找到需要更新的交易日")
@@ -85,7 +129,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
         logger.info("成功: 0 天（範圍內沒有交易日）")
         logger.info("失敗: 0 天")
         logger.info("=" * 60)
-        return
+        return True
     
     logger.info(f"準備更新從 {start_date} 到 {end_date or '今天'} 的股票數據")
     logger.info(f"共 {len(trading_days)} 個交易日需要更新")
@@ -168,6 +212,7 @@ def batch_update_daily_data(start_date: str, end_date: str = None,
         f"SKIPPED_NO_DATA: {len(skipped_no_data_dates)} days, FAILED: {fail_count} days",
         flush=True,
     )
+    return fail_count == 0
 
 def main():
     """主函數"""
@@ -211,6 +256,8 @@ def main():
         default=4.0,
         help='最大延遲時間（秒），預設 4.0'
     )
+    parser.add_argument('--data-root', type=str, help='覆蓋資料根目錄')
+    parser.add_argument('--output-root', type=str, help='覆蓋輸出根目錄')
     
     args = parser.parse_args()
     
@@ -232,12 +279,20 @@ def main():
         print("錯誤：最小延遲時間不能大於最大延遲時間")
         sys.exit(1)
     
-    batch_update_daily_data(
+    config_kwargs = {}
+    if args.data_root:
+        config_kwargs['data_root'] = Path(args.data_root)
+    if args.output_root:
+        config_kwargs['output_root'] = Path(args.output_root)
+    succeeded = batch_update_daily_data(
         args.start_date, 
         args.end_date,
         args.delay_min,
-        args.delay_max
+        args.delay_max,
+        config=TWStockConfig(**config_kwargs) if config_kwargs else None,
     )
+    if succeeded is False:
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()

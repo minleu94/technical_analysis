@@ -8,10 +8,12 @@ artifacts。年度完成後保存 compact causal feature carry、原子封存並
 
 from __future__ import annotations
 
+import ast
 from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timezone
 from decimal import Decimal, ROUND_HALF_EVEN
+import dis
 import gzip
 import hashlib
 import json
@@ -19,8 +21,10 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import sys
 import tempfile
 import time as time_module
+import types
 from typing import Any, Callable, Mapping, Sequence, cast
 from zoneinfo import ZoneInfo
 
@@ -56,6 +60,9 @@ from ml_module.allocation_training_service import AllocationTrainingSample
 DIRECT_SCHEMA_VERSION = "portfolio-ml-direct-numeric.v4"
 DIRECT_CHECKPOINT_SCHEMA_VERSION = "portfolio-ml-direct-checkpoint.v2"
 DIRECT_HEARTBEAT_SCHEMA_VERSION = "portfolio-ml-direct-heartbeat.v1"
+DIRECT_COMPUTATION_DEPENDENCY_SCHEMA_VERSION = (
+    "portfolio-ml-direct-computation-dependencies.v1"
+)
 DIRECT_DISCOVERY_CACHE_SCHEMA_VERSION = (
     "portfolio-ml-direct-discovery-cache.v1"
 )
@@ -88,6 +95,29 @@ _DISCOVERY_PROGRESS_CHECK_INTERVAL = 4_096
 _DISCOVERY_PROGRESS_MAX_SILENCE_NS = 30 * 1_000_000_000
 _VOLUME_WINDOW_SIZE = 20
 _CARRY_METADATA_KEY = "__carry_schema_version__"
+
+# A Direct checkpoint is only resumable with the same source code that
+# produced its completed annual artifacts.  Keep this list explicit: hashing
+# the whole repository would turn unrelated UI/ops edits into a false resume
+# conflict, while hashing only this module would allow a changed label or
+# artifact writer to be mixed into an existing run.
+_DIRECT_COMPUTATION_DEPENDENCY_RELATIVE_PATHS = (
+    "data_module/portfolio_ml_direct_numeric_store.py",
+    "data_module/portfolio_ml_dataset_assembler.py",
+    "data_module/portfolio_ml_out_of_core_store.py",
+    "data_module/ml_storage_capacity.py",
+    "data_module/ml_pit_shared_block_resolver.py",
+    "data_module/ml_direct_shared_block_resolver.py",
+    "data_module/formal_portfolio_ledger.py",
+    "data_module/rule_champion_snapshot_service.py",
+    "data_module/teacher_input_source_producer.py",
+    "ml_module/allocation_training_service.py",
+    "ml_module/allocation_contracts.py",
+    "ml_module/allocation_teacher.py",
+    "ml_module/immutable_ml_block_store.py",
+    "ml_module/purged_walk_forward.py",
+    "data_module/ml_price_availability_contract.py",
+)
 
 
 @dataclass(frozen=True)
@@ -298,6 +328,21 @@ class PortfolioMLDirectNumericStoreBuilder:
         self,
         request: PortfolioMLDirectNumericRequest,
     ) -> PortfolioMLDirectNumericPublication:
+        # Freeze the bounded source custody before any discovery or annual
+        # work.  This is a disk-byte snapshot of the dependency files at
+        # process entry; it does not prove that an already imported module was
+        # loaded from those exact bytes.  Missing legacy snapshots therefore
+        # fail closed, and a source edit during this build is rejected before
+        # another checkpoint/manifest can be certified.
+        computation_dependencies = _direct_computation_dependency_payload()
+        computation_dependency_hash = _sha256_json(
+            computation_dependencies
+        )
+        _assert_direct_computation_dependencies_unchanged(
+            expected_payload=computation_dependencies,
+            expected_hash=computation_dependency_hash,
+            stage="build_start",
+        )
         # 先解析中央 heavy policy，再建立 run identity；避免 capacity
         # 預設變更後沿用同一個 run id 而靜默混用不同安全邊界。
         capacity_budget = _capacity_budget_for_request(request)
@@ -399,6 +444,17 @@ class PortfolioMLDirectNumericStoreBuilder:
             raise FileExistsError(
                 "incomplete direct numeric run exists and resume=false"
             )
+        # Load an existing checkpoint before publishing the first heartbeat.
+        # A dependency mismatch must not make an old run look alive or permit
+        # a later stage to silently mix source versions.
+        checkpoint_path = run_directory / "checkpoint.json"
+        checkpoint = _load_checkpoint(
+            path=checkpoint_path,
+            run_id=run_id,
+            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+            computation_dependency_hash=computation_dependency_hash,
+            computation_dependencies=computation_dependencies,
+        )
         _write_heartbeat(
             path=heartbeat_path,
             run_id=run_id,
@@ -486,6 +542,11 @@ class PortfolioMLDirectNumericStoreBuilder:
             "feature_packs": discovery.feature_packs,
         }
         feature_registry_hash = _sha256_json(feature_registry_payload)
+        _assert_direct_computation_dependencies_unchanged(
+            expected_payload=computation_dependencies,
+            expected_hash=computation_dependency_hash,
+            stage="discovery_complete",
+        )
         source_manifest_hashes = legacy._source_manifest_hashes(
             definitions=discovery.definitions,
             raw_manifest_hash=str(raw_manifest["manifest_hash"]),
@@ -507,6 +568,7 @@ class PortfolioMLDirectNumericStoreBuilder:
         dataset_identity_hash = _sha256_json(
             {
                 "direct_identity": direct_identity,
+                "computation_dependency_hash": computation_dependency_hash,
                 "source_content_hash": discovery.source_content_hash,
                 "feature_registry_hash": feature_registry_hash,
                 "source_manifest_hashes": source_manifest_hashes,
@@ -535,6 +597,8 @@ class PortfolioMLDirectNumericStoreBuilder:
             "schema_version": store_module.STORE_SCHEMA_VERSION,
             "direct_builder_schema_version": DIRECT_SCHEMA_VERSION,
             "direct_identity": direct_identity,
+            "computation_dependency_hash": computation_dependency_hash,
+            "computation_dependencies": computation_dependencies,
             "dataset_identity_hash": dataset_identity_hash,
             "feature_registry_hash": feature_registry_hash,
             "feature_ids": list(discovery.feature_ids),
@@ -598,12 +662,6 @@ class PortfolioMLDirectNumericStoreBuilder:
                 temporary_preflight["estimated_peak_bytes"]
             ),
         )
-        checkpoint_path = run_directory / "checkpoint.json"
-        checkpoint = _load_checkpoint(
-            path=checkpoint_path,
-            run_id=run_id,
-            raw_manifest_hash=str(raw_manifest["manifest_hash"]),
-        )
         completed = {
             int(item["year"]): dict(item)
             for item in _mapping_sequence(
@@ -662,6 +720,11 @@ class PortfolioMLDirectNumericStoreBuilder:
         total_teacher_diagnostics: dict[str, int] = {}
         year_manifests: list[dict[str, Any]] = []
         years = tuple(sorted(discovery.shard_by_year))
+        _assert_direct_computation_dependencies_unchanged(
+            expected_payload=computation_dependencies,
+            expected_hash=computation_dependency_hash,
+            stage="annual_processing_start",
+        )
         _write_heartbeat(
             path=heartbeat_path,
             run_id=run_id,
@@ -671,6 +734,11 @@ class PortfolioMLDirectNumericStoreBuilder:
             completed_years=tuple(sorted(completed)),
         )
         for ordinal, year in enumerate(years):
+            _assert_direct_computation_dependencies_unchanged(
+                expected_payload=computation_dependencies,
+                expected_hash=computation_dependency_hash,
+                stage=f"year_{year}_start",
+            )
             try:
                 capacity_checkpoint(
                     f"year_{year}_before_checkpoint",
@@ -681,6 +749,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                     checkpoint_path=checkpoint_path,
                     run_id=run_id,
                     raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    computation_dependency_hash=computation_dependency_hash,
+                    computation_dependencies=computation_dependencies,
                     completed=completed,
                     peak_temporary_bytes=peak_temporary_bytes,
                     capacity_preflight=exc.preflight,
@@ -764,10 +834,17 @@ class PortfolioMLDirectNumericStoreBuilder:
                     shared_numeric_store_root=request.shared_numeric_store_root,
                 )
                 completed[year] = adopted_entry
+                _assert_direct_computation_dependencies_unchanged(
+                    expected_payload=computation_dependencies,
+                    expected_hash=computation_dependency_hash,
+                    stage=f"year_{year}_adopted",
+                )
                 _write_incomplete_checkpoint(
                     checkpoint_path=checkpoint_path,
                     run_id=run_id,
                     raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    computation_dependency_hash=computation_dependency_hash,
+                    computation_dependencies=computation_dependencies,
                     completed=completed,
                     peak_temporary_bytes=peak_temporary_bytes,
                     capacity_preflight=last_capacity_preflight,
@@ -860,6 +937,10 @@ class PortfolioMLDirectNumericStoreBuilder:
                             raw_manifest_hash=str(
                                 raw_manifest["manifest_hash"]
                             ),
+                            computation_dependency_hash=(
+                                computation_dependency_hash
+                            ),
+                            computation_dependencies=computation_dependencies,
                             completed=completed,
                             peak_temporary_bytes=peak_temporary_bytes,
                             capacity_preflight=exc.preflight,
@@ -911,10 +992,17 @@ class PortfolioMLDirectNumericStoreBuilder:
                             request.shared_numeric_store_root
                         ),
                     )
+                    _assert_direct_computation_dependencies_unchanged(
+                        expected_payload=computation_dependencies,
+                        expected_hash=computation_dependency_hash,
+                        stage=f"year_{year}_shared_reused",
+                    )
                     _write_incomplete_checkpoint(
                         checkpoint_path=checkpoint_path,
                         run_id=run_id,
                         raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                        computation_dependency_hash=computation_dependency_hash,
+                        computation_dependencies=computation_dependencies,
                         completed=completed,
                         peak_temporary_bytes=peak_temporary_bytes,
                         capacity_preflight=last_capacity_preflight,
@@ -978,11 +1066,18 @@ class PortfolioMLDirectNumericStoreBuilder:
                     capacity_checkpoint=capacity_checkpoint,
                     capacity_budget=capacity_budget,
                 )
+                _assert_direct_computation_dependencies_unchanged(
+                    expected_payload=computation_dependencies,
+                    expected_hash=computation_dependency_hash,
+                    stage=f"year_{year}_built",
+                )
             except StorageCapacityError as exc:
                 _write_incomplete_checkpoint(
                     checkpoint_path=checkpoint_path,
                     run_id=run_id,
                     raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    computation_dependency_hash=computation_dependency_hash,
+                    computation_dependencies=computation_dependencies,
                     completed=completed,
                     peak_temporary_bytes=peak_temporary_bytes,
                     capacity_preflight=exc.preflight,
@@ -1015,6 +1110,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                     checkpoint_path=checkpoint_path,
                     run_id=run_id,
                     raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                    computation_dependency_hash=computation_dependency_hash,
+                    computation_dependencies=computation_dependencies,
                     completed=completed,
                     peak_temporary_bytes=peak_temporary_bytes,
                     capacity_preflight=exc.preflight,
@@ -1060,6 +1157,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                 checkpoint_path=checkpoint_path,
                 run_id=run_id,
                 raw_manifest_hash=str(raw_manifest["manifest_hash"]),
+                computation_dependency_hash=computation_dependency_hash,
+                computation_dependencies=computation_dependencies,
                 completed=completed,
                 peak_temporary_bytes=peak_temporary_bytes,
                 capacity_preflight=last_capacity_preflight,
@@ -1113,6 +1212,11 @@ class PortfolioMLDirectNumericStoreBuilder:
             )
         )
         capacity_checkpoint("fold_indexes_complete")
+        _assert_direct_computation_dependencies_unchanged(
+            expected_payload=computation_dependencies,
+            expected_hash=computation_dependency_hash,
+            stage="fold_indexes_complete",
+        )
         portfolio_state_policy = portfolio_replay.custody_payload()
         official_trade_restriction_timeline_present = bool(
             corporate_custody.official_trade_restriction_timeline_present
@@ -1198,6 +1302,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                 f"{dataset_identity_hash[7:19]}"
             ),
             "dataset_identity_hash": dataset_identity_hash,
+            "computation_dependency_hash": computation_dependency_hash,
+            "computation_dependencies": computation_dependencies,
             "dataset_manifest_file_hash": raw_file_hash,
             "source_training_manifest_hash": raw_manifest["manifest_hash"],
             "source_training_manifest_file_hash": raw_file_hash,
@@ -1337,6 +1443,11 @@ class PortfolioMLDirectNumericStoreBuilder:
             )
         if not portfolio_replay.cash_only_fallback:
             manifest["portfolio_state_policy"] = portfolio_state_policy
+        _assert_direct_computation_dependencies_unchanged(
+            expected_payload=computation_dependencies,
+            expected_hash=computation_dependency_hash,
+            stage="before_manifest_publish",
+        )
         manifest["manifest_hash"] = _sha256_json(manifest)
         _write_heartbeat(
             path=heartbeat_path,
@@ -1347,6 +1458,11 @@ class PortfolioMLDirectNumericStoreBuilder:
             completed_years=tuple(sorted(completed)),
         )
         _write_json(manifest_path, manifest)
+        _assert_direct_computation_dependencies_unchanged(
+            expected_payload=computation_dependencies,
+            expected_hash=computation_dependency_hash,
+            stage="after_manifest_publish",
+        )
         manifest_file_hash = _file_sha256(manifest_path)
         _atomic_write_json(
             checkpoint_path,
@@ -1354,6 +1470,8 @@ class PortfolioMLDirectNumericStoreBuilder:
                 "schema_version": DIRECT_CHECKPOINT_SCHEMA_VERSION,
                 "run_id": run_id,
                 "raw_manifest_hash": raw_manifest["manifest_hash"],
+                "computation_dependency_hash": computation_dependency_hash,
+                "computation_dependencies": computation_dependencies,
                 "completed_years": [
                     completed[key] for key in sorted(completed)
                 ],
@@ -1939,7 +2057,7 @@ class _DirectYearWriter:
         self._decision_at_cache: dict[str, datetime] = {}
         self.row_count = 0
         self.unknown_trade_restriction_count = 0
-        self.observed_counts = np.zeros(
+        self.observed_counts: np.ndarray[Any, Any] = np.zeros(
             len(feature_ids),
             dtype=np.int64,
         )
@@ -2033,8 +2151,12 @@ class _DirectYearWriter:
         }
         if set(features) != set(self.feature_ids):
             raise ValueError("direct sample feature registry mismatch")
-        values = np.zeros(len(self.feature_ids), dtype="<i8")
-        masks = np.ones(len(self.feature_ids), dtype="u1")
+        values: np.ndarray[Any, Any] = np.zeros(
+            len(self.feature_ids), dtype="<i8"
+        )
+        masks: np.ndarray[Any, Any] = np.ones(
+            len(self.feature_ids), dtype="u1"
+        )
         for feature_id, position in self.feature_position.items():
             feature = features[feature_id]
             if feature.scale != self.feature_scales[position]:
@@ -2064,11 +2186,13 @@ class _DirectYearWriter:
             ),
             dtype="<i4",
         )
-        labels = np.zeros(
+        labels: np.ndarray[Any, Any] = np.zeros(
             len(self.horizons) * len(store_module.LABEL_FIELDS),
             dtype="<i4",
         )
-        label_masks = np.ones(len(labels), dtype="u1")
+        label_masks: np.ndarray[Any, Any] = np.ones(
+            len(labels), dtype="u1"
+        )
         labels_by_horizon = {
             label.horizon_trading_days: label
             for label in sample.horizon_labels
@@ -3695,12 +3819,15 @@ def _load_checkpoint(
     path: Path,
     run_id: str,
     raw_manifest_hash: str,
+    computation_dependency_hash: str,
+    computation_dependencies: Mapping[str, Any],
 ) -> dict[str, Any]:
     if not path.is_file():
         return {
             "schema_version": DIRECT_CHECKPOINT_SCHEMA_VERSION,
             "run_id": run_id,
             "raw_manifest_hash": raw_manifest_hash,
+            "computation_dependency_hash": computation_dependency_hash,
             "completed_years": [],
             "peak_temporary_bytes": 0,
             "complete": False,
@@ -3713,6 +3840,32 @@ def _load_checkpoint(
         or payload.get("raw_manifest_hash") != raw_manifest_hash
     ):
         raise ValueError("direct checkpoint identity mismatch")
+    stored_dependency_hash = payload.get("computation_dependency_hash")
+    stored_dependencies = payload.get("computation_dependencies")
+    if (
+        not isinstance(stored_dependency_hash, str)
+        or not isinstance(stored_dependencies, dict)
+        or stored_dependencies.get("schema_version")
+        != DIRECT_COMPUTATION_DEPENDENCY_SCHEMA_VERSION
+        or stored_dependencies.get("source_hash_semantics")
+        != "disk_bytes_snapshot_at_build_start;loaded_code_fingerprint_is_checked_separately"
+    ):
+        raise ValueError(
+            "direct checkpoint computation dependency snapshot is missing"
+        )
+    if _sha256_json(stored_dependencies) != stored_dependency_hash:
+        raise ValueError(
+            "direct checkpoint computation dependency snapshot hash mismatch"
+        )
+    if _sha256_json(computation_dependencies) != computation_dependency_hash:
+        raise ValueError(
+            "current direct computation dependency snapshot hash mismatch"
+        )
+    if not _dependency_payloads_compatible(
+        stored_dependencies,
+        computation_dependencies,
+    ):
+        raise ValueError("direct checkpoint computation dependency mismatch")
     return payload
 
 
@@ -3985,15 +4138,23 @@ def _write_incomplete_checkpoint(
     checkpoint_path: Path,
     run_id: str,
     raw_manifest_hash: str,
+    computation_dependency_hash: str,
+    computation_dependencies: Mapping[str, Any],
     completed: Mapping[int, Mapping[str, Any]],
     peak_temporary_bytes: int,
     capacity_preflight: Mapping[str, Any] | None = None,
     failure: Mapping[str, Any] | None = None,
 ) -> None:
+    if _sha256_json(computation_dependencies) != computation_dependency_hash:
+        raise ValueError(
+            "direct checkpoint computation dependency snapshot hash mismatch"
+        )
     payload: dict[str, Any] = {
         "schema_version": DIRECT_CHECKPOINT_SCHEMA_VERSION,
         "run_id": run_id,
         "raw_manifest_hash": raw_manifest_hash,
+        "computation_dependency_hash": computation_dependency_hash,
+        "computation_dependencies": dict(computation_dependencies),
         "completed_years": [
             dict(completed[key]) for key in sorted(completed)
         ],
@@ -4332,6 +4493,555 @@ def _file_sha256(path: Path) -> str:
         while chunk := stream.read(1024 * 1024):
             digest.update(chunk)
     return _SHA256_PREFIX + digest.hexdigest()
+
+
+def _direct_computation_dependency_payload() -> dict[str, Any]:
+    """Capture the bounded source custody used by a Direct run.
+
+    The payload hashes source bytes on disk at the start of the current
+    process.  It is an auditable source snapshot, not proof of the bytecode
+    already loaded by an earlier import.  That distinction is why old
+    checkpoints without this payload are not resumable.
+    """
+
+    project_root = Path(__file__).resolve().parents[1]
+    files: list[dict[str, Any]] = []
+    for relative in _DIRECT_COMPUTATION_DEPENDENCY_RELATIVE_PATHS:
+        candidate = project_root / relative
+        if candidate.is_symlink():
+            raise RuntimeError(
+                "direct computation dependency must not be a symlink: "
+                f"{relative}"
+            )
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(project_root) or not resolved.is_file():
+            raise RuntimeError(
+                "direct computation dependency is missing or outside project: "
+                f"{relative}"
+            )
+        files.append(_direct_dependency_file_identity(relative, resolved))
+    return {
+        "schema_version": DIRECT_COMPUTATION_DEPENDENCY_SCHEMA_VERSION,
+        "source_hash_semantics": (
+            "disk_bytes_snapshot_at_build_start;"
+            "loaded_code_fingerprint_is_checked_separately"
+        ),
+        "files": files,
+    }
+
+
+def _direct_dependency_file_identity(
+    relative: str,
+    resolved: Path,
+) -> dict[str, Any]:
+    source_bytes = resolved.read_bytes()
+    source_hash = _SHA256_PREFIX + hashlib.sha256(source_bytes).hexdigest()
+    module = _loaded_module_for_path(resolved)
+    source_records = _compiled_source_code_records(
+        resolved,
+        source_bytes,
+    )
+    source_constants = _source_literal_constants(source_bytes)
+    source_constant_names = _source_constant_names(source_bytes)
+    loaded_code_fingerprint: str | None = None
+    loaded_constants: dict[str, Any] | None = None
+    loaded_module_name: str | None = None
+    loaded_code_matches_source: bool | None = None
+    if module is not None:
+        loaded_module_name = str(getattr(module, "__name__", "")) or None
+        loaded_records, loaded_class_names = _loaded_module_code_records(
+            module
+        )
+        # Class bodies are not retained as code objects on a live class, while
+        # their methods are.  Remove those source-only class-body records
+        # before comparing the executable function/class-method set.
+        comparable_source_records = {
+            key: value
+            for key, value in source_records.items()
+            if key not in loaded_class_names
+        }
+        loaded_code_matches_source = (
+            set(loaded_records) <= set(comparable_source_records)
+            and all(
+                loaded_records[key] == comparable_source_records[key]
+                for key in loaded_records
+            )
+        )
+        loaded_constants = _loaded_module_constants(module)
+        common_constants = set(source_constants).intersection(
+            loaded_constants
+        )
+        constants_match = all(
+            _canonical_json(source_constants[name])
+            == _canonical_json(loaded_constants[name])
+            for name in common_constants
+        )
+        constants_match = constants_match and set(source_constants).issubset(
+            loaded_constants
+        )
+        expected_runtime_constant_names = {
+            name
+            for name in source_constant_names
+            if name in loaded_constants or name in source_constants
+        }
+        constants_match = constants_match and (
+            set(loaded_constants) == expected_runtime_constant_names
+        )
+        if not loaded_code_matches_source or not constants_match:
+            code_differences = [
+                key
+                for key in sorted(
+                    set(loaded_records).union(comparable_source_records)
+                )
+                if loaded_records.get(key)
+                != comparable_source_records.get(key)
+            ]
+            raise RuntimeError(
+                "direct computation dependency loaded code/constants do not "
+                "match source: "
+                f"{relative} ({loaded_module_name}); "
+                f"code_match={loaded_code_matches_source}; "
+                f"constants_match={constants_match}; "
+                f"code_differences={code_differences[:8]}"
+            )
+        loaded_code_fingerprint = _records_fingerprint(loaded_records)
+    return {
+        "path": relative,
+        "sha256": source_hash,
+        "loaded_module": loaded_module_name,
+        "source_code_fingerprint": _records_fingerprint(
+            source_records
+        ),
+        "loaded_code_fingerprint": loaded_code_fingerprint,
+        "loaded_code_matches_source": loaded_code_matches_source,
+        "loaded_constants": loaded_constants,
+    }
+
+
+def _loaded_module_for_path(path: Path) -> types.ModuleType | None:
+    resolved = path.resolve()
+    for module in tuple(sys.modules.values()):
+        if not isinstance(module, types.ModuleType):
+            continue
+        module_file = getattr(module, "__file__", None)
+        if not isinstance(module_file, str):
+            continue
+        try:
+            if Path(module_file).resolve() == resolved:
+                return module
+        except OSError:
+            continue
+    return None
+
+
+def _code_signature(code: types.CodeType) -> str:
+    # Do not use ``marshal.dumps`` here.  Its encoding is an implementation
+    # detail and equal tuples can receive different byte representations after
+    # a module has run (for example because of interned strings or object
+    # references).  The dependency guard is persisted across processes, so the
+    # code identity must be a typed, deterministic representation.
+    payload = {
+        "name": code.co_name,
+        "qualname": getattr(code, "co_qualname", code.co_name),
+        "argcount": code.co_argcount,
+        "posonlyargcount": code.co_posonlyargcount,
+        "kwonlyargcount": code.co_kwonlyargcount,
+        "nlocals": code.co_nlocals,
+        "stacksize": code.co_stacksize,
+        "flags": code.co_flags,
+        "instructions": [
+            {
+                "opname": instruction.opname,
+                "arg": instruction.arg,
+                "argval": _instruction_argval(instruction.argval),
+            }
+            for instruction in dis.get_instructions(
+                code,
+                show_caches=False,
+                adaptive=False,
+            )
+        ],
+        "names": list(code.co_names),
+        "varnames": list(code.co_varnames),
+        "freevars": list(code.co_freevars),
+        "cellvars": list(code.co_cellvars),
+        "exceptiontable_hex": code.co_exceptiontable.hex(),
+        "constants": [
+            _constant_identity_value(value) for value in code.co_consts
+        ],
+    }
+    return _SHA256_PREFIX + hashlib.sha256(
+        _canonical_json(payload).encode("utf-8")
+    ).hexdigest()
+
+
+def _instruction_argval(value: object) -> object:
+    return _constant_identity_value(value)
+
+
+def _constant_identity_value(value: object) -> object:
+    if isinstance(value, types.CodeType):
+        return {
+            "type": "code",
+            "name": value.co_name,
+            "qualname": getattr(value, "co_qualname", value.co_name),
+        }
+    if value is None:
+        return {"type": "none"}
+    if isinstance(value, bool):
+        return {"type": "bool", "value": value}
+    if isinstance(value, int):
+        return {"type": "int", "value": str(value)}
+    if isinstance(value, float):
+        return {"type": "float", "value": value.hex()}
+    if isinstance(value, str):
+        return {"type": "str", "value": value}
+    if isinstance(value, bytes):
+        return {"type": "bytes", "value": value.hex()}
+    if isinstance(value, bytearray):
+        return {"type": "bytearray", "value": bytes(value).hex()}
+    if isinstance(value, tuple):
+        return {
+            "type": "tuple",
+            "items": [_constant_identity_value(item) for item in value],
+        }
+    if isinstance(value, list):
+        return {
+            "type": "list",
+            "items": [_constant_identity_value(item) for item in value],
+        }
+    if isinstance(value, (set, frozenset)):
+        identity_items = [
+            _constant_identity_value(item) for item in value
+        ]
+        identity_items.sort(key=_canonical_json)
+        return {
+            "type": "set" if isinstance(value, set) else "frozenset",
+            "items": identity_items,
+        }
+    if isinstance(value, dict):
+        entries = [
+            {
+                "key": _constant_identity_value(key),
+                "value": _constant_identity_value(item),
+            }
+            for key, item in value.items()
+        ]
+        entries.sort(key=_canonical_json)
+        return {"type": "dict", "items": entries}
+    return {
+        "type": "object",
+        "module": type(value).__module__,
+        "qualname": type(value).__qualname__,
+    }
+
+
+def _nested_code_records(
+    code: types.CodeType,
+    records: dict[str, list[str]],
+    *,
+    source_path: Path | None = None,
+) -> None:
+    if source_path is not None:
+        try:
+            if Path(code.co_filename).resolve() != source_path.resolve():
+                return
+        except OSError:
+            return
+    key = getattr(code, "co_qualname", code.co_name)
+    records.setdefault(key, []).append(_code_signature(code))
+    for value in code.co_consts:
+        if isinstance(value, types.CodeType):
+            _nested_code_records(value, records, source_path=source_path)
+
+
+def _compiled_source_code_records(
+    path: Path,
+    source_bytes: bytes,
+) -> dict[str, list[str]]:
+    try:
+        compiled = compile(
+            source_bytes.decode("utf-8-sig"),
+            str(path),
+            "exec",
+            dont_inherit=True,
+        )
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RuntimeError(
+            f"direct computation dependency cannot be compiled: {path}"
+        ) from exc
+    records: dict[str, list[str]] = {}
+    for value in compiled.co_consts:
+        if isinstance(value, types.CodeType):
+            _nested_code_records(value, records)
+    return {
+        key: sorted(set(values))
+        for key, values in sorted(records.items())
+        if not key.startswith("<")
+    }
+
+
+def _loaded_module_code_records(
+    module: types.ModuleType,
+) -> tuple[dict[str, list[str]], set[str]]:
+    module_name = module.__name__
+    module_file = getattr(module, "__file__", None)
+    source_path = (
+        Path(module_file).resolve()
+        if isinstance(module_file, str)
+        else None
+    )
+    records: dict[str, list[str]] = {}
+    class_names: set[str] = set()
+
+    def add_class(value: type[Any]) -> None:
+        class_names.add(value.__qualname__)
+        for member in vars(value).values():
+            function: types.FunctionType | None = None
+            if isinstance(member, types.FunctionType):
+                function = member
+            elif isinstance(member, (staticmethod, classmethod)):
+                function = cast(types.FunctionType, member.__func__)
+            elif isinstance(member, property):
+                for accessor in (member.fget, member.fset, member.fdel):
+                    if (
+                        accessor is not None
+                        and accessor.__module__ == module_name
+                    ):
+                        _nested_code_records(
+                            accessor.__code__,
+                            records,
+                            source_path=source_path,
+                        )
+            if function is not None:
+                if function.__module__ == module_name:
+                    _nested_code_records(
+                        function.__code__,
+                        records,
+                        source_path=source_path,
+                    )
+
+    for value in vars(module).values():
+        if isinstance(value, types.FunctionType):
+            if value.__module__ == module_name:
+                _nested_code_records(
+                    value.__code__,
+                    records,
+                    source_path=source_path,
+                )
+        elif isinstance(value, type) and value.__module__ == module_name:
+            add_class(value)
+    return (
+        {
+            key: sorted(set(values))
+            for key, values in sorted(records.items())
+        },
+        class_names,
+    )
+
+
+def _loaded_module_constants(module: types.ModuleType) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for name, value in vars(module).items():
+        if name.startswith("__"):
+            continue
+        if not (name.isupper() or name.startswith("_")):
+            continue
+        if isinstance(value, (types.ModuleType, types.FunctionType, type)):
+            continue
+        try:
+            encoded = json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        except (TypeError, ValueError):
+            continue
+        # Keep the identity JSON-native so the in-memory snapshot and its
+        # checkpoint round trip have the same representation (tuple constants
+        # become lists in JSON).
+        result[name] = json.loads(encoded)
+    return dict(sorted(result.items()))
+
+
+def _source_literal_constants(source_bytes: bytes) -> dict[str, Any]:
+    try:
+        tree = ast.parse(source_bytes.decode("utf-8-sig"))
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RuntimeError("direct dependency source cannot be parsed") from exc
+    result: dict[str, Any] = {}
+    for statement in tree.body:
+        targets: list[ast.Name] = []
+        value_node: ast.AST | None = None
+        if isinstance(statement, ast.Assign):
+            targets = [
+                target
+                for target in statement.targets
+                if isinstance(target, ast.Name)
+            ]
+            value_node = statement.value
+        elif isinstance(statement, ast.AnnAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            targets = [statement.target]
+            value_node = statement.value
+        if value_node is None:
+            continue
+        for target in targets:
+            if target.id.startswith("__") or not (
+                target.id.isupper() or target.id.startswith("_")
+            ):
+                continue
+            try:
+                result[target.id] = ast.literal_eval(value_node)
+            except (ValueError, TypeError, SyntaxError):
+                continue
+    return dict(sorted(result.items()))
+
+
+def _source_constant_names(source_bytes: bytes) -> set[str]:
+    try:
+        tree = ast.parse(source_bytes.decode("utf-8-sig"))
+    except (UnicodeDecodeError, SyntaxError) as exc:
+        raise RuntimeError("direct dependency source cannot be parsed") from exc
+    result: set[str] = set()
+    for statement in tree.body:
+        if isinstance(statement, ast.Import):
+            for alias in statement.names:
+                name = alias.asname or alias.name.split(".")[-1]
+                if not name.startswith("__") and (
+                    name.isupper() or name.startswith("_")
+                ):
+                    result.add(name)
+            continue
+        if isinstance(statement, ast.ImportFrom):
+            for alias in statement.names:
+                if alias.name == "*":
+                    continue
+                name = alias.asname or alias.name
+                if not name.startswith("__") and (
+                    name.isupper() or name.startswith("_")
+                ):
+                    result.add(name)
+            continue
+        targets: list[ast.Name] = []
+        if isinstance(statement, ast.Assign):
+            targets = [
+                target
+                for target in statement.targets
+                if isinstance(target, ast.Name)
+            ]
+        elif isinstance(statement, ast.AnnAssign) and isinstance(
+            statement.target, ast.Name
+        ):
+            targets = [statement.target]
+        result.update(
+            target.id
+            for target in targets
+            if not target.id.startswith("__")
+            and (target.id.isupper() or target.id.startswith("_"))
+        )
+    return result
+
+
+def _records_fingerprint(records: Mapping[str, Sequence[str]]) -> str:
+    return _sha256_json(
+        {
+            key: list(values)
+            for key, values in sorted(records.items())
+        }
+    )
+
+
+def _dependency_payloads_compatible(
+    expected: Mapping[str, Any],
+    current: Mapping[str, Any],
+) -> bool:
+    """Compare source custody while allowing a lazy module to load later.
+
+    A module absent from the build-start snapshot is not treated as a
+    mismatch when it is imported by a later stage; its source hash and loaded
+    code are still validated by ``_direct_dependency_file_identity``.  A
+    module already loaded at the snapshot boundary must retain the same
+    module name, code fingerprint, and runtime constants.
+    """
+
+    if (
+        expected.get("schema_version")
+        != DIRECT_COMPUTATION_DEPENDENCY_SCHEMA_VERSION
+        or current.get("schema_version")
+        != DIRECT_COMPUTATION_DEPENDENCY_SCHEMA_VERSION
+        or expected.get("source_hash_semantics")
+        != current.get("source_hash_semantics")
+    ):
+        return False
+    expected_raw = expected.get("files")
+    current_raw = current.get("files")
+    if not isinstance(expected_raw, list) or not isinstance(current_raw, list):
+        return False
+    expected_files: dict[str, Mapping[str, Any]] = {}
+    current_files: dict[str, Mapping[str, Any]] = {}
+    for raw_file, destination in (
+        (expected_raw, expected_files),
+        (current_raw, current_files),
+    ):
+        for raw_entry in raw_file:
+            if not isinstance(raw_entry, Mapping):
+                return False
+            path = raw_entry.get("path")
+            if not isinstance(path, str) or path in destination:
+                return False
+            destination[path] = raw_entry
+    if set(expected_files) != set(current_files):
+        return False
+    for path, expected_file in expected_files.items():
+        current_file = current_files[path]
+        for key in ("sha256", "source_code_fingerprint"):
+            if expected_file.get(key) != current_file.get(key):
+                return False
+        expected_module = expected_file.get("loaded_module")
+        if expected_module is None:
+            # The module may have been loaded lazily since the snapshot.
+            continue
+        if (
+            current_file.get("loaded_module") != expected_module
+            or current_file.get("loaded_code_fingerprint")
+            != expected_file.get("loaded_code_fingerprint")
+            or current_file.get("loaded_constants")
+            != expected_file.get("loaded_constants")
+            or current_file.get("loaded_code_matches_source") is not True
+            or expected_file.get("loaded_code_matches_source") is not True
+        ):
+            return False
+    return True
+
+
+def _assert_direct_computation_dependencies_unchanged(
+    *,
+    expected_payload: Mapping[str, Any],
+    expected_hash: str,
+    stage: str,
+) -> None:
+    """Reject a source edit observed during a Direct build.
+
+    Rehashing at bounded stage boundaries prevents a long annual build from
+    certifying a mixed source version.  A mutation that races the final
+    check remains an ordinary filesystem TOCTOU limitation; the manifest and
+    checkpoint both retain the start snapshot so later custody validation
+    still fails closed when the identity no longer matches.
+    """
+
+    if _sha256_json(expected_payload) != expected_hash:
+        raise RuntimeError(
+            "direct computation dependency start snapshot hash mismatch"
+        )
+    current_payload = _direct_computation_dependency_payload()
+    if not _dependency_payloads_compatible(expected_payload, current_payload):
+        raise RuntimeError(
+            "direct computation dependency drift detected at "
+            f"{stage}: expected {expected_hash}, observed "
+            f"{_sha256_json(current_payload)}"
+        )
 
 
 def _read_json(path: Path) -> dict[str, Any]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
 from dataclasses import replace
 from datetime import date, datetime
 import json
@@ -11,7 +12,10 @@ from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from app_module.decision_desk_builder_factory import build_service_backed_decision_desk_snapshot_builder
+from app_module.decision_desk_dtos import DecisionDeskQuality
 from app_module.decision_desk_snapshot_repository import DecisionDeskSnapshotRepository
+from app_module.decision_desk_risk_prompt_service import DecisionDeskRiskPromptService
+from app_module.decision_desk_snapshot_support import compute_overall_quality
 from app_module.decision_desk_snapshot_storage_dtos import (
     StoredDecisionDeskSnapshot,
     build_stored_decision_desk_snapshot,
@@ -45,6 +49,9 @@ from app_module.evidence_pipeline_runner_dtos import (
 )
 from app_module.evidence_source_coverage_service import EvidenceSourceCoverageService
 from app_module.paper_portfolio_time import taiwan_market_today
+from app_module.paper_decision_desk_evidence_source import (
+    PaperDecisionDeskEvidenceSource,
+)
 from app_module.forward_performance_read_model import (
     ForwardPerformanceFilter,
     ForwardPerformanceReadModel,
@@ -75,6 +82,20 @@ def _transient_capture_ready(payload: Mapping[str, Any]) -> bool:
     )
 
 
+def _transient_section_available(payload: Mapping[str, Any]) -> bool:
+    """Return whether a transient section exists, even when it is degraded.
+
+    Availability and capture readiness are different contracts.  A degraded
+    section with real attributions/prompts is available evidence and must not
+    be relabelled as a missing snapshot; its quality still keeps scheduler
+    readiness fail-closed through ``_transient_capture_ready``.
+    """
+
+    quality = str(payload.get("quality") or "missing")
+    as_of_date = str(payload.get("as_of_date") or "").strip()
+    return quality in {"observed", "estimated", "degraded"} and bool(as_of_date)
+
+
 class _Timer:
     def __init__(self) -> None:
         self.start = time.perf_counter()
@@ -93,6 +114,9 @@ class _DecisionDeskSnapshotSectionProvider:
             "decision_desk_snapshot_hash": stored_snapshot.snapshot_hash,
             "decision_desk_snapshot_source": "durable_snapshot",
         }
+        paper_source = stored_snapshot.metadata_json.get("paper_evidence_source")
+        if isinstance(paper_source, Mapping):
+            self.metadata["paper_evidence_source"] = deepcopy(dict(paper_source))
 
     def build_snapshot(self, as_of_date: date) -> Any:
         snapshot = self.stored_snapshot.to_decision_desk_snapshot()
@@ -115,11 +139,13 @@ class EvidencePipelineRunner:
         db_path: str | Path | None = None,
         clock: Any | None = None,
         run_id_factory: Any | None = None,
+        paper_evidence_source: PaperDecisionDeskEvidenceSource | None = None,
     ) -> None:
         self.config = config
         self.db_path = Path(db_path) if db_path is not None else Path(config.db_file)
         self.clock = clock or (lambda: datetime.utcnow().replace(microsecond=0))
         self.run_id_factory = run_id_factory or (lambda: f"epr_{uuid4().hex[:12]}")
+        self.paper_evidence_source = paper_evidence_source
         self._transient_decision_desk_snapshot: StoredDecisionDeskSnapshot | None = None
 
     def run(self, request: EvidencePipelineRunRequest) -> EvidencePipelineRunSummary:
@@ -363,6 +389,9 @@ class EvidencePipelineRunner:
         watchlist_ready = _transient_capture_ready(stored.watchlist_trigger_json)
         portfolio_ready = _transient_capture_ready(stored.portfolio_alert_json)
         risk_ready = _transient_capture_ready(stored.risk_prompt_json)
+        watchlist_available = _transient_section_available(stored.watchlist_trigger_json)
+        portfolio_available = _transient_section_available(stored.portfolio_alert_json)
+        risk_available = _transient_section_available(stored.risk_prompt_json)
         reconciled.update(
             {
                 "decision_desk_snapshots_count": max(int(reconciled.get("decision_desk_snapshots_count") or 0), 1),
@@ -370,6 +399,9 @@ class EvidencePipelineRunner:
                 "watchlist_trigger_capture_ready": watchlist_ready,
                 "portfolio_alert_capture_ready": portfolio_ready,
                 "risk_prompt_capture_ready": risk_ready,
+                "watchlist_trigger_snapshot_available": watchlist_available,
+                "portfolio_alert_snapshot_available": portfolio_available,
+                "risk_prompt_snapshot_available": risk_available,
                 "source_coverage_basis": "dry_run_transient_decision_desk_snapshot",
             }
         )
@@ -385,11 +417,23 @@ class EvidencePipelineRunner:
             }
         ]
         if not watchlist_ready:
-            gaps.append("watchlist_trigger_snapshot_section_missing")
+            gaps.append(
+                "watchlist_trigger_snapshot_section_missing"
+                if not watchlist_available
+                else "watchlist_trigger_snapshot_quality_not_ready"
+            )
         if not portfolio_ready:
-            gaps.append("portfolio_alert_snapshot_section_missing")
+            gaps.append(
+                "portfolio_alert_snapshot_section_missing"
+                if not portfolio_available
+                else "portfolio_alert_snapshot_quality_not_ready"
+            )
         if not risk_ready:
-            gaps.append("risk_prompt_snapshot_section_missing")
+            gaps.append(
+                "risk_prompt_snapshot_section_missing"
+                if not risk_available
+                else "risk_prompt_snapshot_quality_not_ready"
+            )
         reconciled["blocking_gaps"] = gaps
 
         snapshot_ready = watchlist_ready and portfolio_ready and risk_ready
@@ -453,7 +497,22 @@ class EvidencePipelineRunner:
                 self.config,
                 clock=self.clock,
             ).build_snapshot(date.fromisoformat(request.decision_date[:10]))
-            stored = build_stored_decision_desk_snapshot(snapshot, decision_date=request.decision_date[:10])
+            paper_source_metadata: dict[str, Any] | None = None
+            if self.paper_evidence_source is not None:
+                snapshot, paper_source_metadata = self._apply_paper_evidence_source(
+                    snapshot,
+                    date.fromisoformat(request.decision_date[:10]),
+                )
+            stored_metadata = (
+                {"paper_evidence_source": paper_source_metadata}
+                if paper_source_metadata is not None
+                else None
+            )
+            stored = build_stored_decision_desk_snapshot(
+                snapshot,
+                decision_date=request.decision_date[:10],
+                metadata=stored_metadata,
+            )
             self._transient_decision_desk_snapshot = stored
             created = 0
             skipped = 1
@@ -503,6 +562,87 @@ class EvidencePipelineRunner:
                 diagnostics=tuple(diagnostics),
                 duration_ms=timer.elapsed_ms(),
             )
+
+    def _apply_paper_evidence_source(
+        self,
+        snapshot: Any,
+        decision_date: date,
+    ) -> tuple[Any, dict[str, Any]]:
+        """Replace only portfolio/risk sections with verified Paper evidence.
+
+        The regular Decision Desk builder remains unchanged for UI and manual
+        flows.  Scheduled evidence opts into this explicit source so a manual
+        JSONL portfolio cannot silently masquerade as the isolated Paper
+        state.  The resulting section quality is deliberately preserved and
+        is still consumed by the normal readiness gate.
+        """
+
+        if self.paper_evidence_source is None:
+            return snapshot, {}
+        result = self.paper_evidence_source.build(decision_date)
+        portfolio_alerts = result.portfolio_alerts
+        risk_prompts = DecisionDeskRiskPromptService().build_summary(
+            as_of_date=decision_date,
+            market_regime=snapshot.market_regime,
+            market_breadth=snapshot.market_breadth,
+            sector_rotation=snapshot.sector_rotation,
+            relative_strength_liquidity=snapshot.relative_strength_liquidity,
+            watchlist_triggers=snapshot.watchlist_triggers,
+            portfolio_alerts=portfolio_alerts,
+        )
+        sections = (
+            snapshot.market_regime,
+            snapshot.market_breadth,
+            snapshot.sector_rotation,
+            snapshot.relative_strength_liquidity,
+            snapshot.watchlist_triggers,
+            portfolio_alerts,
+            risk_prompts,
+        )
+        overall_quality = compute_overall_quality(sections)
+        if snapshot.overall_quality in {
+            # Keep an existing stronger failure from being hidden by a
+            # source replacement that happens to be observed.
+            DecisionDeskQuality.MISSING,
+            DecisionDeskQuality.DEGRADED,
+        } and overall_quality == DecisionDeskQuality.OBSERVED:
+            overall_quality = snapshot.overall_quality
+        old_warnings = tuple(
+            item
+            for item in snapshot.warnings
+            if not item.startswith(("portfolio_alerts:", "risk_prompts:"))
+        )
+        section_warnings = tuple(
+            f"portfolio_alerts:{item}" for item in portfolio_alerts.warnings
+        ) + tuple(f"risk_prompts:{item}" for item in risk_prompts.warnings)
+        lineage = deepcopy(getattr(snapshot, "source_lineage", {}) or {})
+        lineage["portfolio_alerts"] = {
+            "as_of_date": portfolio_alerts.as_of_date.isoformat()
+            if portfolio_alerts.as_of_date
+            else None,
+            "quality": portfolio_alerts.quality.value,
+            "warnings": list(portfolio_alerts.warnings),
+            "metadata": deepcopy(result.metadata),
+        }
+        lineage["risk_prompts"] = {
+            "as_of_date": risk_prompts.as_of_date.isoformat()
+            if risk_prompts.as_of_date
+            else None,
+            "quality": risk_prompts.quality.value,
+            "warnings": list(risk_prompts.warnings),
+            "metadata": {"derived_from": "paper_evidence_portfolio_alerts"},
+        }
+        return (
+            replace(
+                snapshot,
+                overall_quality=overall_quality,
+                warnings=tuple(dict.fromkeys(old_warnings + section_warnings)),
+                portfolio_alerts=portfolio_alerts,
+                risk_prompts=risk_prompts,
+                source_lineage=lineage,
+            ),
+            deepcopy(result.metadata),
+        )
 
     def _capture_step(self, request: EvidencePipelineRunRequest, dry_run: bool) -> tuple[Any, EvidencePipelineStepSummary]:
         timer = _Timer()

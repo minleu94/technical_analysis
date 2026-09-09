@@ -38,6 +38,10 @@ from data_module.ml_daily_price_source_quality import (
     assert_daily_price_source_quality,
     write_quarantine_report,
 )
+from data_module.ml_price_availability_contract import (
+    PRICE_AVAILABILITY_CONTRACT_VERSION,
+    build_price_unavailable_research_contract,
+)
 from data_module.statement_report_basis_contract import (
     resolve_statement_report_basis,
 )
@@ -90,6 +94,40 @@ _BAD_QUALITY_TOKENS = frozenset(
 _REPORT_BASES = frozenset({"consolidated", "individual"})
 
 
+def _source_quality_is_price_unavailable_only(
+    report: Mapping[str, Any],
+) -> bool:
+    """Allow raw research rows with unavailable prices through the shard stage.
+
+    The source guard remains fail-closed for CSV mismatches, route conflicts,
+    and scale discontinuities.  This narrow exception is safe only when the
+    guard's complete candidate count is the same as its explicit
+    ``price_unavailable`` contract count; a truncated sample can never widen
+    that exception.
+    """
+
+    try:
+        candidate_count = int(report.get("candidate_count", -1))
+        unavailable_count = int(
+            report.get("research_price_unavailable_count", -1)
+        )
+        invalid_count = int(report.get("research_price_invalid_count", -1))
+    except (TypeError, ValueError):
+        return False
+    if (
+        candidate_count <= 0
+        or candidate_count != unavailable_count
+        or invalid_count != 0
+    ):
+        return False
+    classifications = report.get("classification_counts")
+    if not isinstance(classifications, Mapping):
+        return False
+    return set(str(key) for key in classifications) <= {
+        "sqlite_row_invalid_requires_quarantine"
+    }
+
+
 @dataclass(frozen=True)
 class PITYearShardBuildRequest:
     """年度 shard 建置輸入；``symbols=None`` 明確代表全 universe。"""
@@ -114,9 +152,15 @@ class PITYearShardBuildRequest:
     # Optional source guard.  Production callers may supply the canonical
     # daily CSV root; omitted keeps legacy fixture/API behaviour unchanged.
     daily_price_source_dir: Path | None = None
+    # Production callers with both exchanges must pass both roots explicitly;
+    # routing is performed per symbol and never by directory order alone.
+    daily_price_source_dirs: tuple[Path, ...] | None = None
     source_quality_report_path: Path | None = None
     # 來源 receipt 的實際可得時間；不提供時不得以 mtime 或當前時間代替。
     source_quality_known_at: str | None = None
+    # 全歷史 source guard 只保留有限 evidence sample；candidate_count 與
+    # classification/date counts 仍計算全量候選。
+    source_quality_candidate_sample_limit: int = 64
 
     def __post_init__(self) -> None:
         if not str(self.decision_at).strip():
@@ -131,6 +175,12 @@ class PITYearShardBuildRequest:
             raise TypeError("compression_level must be an integer")
         if self.compression_level < 0 or self.compression_level > 9:
             raise ValueError("compression_level must be between 0 and 9")
+        if isinstance(self.source_quality_candidate_sample_limit, bool) or not isinstance(
+            self.source_quality_candidate_sample_limit, int
+        ):
+            raise TypeError("source_quality_candidate_sample_limit must be an integer")
+        if self.source_quality_candidate_sample_limit < 0:
+            raise ValueError("source_quality_candidate_sample_limit must be non-negative")
         if self.symbols is not None:
             normalized = _normalized_texts(self.symbols)
             if not normalized:
@@ -143,6 +193,19 @@ class PITYearShardBuildRequest:
             "industry_index_names",
             _normalized_texts(self.industry_index_names),
         )
+        if self.daily_price_source_dirs is not None:
+            normalized_source_dirs = tuple(
+                Path(value) for value in self.daily_price_source_dirs
+            )
+            if not normalized_source_dirs:
+                raise ValueError(
+                    "daily_price_source_dirs must be non-empty when supplied"
+                )
+            object.__setattr__(
+                self,
+                "daily_price_source_dirs",
+                normalized_source_dirs,
+            )
         aliases = (
             self.persistent_storage_budget_bytes,
             self.persistent_new_bytes_budget,
@@ -525,37 +588,93 @@ class PITYearShardExporter:
         if request.years and max(request.years) > decision.year:
             raise ValueError("requested shard year must not exceed decision year")
 
-        if request.daily_price_source_dir is not None:
+        source_quality_summary: dict[str, Any] | None = None
+
+        source_dirs: tuple[Path, ...] = tuple(
+            path
+            for path in (
+                (() if request.daily_price_source_dir is None else (request.daily_price_source_dir,))
+                + (
+                    ()
+                    if request.daily_price_source_dirs is None
+                    else request.daily_price_source_dirs
+                )
+            )
+        )
+        if source_dirs:
+            source_roots = (database_path.parent, *source_dirs)
             try:
                 source_quality = assert_daily_price_source_quality(
                     sqlite_path=database_path,
-                    canonical_daily_price_dir=(
-                        request.daily_price_source_dir
-                    ),
+                    canonical_daily_price_dirs=source_dirs,
                     start_date=history_start.isoformat(),
                     end_date=decision.date().isoformat(),
                     quality_mode="ingest_guard",
                     quality_known_at=request.source_quality_known_at,
+                    candidate_sample_limit=request.source_quality_candidate_sample_limit,
                 )
             except DailyPriceSourceQualityError as exc:
-                if request.source_quality_report_path is not None:
-                    write_quarantine_report(
-                        request.source_quality_report_path,
-                        exc.report,
-                        source_roots=(
-                            database_path.parent,
-                            request.daily_price_source_dir,
+                if _source_quality_is_price_unavailable_only(exc.report):
+                    # Keep the raw row and its missing mask in the shard.  The
+                    # feature/label consumers must exclude its affected
+                    # windows; this exception never permits a CSV mismatch or
+                    # scale anomaly to reach publication.
+                    source_quality_summary = {
+                        "schema_version": str(exc.report.get("schema_version", "")),
+                        "status": str(exc.report.get("status", "")),
+                        "research_only": True,
+                        "formal_training_allowed": False,
+                        "price_availability_contract": (
+                            PRICE_AVAILABILITY_CONTRACT_VERSION
                         ),
-                    )
-                raise
-            if request.source_quality_report_path is not None:
+                        "candidate_count": int(exc.report["candidate_count"]),
+                        "research_price_unavailable_count": int(
+                            exc.report["research_price_unavailable_count"]
+                        ),
+                        "candidate_digest": str(
+                            exc.report.get("candidate_digest", "")
+                        ),
+                        "report_hash": str(exc.report.get("report_hash", "")),
+                    }
+                    if request.source_quality_report_path is not None:
+                        write_quarantine_report(
+                            request.source_quality_report_path,
+                            exc.report,
+                            source_roots=source_roots,
+                        )
+                else:
+                    if request.source_quality_report_path is not None:
+                        write_quarantine_report(
+                            request.source_quality_report_path,
+                            exc.report,
+                            source_roots=source_roots,
+                        )
+                    raise
+            else:
+                source_quality_summary = {
+                    "schema_version": str(source_quality.get("schema_version", "")),
+                    "status": str(source_quality.get("status", "")),
+                    "research_only": False,
+                    "formal_training_allowed": bool(
+                        source_quality.get("formal_training_allowed", False)
+                    ),
+                    "price_availability_contract": (
+                        PRICE_AVAILABILITY_CONTRACT_VERSION
+                    ),
+                    "candidate_count": int(source_quality.get("candidate_count", 0)),
+                    "research_price_unavailable_count": int(
+                        source_quality.get("research_price_unavailable_count", 0)
+                    ),
+                    "candidate_digest": str(
+                        source_quality.get("candidate_digest", "")
+                    ),
+                    "report_hash": str(source_quality.get("report_hash", "")),
+                }
+            if request.source_quality_report_path is not None and source_quality_summary is not None and not source_quality_summary["research_only"]:
                 write_quarantine_report(
                     request.source_quality_report_path,
                     source_quality,
-                    source_roots=(
-                        database_path.parent,
-                        request.daily_price_source_dir,
-                    ),
+                    source_roots=source_roots,
                 )
 
         output_root.mkdir(parents=True, exist_ok=True)
@@ -706,6 +825,7 @@ class PITYearShardExporter:
                 requested_years=request.years,
                 eligibility_manifest_hash=eligibility.manifest_hash,
                 source_fingerprint=source_fingerprint,
+                source_quality_summary=source_quality_summary,
                 capacity_checkpoint=capacity_checkpoint,
             )
             content_identity = {
@@ -826,6 +946,8 @@ class PITYearShardExporter:
                     ],
                 },
             }
+            if source_quality_summary is not None:
+                publication_manifest["source_quality"] = source_quality_summary
             publication_manifest["manifest_hash"] = _sha256_json(
                 publication_manifest
             )
@@ -1038,6 +1160,13 @@ class PITYearShardExporter:
                 f"CAST({_quote_identifier(record.column_name)} AS TEXT) AS "
                 f"{_quote_identifier(alias)}"
             )
+        raw_price_aliases = {
+            record.column_name: feature_aliases[record.feature_id]
+            for record in selected_records
+            if table_name == "daily_prices"
+            and record.column_name
+            in {"證券名稱", "開盤價", "最高價", "最低價", "收盤價", "成交股數"}
+        }
 
         predicates: list[str] = []
         parameters: list[object] = []
@@ -1129,6 +1258,8 @@ class PITYearShardExporter:
         derived_atr_count = 0
         derived_adx_count = 0
         blocked_atr_adx_count = 0
+        price_unavailable_row_count = 0
+        price_unavailable_contract_samples: list[dict[str, Any]] = []
         technical_states: dict[str, _CausalWilder14State] = {}
         cursor = connection.execute(query, tuple(parameters))
         batch_number = 0
@@ -1166,6 +1297,47 @@ class PITYearShardExporter:
                     _required_identity(row[f"__identity_{index}"])
                     for index in range(len(identity_columns))
                 )
+                price_unavailable_contract: dict[str, Any] | None = None
+                if table_name == "daily_prices" and {
+                    "開盤價",
+                    "最高價",
+                    "最低價",
+                    "收盤價",
+                }.issubset(raw_price_aliases):
+                    raw_price_row = {
+                        "symbol": entity_id,
+                        "name": (
+                            row[raw_price_aliases["證券名稱"]]
+                            if "證券名稱" in raw_price_aliases
+                            else None
+                        ),
+                        "open": row[raw_price_aliases["開盤價"]],
+                        "high": row[raw_price_aliases["最高價"]],
+                        "low": row[raw_price_aliases["最低價"]],
+                        "close": row[raw_price_aliases["收盤價"]],
+                        "volume": (
+                            row[raw_price_aliases["成交股數"]]
+                            if "成交股數" in raw_price_aliases
+                            else None
+                        ),
+                    }
+                    try:
+                        price_unavailable_contract = (
+                            build_price_unavailable_research_contract(
+                                symbol=entity_id,
+                                date_iso=event_date.isoformat(),
+                                raw_row=raw_price_row,
+                            )
+                        )
+                    except ValueError as contract_error:
+                        if str(contract_error) != "raw_row has no unavailable price field":
+                            raise
+                    if price_unavailable_contract is not None:
+                        price_unavailable_row_count += 1
+                        if len(price_unavailable_contract_samples) < 64:
+                            price_unavailable_contract_samples.append(
+                                price_unavailable_contract
+                            )
                 report_basis: str | None = None
                 if table_name == "fundamental_statement_items":
                     report_basis = resolve_statement_report_basis(
@@ -1205,6 +1377,13 @@ class PITYearShardExporter:
                                 "entity_id": entity_id,
                                 "blocker": "missing_ohlc_derivation_columns",
                             }
+                        )
+                        state = technical_states.setdefault(
+                            entity_id, _CausalWilder14State()
+                        )
+                        state._reset_after_gap(
+                            event_date=event_date,
+                            state_hash=missing_hash,
                         )
                         atr_value, adx_value = _CausalWilder14State._missing_pair(
                             blocker="missing_ohlc_derivation_columns",
@@ -1299,6 +1478,10 @@ class PITYearShardExporter:
                             "pit_status": "eligible_as_of_decision",
                             "values": list(values),
                         }
+                        if price_unavailable_contract is not None:
+                            row_payload["price_availability_contract"] = (
+                                price_unavailable_contract
+                            )
                         row_payload["source_row_hash"] = _sha256_json(row_payload)
                         writers.get(dataset_id, available_at.year).write(row_payload)
                         emitted_row_count += 1
@@ -1346,6 +1529,10 @@ class PITYearShardExporter:
                         "pit_status": "eligible_as_of_decision",
                         "values": list(values),
                     }
+                    if price_unavailable_contract is not None:
+                        derived_payload["price_availability_contract"] = (
+                            price_unavailable_contract
+                        )
                     derived_payload["source_row_hash"] = _sha256_json(
                         derived_payload
                     )
@@ -1420,6 +1607,15 @@ class PITYearShardExporter:
             "filtered_year_row_count": filtered_year_rows,
             "filtered_history_row_count": filtered_history_rows,
             "invalid_event_row_count": invalid_event_rows,
+            "price_unavailable_row_count": price_unavailable_row_count,
+            "price_unavailable_contract_schema": (
+                PRICE_AVAILABILITY_CONTRACT_VERSION
+                if price_unavailable_row_count
+                else None
+            ),
+            "price_unavailable_contract_samples": (
+                price_unavailable_contract_samples
+            ),
             "diagnostics": diagnostics,
         }
 
@@ -1434,6 +1630,7 @@ class PITYearShardExporter:
         requested_years: tuple[int, ...],
         eligibility_manifest_hash: str,
         source_fingerprint: str,
+        source_quality_summary: Mapping[str, Any] | None = None,
         capacity_checkpoint: Callable[[str], None] | None = None,
     ) -> dict[DatasetId, dict[str, Any]]:
         result: dict[DatasetId, dict[str, Any]] = {}
@@ -1512,6 +1709,8 @@ class PITYearShardExporter:
                     ],
                 },
             }
+            if source_quality_summary is not None:
+                manifest["source_quality"] = dict(source_quality_summary)
             manifest["manifest_hash"] = _sha256_json(manifest)
             dataset_directory = staging / dataset_id
             dataset_directory.mkdir(parents=True, exist_ok=True)

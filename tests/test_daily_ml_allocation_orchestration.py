@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -148,7 +148,12 @@ def _promotion_result(output_root: Path) -> dict[str, object]:
     }
 
 
-def _shadow_result(output_root: Path) -> dict[str, object]:
+def _shadow_result(
+    output_root: Path,
+    *,
+    observation_emitted_at: datetime | None = None,
+    natural_forward_deadline_at: datetime | None = None,
+) -> dict[str, object]:
     root = (
         output_root
         / "scheduled"
@@ -161,7 +166,7 @@ def _shadow_result(output_root: Path) -> dict[str, object]:
     for path in (observation, evidence, advice):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{}", encoding="utf-8")
-    return {
+    result: dict[str, object] = {
         "status": "shadow_observation_recorded",
         "observation_recorded": True,
         "shadow_day_credit_allowed": True,
@@ -183,6 +188,13 @@ def _shadow_result(output_root: Path) -> dict[str, object]:
         "production_action_allowed": False,
         "broker_order_allowed": False,
     }
+    if observation_emitted_at is not None:
+        result["observation_emitted_at"] = observation_emitted_at.isoformat()
+    if natural_forward_deadline_at is not None:
+        result["natural_forward_deadline_at"] = (
+            natural_forward_deadline_at.isoformat()
+        )
+    return result
 
 
 def _run(
@@ -193,6 +205,11 @@ def _run(
     promotion_reference_pointer_path: Path | None = None,
     promotion_authority_pointer_path: Path | None = None,
     pit_machine_operational_path: Path | None = None,
+    pit_machine_operational_publication_file_hash: str | None = None,
+    pit_machine_archive_root: Path | None = None,
+    pit_machine_archive_manifest: Path | None = None,
+    pit_machine_archive_manifest_file_hash: str | None = None,
+    natural_forward_deadline_at: datetime | None = None,
 ) -> dict[str, object]:
     return orchestration.run(
         database_path=tmp_path / "twstock.db",
@@ -203,6 +220,15 @@ def _run(
         promotion_reference_pointer_path=promotion_reference_pointer_path,
         promotion_authority_pointer_path=promotion_authority_pointer_path,
         pit_machine_operational_path=pit_machine_operational_path,
+        pit_machine_operational_publication_file_hash=(
+            pit_machine_operational_publication_file_hash
+        ),
+        pit_machine_archive_root=pit_machine_archive_root,
+        pit_machine_archive_manifest=pit_machine_archive_manifest,
+        pit_machine_archive_manifest_file_hash=(
+            pit_machine_archive_manifest_file_hash
+        ),
+        natural_forward_deadline_at=natural_forward_deadline_at,
     )
 
 
@@ -377,7 +403,11 @@ def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
         Path(kwargs["input_output"]).parent.mkdir(parents=True, exist_ok=True)
         Path(kwargs["input_output"]).write_bytes(b"input")
         Path(kwargs["audit_output"]).write_text("{}", encoding="utf-8")
-        return _post_freeze_result()
+        result = _post_freeze_result()
+        result["pit_machine_operational_publication"] = str(
+            pit_machine_path.resolve()
+        )
+        return result
 
     def fake_inference(**kwargs: Any) -> dict[str, object]:
         calls.append("inference")
@@ -432,6 +462,9 @@ def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
         release_root,
         promotion_reference_pointer_path=reference_pointer_path,
         pit_machine_operational_path=pit_machine_path,
+        pit_machine_operational_publication_file_hash=(
+            orchestration._file_hash(pit_machine_path)
+        ),
     )
 
     assert calls == ["raw", "input", "inference", "shadow", "promotion"]
@@ -442,6 +475,13 @@ def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
         pit_machine_path.resolve()
     )
     assert captured["input"]["strict_t_minus_one"] == date(2026, 7, 30)
+    post_freeze_stage = result["stage_results"]["post_freeze_input"]
+    assert post_freeze_stage["pit_machine_operational_publication"] == str(
+        pit_machine_path.resolve()
+    )
+    assert post_freeze_stage[
+        "pit_machine_operational_publication_file_hash"
+    ] == orchestration._file_hash(pit_machine_path)
     assert captured["inference"]["policy_hash"] == orchestration.POLICY_HASH
     assert captured["inference"]["expected_universe_hash"] == (
         f"sha256:{'e' * 64}"
@@ -507,6 +547,299 @@ def test_success_runs_raw_input_inference_then_promotion_and_hashes_status(
     status_hash = stored.pop("status_hash")
     assert status_hash == orchestration._payload_hash(stored)
     assert stored == {key: value for key, value in result.items() if key != "status_hash"}
+
+
+def test_missing_pit_machine_publication_fails_closed_before_post_freeze_builder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """缺少盤前 machine candidate 時不得進入 feature assembly。"""
+
+    release_root = _write_release(tmp_path / "release")
+    calls: list[str] = []
+
+    def fake_raw(**_kwargs: Any) -> orchestration.RawPublication:
+        calls.append("raw")
+        return _raw_publication(tmp_path)
+
+    def should_not_build_input(**_kwargs: Any) -> dict[str, object]:
+        raise AssertionError("missing machine publication must stop before input")
+
+    monkeypatch.setattr(orchestration, "_build_raw_publication", fake_raw)
+    monkeypatch.setattr(
+        orchestration,
+        "_build_post_freeze_input",
+        should_not_build_input,
+    )
+
+    missing_path = tmp_path / "missing-pit-machine-operational.json"
+    result = _run(
+        tmp_path,
+        release_root,
+        pit_machine_operational_path=missing_path,
+    )
+
+    assert calls == ["raw"]
+    assert result["status"] == "passed_rule_only"
+    assert result["orchestration_status"] == "fail_closed"
+    assert result["failed_stage"] == "post_freeze_input"
+    assert "operational publication is missing" in str(result["failed_reasons"])
+    assert result["post_freeze_input_status"] == "failed"
+    assert result["orchestration_run_hash"] is None
+
+
+def test_operational_publication_frozen_hash_mismatch_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_root = _write_release(tmp_path / "release")
+
+    monkeypatch.setattr(
+        orchestration,
+        "_build_raw_publication",
+        lambda **_kwargs: _raw_publication(tmp_path),
+    )
+    pit_machine_path = tmp_path / "pit-machine-operational.json"
+    pit_machine_path.write_text("{}", encoding="utf-8")
+
+    result = _run(
+        tmp_path,
+        release_root,
+        pit_machine_operational_path=pit_machine_path,
+        pit_machine_operational_publication_file_hash=(
+            f"sha256:{'0' * 64}"
+        ),
+    )
+
+    assert result["status"] == "passed_rule_only"
+    assert result["orchestration_status"] == "fail_closed"
+    assert result["failed_stage"] == "post_freeze_input"
+    assert "file hash mismatch" in str(result["failed_reasons"])
+
+
+def test_archive_manifest_path_and_freeze_hash_reach_post_freeze_builder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """archive 選擇由 caller 凍結後，orchestration 必須原樣傳給 builder。"""
+
+    release_root = _write_release(tmp_path / "release")
+    archive_root = tmp_path / "pit_candidate_archive"
+    archive_root.mkdir()
+    manifest = archive_root / "2026-07-30" / "archive-key" / "archive_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("archive-manifest", encoding="utf-8")
+    frozen_hash = orchestration._file_hash(manifest)
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        orchestration,
+        "_build_raw_publication",
+        lambda **_kwargs: _raw_publication(tmp_path),
+    )
+
+    def stop_after_archive_wiring(**kwargs: Any) -> dict[str, object]:
+        captured.update(kwargs)
+        raise RuntimeError("stop after archive wiring")
+
+    monkeypatch.setattr(
+        orchestration,
+        "_build_post_freeze_input",
+        stop_after_archive_wiring,
+    )
+    result = _run(
+        tmp_path,
+        release_root,
+        pit_machine_archive_root=archive_root,
+        pit_machine_archive_manifest=manifest,
+        pit_machine_archive_manifest_file_hash=frozen_hash,
+    )
+
+    assert captured["pit_machine_archive_root"] == archive_root.resolve()
+    assert captured["pit_machine_archive_manifest"] == manifest.resolve()
+    assert captured["pit_machine_archive_manifest_file_hash"] == frozen_hash
+    assert result["orchestration_status"] == "fail_closed"
+    assert result["failed_stage"] == "post_freeze_input"
+
+
+def test_partial_pit_machine_archive_contract_fails_closed_before_builder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_root = _write_release(tmp_path / "release")
+    calls: list[str] = []
+
+    def fake_raw(**_kwargs: Any) -> orchestration.RawPublication:
+        calls.append("raw")
+        return _raw_publication(tmp_path)
+
+    def should_not_build_input(**_kwargs: Any) -> dict[str, object]:
+        raise AssertionError("partial archive contract must stop before input")
+
+    monkeypatch.setattr(orchestration, "_build_raw_publication", fake_raw)
+    monkeypatch.setattr(
+        orchestration,
+        "_build_post_freeze_input",
+        should_not_build_input,
+    )
+    archive_root = tmp_path / "pit_candidate_archive"
+    archive_root.mkdir()
+
+    result = _run(
+        tmp_path,
+        release_root,
+        pit_machine_archive_root=archive_root,
+    )
+
+    assert calls == ["raw"]
+    assert result["orchestration_status"] == "fail_closed"
+    assert result["failed_stage"] == "post_freeze_input"
+    assert "must be supplied together" in str(result["failed_reasons"])
+    assert result["orchestration_run_hash"] is None
+
+
+def test_forward_completion_deadline_blocks_slow_inference_before_observation_append(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """慢 inference 越過 08:35 時，late artifact 不得 append observation。"""
+
+    release_root = _write_release(tmp_path / "release")
+    calls: list[str] = []
+
+    def fake_raw(**_kwargs: Any) -> orchestration.RawPublication:
+        calls.append("raw")
+        return _raw_publication(tmp_path)
+
+    def fake_input(**kwargs: Any) -> dict[str, object]:
+        calls.append("input")
+        Path(kwargs["input_output"]).parent.mkdir(parents=True, exist_ok=True)
+        Path(kwargs["input_output"]).write_bytes(b"input")
+        Path(kwargs["audit_output"]).write_text("{}", encoding="utf-8")
+        return _post_freeze_result()
+
+    def fake_inference(**kwargs: Any) -> dict[str, object]:
+        calls.append("inference")
+        Path(kwargs["proposal_output"]).write_text("{}", encoding="utf-8")
+        Path(kwargs["audit_output"]).write_text("{}", encoding="utf-8")
+        return _inference_result()
+
+    monkeypatch.setattr(orchestration, "_build_raw_publication", fake_raw)
+    monkeypatch.setattr(orchestration, "_build_post_freeze_input", fake_input)
+    monkeypatch.setattr(orchestration, "_run_inference", fake_inference)
+    monkeypatch.setattr(
+        orchestration,
+        "_calculate_inference_universe_hash",
+        lambda _path: f"sha256:{'e' * 64}",
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_load_inference_rows",
+        lambda _path: (),
+    )
+    deadline = DECISION_AT + timedelta(minutes=5)
+    monkeypatch.setattr(
+        orchestration,
+        "_utc_now",
+        lambda: deadline.astimezone(timezone.utc) + timedelta(seconds=1),
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_run_shadow_evidence_collector",
+        lambda **_kwargs: pytest.fail(
+            "late forward inference must not append a shadow observation"
+        ),
+    )
+
+    result = _run(
+        tmp_path,
+        release_root,
+        natural_forward_deadline_at=deadline,
+    )
+
+    assert calls == ["raw", "input", "inference"]
+    assert result["orchestration_status"] == "fail_closed"
+    assert result["failed_stage"] == "shadow_evidence"
+    assert result["shadow_observation_recorded"] is False
+    assert result["shadow_day_credit_allowed"] is False
+    clock = result["natural_forward_completion_clock"]
+    assert isinstance(clock, dict)
+    assert clock["within_forward_completion_window"] is False
+    assert clock["observation_append_attempted"] is False
+
+
+def test_forward_completion_and_emission_on_time_are_recorded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """在 08:35 前完成並 emission 時，四項 clock evidence 應落盤。"""
+
+    release_root = _write_release(tmp_path / "release")
+
+    def fake_input(**kwargs: Any) -> dict[str, object]:
+        Path(kwargs["input_output"]).parent.mkdir(parents=True, exist_ok=True)
+        Path(kwargs["input_output"]).write_bytes(b"input")
+        Path(kwargs["audit_output"]).write_text("{}", encoding="utf-8")
+        return _post_freeze_result()
+
+    def fake_inference(**kwargs: Any) -> dict[str, object]:
+        Path(kwargs["proposal_output"]).write_text("{}", encoding="utf-8")
+        Path(kwargs["audit_output"]).write_text("{}", encoding="utf-8")
+        return _inference_result()
+
+    deadline = DECISION_AT + timedelta(minutes=5)
+    emitted_at = deadline - timedelta(seconds=1)
+    monkeypatch.setattr(
+        orchestration,
+        "_build_raw_publication",
+        lambda **_kwargs: _raw_publication(tmp_path),
+    )
+    monkeypatch.setattr(orchestration, "_build_post_freeze_input", fake_input)
+    monkeypatch.setattr(
+        orchestration,
+        "_calculate_inference_universe_hash",
+        lambda _path: f"sha256:{'e' * 64}",
+    )
+    monkeypatch.setattr(orchestration, "_load_inference_rows", lambda _path: ())
+    monkeypatch.setattr(orchestration, "_run_inference", fake_inference)
+    monkeypatch.setattr(
+        orchestration,
+        "_utc_now",
+        lambda: (deadline - timedelta(seconds=2)).astimezone(timezone.utc),
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_run_shadow_evidence_collector",
+        lambda **_kwargs: _shadow_result(
+            tmp_path / "output",
+            observation_emitted_at=emitted_at,
+            natural_forward_deadline_at=deadline,
+        ),
+    )
+    monkeypatch.setattr(
+        orchestration,
+        "_run_promotion_evaluator",
+        lambda **_kwargs: _promotion_result(tmp_path / "output"),
+    )
+
+    result = _run(
+        tmp_path,
+        release_root,
+        natural_forward_deadline_at=deadline,
+    )
+
+    assert result["orchestration_status"] == "completed"
+    clock = result["natural_forward_completion_clock"]
+    assert isinstance(clock, dict)
+    assert clock["within_forward_completion_window"] is True
+    assert clock["observation_append_attempted"] is True
+    assert clock["within_forward_emission_window"] is True
+    assert clock["observation_emitted_at"] == emitted_at.isoformat(
+        timespec="microseconds"
+    )
+    stage = result["stage_results"]["shadow_evidence"]
+    assert stage["observation_emitted_at"] == emitted_at.isoformat()
+    assert stage["natural_forward_deadline_at"] == deadline.isoformat()
 
 
 def test_signed_authority_for_different_model_cannot_drive_inference_release(
@@ -1021,3 +1354,334 @@ def test_shadow_collector_failure_rolls_back_to_rule_and_skips_promotion(
     assert result["production_blend_alpha_bp"] == 0
     assert result["formal_oos_allowed"] is False
     assert result["broker_order_allowed"] is False
+
+
+def test_maturity_refresh_keeps_missing_sidecar_pending_without_creating_one(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "output" / "scheduled" / "forward"
+    result = orchestration._run_shadow_maturity_refresh(
+        database_path=tmp_path / "market.sqlite",
+        run_root=run_root,
+        cutoff_date=date(2026, 7, 30),
+    )
+
+    assert result["status"] == "pending_source_missing"
+    assert result["cutoff_date"] == "2026-07-30"
+    assert result["natural_day_credit_granted"] is False
+    assert result["writes_market_database"] is False
+    assert not (
+        run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite"
+    ).exists()
+
+
+def test_maturity_refresh_binds_exact_lane_sidecar_and_reports_revision_delta(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run_root = tmp_path / "output" / "scheduled" / "forward"
+    sidecar = run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite"
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_bytes(b"existing-sidecar")
+    captured: dict[str, object] = {}
+
+    class _FakeCollector:
+        @classmethod
+        def for_maturity_refresh(cls, **kwargs: object) -> "_FakeCollector":
+            captured.update(kwargs)
+            return cls()
+
+        def mature_and_summarize(
+            self,
+            *,
+            cutoff_date: date,
+            available_at_cutoff: datetime,
+        ) -> dict[str, object]:
+            captured["cutoff_date"] = cutoff_date
+            captured["available_at_cutoff"] = available_at_cutoff
+            return {
+                "status": "insufficient_evidence",
+                "evidence_hash": "sha256:" + "1" * 64,
+                "evidence_path": str(tmp_path / "evidence.json"),
+                "observation_count": 3,
+                "matured_observation_count": 0,
+                "partial_outcome_count": 2,
+                "blocked_outcome_count": 1,
+                "promotion_credit_observation_count": 0,
+                "outcome_record_count_before": 4,
+                "outcome_record_count_after": 5,
+                "outcome_records_appended": 1,
+            }
+
+    monkeypatch.setattr(orchestration, "MLAllocationShadowCollector", _FakeCollector)
+
+    result = orchestration._run_shadow_maturity_refresh(
+        database_path=tmp_path / "market.sqlite",
+        run_root=run_root,
+        cutoff_date=date(2026, 7, 30),
+    )
+
+    assert result["status"] == "completed"
+    assert captured["market_database_path"] == tmp_path / "market.sqlite"
+    assert captured["sidecar_database_path"] == sidecar
+    assert captured["artifact_root"] == sidecar.parent
+    assert captured["cutoff_date"] == date(2026, 7, 30)
+    assert isinstance(captured["available_at_cutoff"], datetime)
+    assert result["outcome_records_before"] == 4
+    assert result["outcome_records_after"] == 5
+    assert result["outcome_records_appended"] == 1
+    assert result["writes_shadow_sidecar"] is True
+    assert result["natural_day_credit_granted"] is False
+
+
+def test_maturity_refresh_does_not_repair_or_mutate_invalid_sidecar(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "output" / "scheduled" / "forward"
+    sidecar = run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite"
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    original = b"not-a-sqlite-database"
+    sidecar.write_bytes(original)
+
+    result = orchestration._run_shadow_maturity_refresh(
+        database_path=tmp_path / "market.sqlite",
+        run_root=run_root,
+        cutoff_date=date(2026, 7, 30),
+    )
+
+    assert result["status"] == "blocked"
+    assert "DatabaseError" in str(result["blocker"])
+    assert sidecar.read_bytes() == original
+
+
+def test_maturity_refresh_rejects_future_cutoff_without_sidecar_write(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "output" / "scheduled" / "forward"
+    sidecar = run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite"
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    original = b"existing-sidecar"
+    sidecar.write_bytes(original)
+    future_cutoff = datetime.now(TAIPEI).date() + timedelta(days=1)
+
+    result = orchestration._run_shadow_maturity_refresh(
+        database_path=tmp_path / "market.sqlite",
+        run_root=run_root,
+        cutoff_date=future_cutoff,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["blocker"] == (
+        "maturity_cutoff_future_relative_to_runtime_clock"
+    )
+    assert sidecar.read_bytes() == original
+
+
+def test_maturity_refresh_runs_before_non_trading_day_return(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_refresh(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {
+            "status": "pending_source_missing",
+            "natural_day_credit_granted": False,
+        }
+
+    monkeypatch.setattr(
+        orchestration,
+        "_run_shadow_maturity_refresh",
+        fake_refresh,
+    )
+
+    calendar = _Calendar(
+        {
+            DECISION_AT.date(): (False, "official_closed"),
+            date(2026, 7, 30): (True, "official_open"),
+        }
+    )
+    result = orchestration.run(
+        database_path=tmp_path / "market.sqlite",
+        output_root=tmp_path / "output",
+        release_root=tmp_path / "release",
+        decision_at=DECISION_AT,
+        calendar=calendar,
+    )
+
+    assert result["status"] == "skipped_non_trading_day"
+    assert len(calls) == 1
+    assert calls[0]["run_root"] == (
+        tmp_path / "output" / "scheduled" / "ml_allocation_copilot"
+    )
+    assert calls[0]["cutoff_date"] == date(2026, 7, 30)
+    assert result["natural_shadow_maturity"]["status"] == (
+        "pending_source_missing"
+    )
+    assert result["natural_shadow_maturity_degraded"] is False
+    assert result["natural_shadow_maturity_exit_code"] == 0
+
+
+def test_maturity_refresh_blocks_on_unknown_calendar_cutoff_at_common_exit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_refresh(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {
+            "status": "blocked",
+            "blocker": "maturity_cutoff_unavailable",
+            "natural_day_credit_granted": False,
+        }
+
+    monkeypatch.setattr(
+        orchestration,
+        "_run_shadow_maturity_refresh",
+        fake_refresh,
+    )
+    calendar = _Calendar(
+        {
+            DECISION_AT.date(): (None, "calendar_unknown"),
+        }
+    )
+
+    result = orchestration.run(
+        database_path=tmp_path / "market.sqlite",
+        output_root=tmp_path / "output",
+        release_root=tmp_path / "release",
+        decision_at=DECISION_AT,
+        calendar=calendar,
+    )
+
+    assert result["status"] == "passed_rule_only"
+    assert result["failed_stage"] == "trading_calendar"
+    assert len(calls) == 1
+    assert calls[0]["cutoff_date"] is None
+    assert result["natural_shadow_maturity"]["status"] == "blocked"
+    assert result["natural_shadow_maturity_degraded"] is True
+    assert result["natural_shadow_maturity_exit_code"] == 2
+    assert "natural_shadow_maturity:blocked" in result["failed_reasons"]
+
+
+def test_common_status_normalizes_existing_blocked_maturity_result(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "scheduled" / "ml_allocation_copilot"
+    result = orchestration._write_status(
+        run_root,
+        {
+            "schema_version": "fixture",
+            "status": "passed_rule_only",
+            "decision_at": "2026-09-08T08:30:00+08:00",
+            "failed_reasons": [],
+            "natural_shadow_maturity": {
+                "mode": "maturity_only",
+                "status": "blocked",
+                "blocker": "calendar_unknown",
+            },
+            "natural_shadow_maturity_degraded": False,
+            "natural_shadow_maturity_exit_code": 0,
+        },
+    )
+
+    assert result["natural_shadow_maturity_degraded"] is True
+    assert result["natural_shadow_maturity_exit_code"] == 2
+    assert "natural_shadow_maturity:blocked" in result["failed_reasons"]
+
+
+def test_forward_common_status_defers_sidecar_work_until_after_deadline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def should_not_refresh(**_kwargs: object) -> dict[str, object]:
+        raise AssertionError("forward child must not scan sidecar before timeout")
+
+    monkeypatch.setattr(
+        orchestration,
+        "_run_shadow_maturity_refresh",
+        should_not_refresh,
+    )
+    run_root = tmp_path / "scheduled" / "ml_allocation_copilot"
+    result = orchestration._write_status(
+        run_root,
+        {
+            "schema_version": "fixture",
+            "status": "passed_rule_only",
+            "decision_at": "2026-09-08T08:30:00+08:00",
+            "natural_forward_deadline_at": "2026-09-08T08:35:00+08:00",
+            "natural_shadow_maturity_database_path": str(
+                tmp_path / "market.sqlite"
+            ),
+            "natural_shadow_maturity_cutoff_date": "2026-09-07",
+            "natural_shadow_maturity": None,
+            "failed_reasons": [],
+        },
+    )
+
+    assert result["natural_shadow_maturity"]["status"] == (
+        "deferred_post_deadline"
+    )
+    assert result["natural_shadow_maturity_deferred"] is True
+    assert result["natural_shadow_maturity_degraded"] is False
+    assert result["natural_shadow_maturity_exit_code"] == 0
+    assert result["natural_shadow_pruning_evidence"]["status"] == (
+        "deferred_post_deadline"
+    )
+    assert result["natural_shadow_pruning_evidence_deferred"] is True
+    assert result["natural_shadow_pruning_evidence_exit_code"] == 0
+
+
+def test_maturity_only_cli_keeps_missing_sidecar_as_normal_pending(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_root = tmp_path / "scheduled" / "ml_allocation_copilot"
+    exit_code = orchestration.main(
+        [
+            "--maturity-only",
+            "--database",
+            str(tmp_path / "market.sqlite"),
+            "--maturity-run-root",
+            str(run_root),
+            "--maturity-cutoff-date",
+            "2026-09-07",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "pending_source_missing"
+    assert payload["natural_shadow_maturity"]["status"] == (
+        "pending_source_missing"
+    )
+    assert payload["natural_shadow_maturity_exit_code"] == 0
+    assert not (
+        run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite"
+    ).exists()
+
+
+def test_maturity_only_cli_rejects_invalid_cutoff(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = orchestration.main(
+        [
+            "--maturity-only",
+            "--database",
+            str(tmp_path / "market.sqlite"),
+            "--maturity-run-root",
+            str(tmp_path / "scheduled" / "ml_allocation_copilot"),
+            "--maturity-cutoff-date",
+            "20261399",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "blocked"
+    assert payload["natural_shadow_maturity"]["blocker"] == (
+        "maturity_cutoff_date_invalid"
+    )

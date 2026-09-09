@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
 
 from app_module.evidence_pipeline_runner import EvidencePipelineRunner, write_pipeline_report
 from app_module.evidence_pipeline_runner_dtos import EvidencePipelineRunRequest
+from app_module.paper_decision_desk_evidence_source import PaperDecisionDeskEvidenceSource
 from data_module.config import TWStockConfig
 
 
@@ -40,6 +41,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-production-db-confirm", action="store_true")
     parser.add_argument("--data-root")
     parser.add_argument("--output-root")
+    parser.add_argument(
+        "--paper-evidence-operation-root",
+        help=(
+            "explicit isolated Paper operation root for scheduled evidence; "
+            "when supplied, its snapshot DB/status are read-only"
+        ),
+    )
+    parser.add_argument(
+        "--paper-evidence-health-baseline",
+        help="explicit position-health baseline JSON used by scheduled evidence",
+    )
+    parser.add_argument(
+        "--paper-evidence-status-path",
+        help="optional explicit isolated Paper daily status JSON",
+    )
     return parser
 
 
@@ -96,7 +112,31 @@ def main(argv: list[str] | None = None) -> int:
     if args.confirm:
         print("WARNING: confirm mode writes only to the explicit --db-path.", file=sys.stderr)
     try:
-        summary = EvidencePipelineRunner(config, db_path=args.db_path).run(request)
+        paper_source = None
+        if bool(args.paper_evidence_operation_root) != bool(args.paper_evidence_health_baseline):
+            parser.error(
+                "--paper-evidence-operation-root and "
+                "--paper-evidence-health-baseline must be supplied together"
+            )
+        if args.paper_evidence_operation_root and args.paper_evidence_health_baseline:
+            operation_root = Path(args.paper_evidence_operation_root).resolve()
+            paper_source = PaperDecisionDeskEvidenceSource(
+                state_db_path=operation_root / "paper_portfolio" / "paper_portfolio.sqlite",
+                status_path=(
+                    Path(args.paper_evidence_status_path).resolve()
+                    if args.paper_evidence_status_path
+                    else operation_root
+                    / "scheduled"
+                    / "paper_portfolio_daily"
+                    / "latest_status.json"
+                ),
+                health_baseline_path=Path(args.paper_evidence_health_baseline).resolve(),
+            )
+        summary = EvidencePipelineRunner(
+            config,
+            db_path=args.db_path,
+            paper_evidence_source=paper_source,
+        ).run(request)
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps(summary.to_dict(), ensure_ascii=True, sort_keys=True, indent=2))

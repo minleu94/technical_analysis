@@ -35,6 +35,38 @@ def test_pending_outcomes_are_not_in_metric_denominator() -> None:
     assert item.avoided_loss_average_bp is None
 
 
+def test_proposal_and_closed_rows_with_same_reason_are_not_mixed() -> None:
+    report = ExitEffectivenessReadModel().build(
+        observations=(
+            # ``post_exit_return_bp`` is the legacy counterfactual spelling
+            # for a proposal and must never become a realised metric.
+            ExitEffectivenessObservation(
+                "proposal",
+                "same_reason",
+                "ready",
+                "proposal",
+                None,
+                -800,
+            ),
+            ExitEffectivenessObservation(
+                "closed",
+                "same_reason",
+                "ready",
+                "closed",
+                100,
+                500,
+            ),
+        )
+    )
+
+    item = report.slices[0]
+    assert item.ready_count == 1
+    assert item.avoided_loss_count == 0
+    assert item.early_exit_regret_count == 1
+    assert item.counterfactual_ready_count == 1
+    assert item.counterfactual_avoided_loss_count == 1
+
+
 def test_ready_outcome_requires_post_exit_return() -> None:
     try:
         ExitEffectivenessObservation("e", "reason", "ready", "closed", 0, None)

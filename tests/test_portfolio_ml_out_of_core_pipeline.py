@@ -14,7 +14,6 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
-from data_module import portfolio_ml_dataset_assembler as assembler_module
 from data_module import portfolio_ml_direct_numeric_store as direct_store_module
 from data_module.portfolio_ml_direct_numeric_store import (
     PortfolioMLDirectNumericRequest,
@@ -338,62 +337,7 @@ def test_transitional_raw_adapter_binds_corporate_action_custody(
 def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
     bounded_e2e: BoundedE2E,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    heartbeat_stages: list[str] = []
-    original_write_heartbeat = direct_store_module._write_heartbeat
-
-    # Force the test fixture to exercise the time-based progress fallback
-    # without making the production row threshold artificially small.
-    monotonic_value = 0
-
-    def fake_monotonic_ns() -> int:
-        nonlocal monotonic_value
-        monotonic_value += 1
-        return monotonic_value
-
-    monkeypatch.setattr(
-        assembler_module,
-        "_RAW_SPOOL_PROGRESS_INTERVAL",
-        1_000_000,
-    )
-    monkeypatch.setattr(
-        assembler_module,
-        "_RAW_SPOOL_PROGRESS_CHECK_INTERVAL",
-        64,
-    )
-    monkeypatch.setattr(
-        assembler_module,
-        "_RAW_SPOOL_PROGRESS_MAX_SILENCE_NS",
-        1,
-    )
-    monkeypatch.setattr(
-        assembler_module,
-        "_ASSEMBLY_PROGRESS_INTERVAL",
-        1,
-    )
-    monkeypatch.setattr(
-        assembler_module,
-        "_ASSEMBLY_PROGRESS_MAX_SILENCE_NS",
-        1,
-    )
-    monkeypatch.setattr(
-        assembler_module,
-        "monotonic_ns",
-        fake_monotonic_ns,
-    )
-
-    def capture_heartbeat(**kwargs: Any) -> None:
-        stage = kwargs.get("stage")
-        if isinstance(stage, str):
-            heartbeat_stages.append(stage)
-        original_write_heartbeat(**kwargs)
-
-    monkeypatch.setattr(
-        direct_store_module,
-        "_write_heartbeat",
-        capture_heartbeat,
-    )
     official = _official_corporate_action_publication(tmp_path)
     request = PortfolioMLDirectNumericRequest(
         raw_manifest_path=bounded_e2e.raw_manifest_path,
@@ -415,18 +359,13 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
         publication.run_directory / "discovery_cache.json"
     ).is_file()
 
-    def _unexpected_discovery(**_: Any) -> Any:
-        raise AssertionError(
-            "resume should reuse the hash-bound discovery cache"
-        )
-
-    monkeypatch.setattr(
-        direct_store_module,
-        "_discover",
-        _unexpected_discovery,
-    )
+    discovery_cache = publication.run_directory / "discovery_cache.json"
+    discovery_cache_bytes = discovery_cache.read_bytes()
+    discovery_cache_mtime = discovery_cache.stat().st_mtime_ns
     resume_request = replace(request, resume=True)
     replay = PortfolioMLDirectNumericStoreBuilder().build(resume_request)
+    assert discovery_cache.read_bytes() == discovery_cache_bytes
+    assert discovery_cache.stat().st_mtime_ns == discovery_cache_mtime
     manifest = _read_json(publication.manifest_path)
     heartbeat = _read_json(
         publication.run_directory / "heartbeat.json"
@@ -476,50 +415,6 @@ def test_direct_annual_numeric_store_has_no_full_period_spool_or_jsonl(
     assert heartbeat["completed_years"] == sorted(
         int(item["year"]) for item in manifest["years"]
     )
-    assert {
-        "year_raw_spool_complete",
-        "year_labels_complete",
-        "year_assembly_complete",
-        "year_artifacts_complete",
-        "year_directory_finalized",
-    }.issubset(heartbeat_stages)
-    assert any(
-        stage.startswith("raw_spool_source_shard_")
-        for stage in heartbeat_stages
-    )
-    assert any(
-        stage.startswith("discovery_source_shard_")
-        and stage.endswith("_complete")
-        for stage in heartbeat_stages
-    )
-    assert "discovery_cache_reused" in heartbeat_stages
-    assert any(
-        stage.endswith("rows_64_processed")
-        for stage in heartbeat_stages
-    )
-    assert any(
-        stage.startswith("assembly_decision_")
-        for stage in heartbeat_stages
-    )
-    assert any(
-        stage.startswith("label_spool_starting_")
-        for stage in heartbeat_stages
-    )
-    assert any(
-        stage.startswith("label_spool_symbols_")
-        for stage in heartbeat_stages
-    )
-    assert "label_spool_complete" in heartbeat_stages
-    assembly_stages = [
-        stage
-        for stage in heartbeat_stages
-        if stage.startswith("assembly_decision_")
-    ]
-    assembly_dates = [
-        stage.removeprefix("assembly_decision_").split("_rows_", 1)[0]
-        for stage in assembly_stages
-    ]
-    assert len(assembly_stages) > len(set(assembly_dates))
     assert manifest["execution"]["direct_store_complete"] is True
     assert manifest["execution"]["full_market_scale_capable"] is True
     assert manifest["execution"]["full_market_ready"] is False

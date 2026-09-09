@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions
 
-set TASKS=baldr-paper-execution-eod-replay-daily baldr-data-update-quick-daily baldr-official-market-events-daily baldr-data-freshness-check-daily baldr-ml-raw-pit-refresh-daily baldr-ml-direct-chain-maintainer baldr-recommendation-snapshot-daily baldr-evidence-pipeline-dry-run-daily baldr-ml-promotion-evidence-daily baldr-ml-promotion-authority-daily baldr-ml-allocation-copilot-daily baldr-decision-evidence-capture-daily baldr-paper-portfolio-daily baldr-formal-input-producer-daily
+set TASKS=baldr-data-update-quick-daily baldr-official-market-events-daily baldr-data-freshness-check-daily baldr-ml-raw-pit-refresh-daily baldr-recommendation-snapshot-daily baldr-evidence-pipeline-dry-run-daily baldr-ml-promotion-evidence-daily baldr-ml-promotion-authority-daily baldr-ml-allocation-copilot-daily baldr-decision-evidence-capture-daily baldr-ml-direct-chain-maintainer baldr-paper-execution-eod-replay-daily baldr-pit-sector-membership-preopen-capture-daily baldr-paper-portfolio-daily baldr-ml-allocation-forward-daily baldr-formal-pit-sidecar-postcutoff-daily baldr-formal-input-producer-daily
 set WEEKLY_TASK=baldr-v2-2-weekly-collection
 if not defined BALDR_SCHTASKS_EXE set "BALDR_SCHTASKS_EXE=schtasks.exe"
 set /a MISSING_TASK_COUNT=0 >nul
-set /a EXPECTED_TASK_COUNT=15 >nul
+set /a EXPECTED_TASK_COUNT=18 >nul
 
 for %%T in (%TASKS%) do (
   echo.

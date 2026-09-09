@@ -158,6 +158,87 @@ def test_main_preflight_only_records_headroom_without_starting_chain(
     assert status["storage_preflight"]["within_minimum_free_space"] is True
 
 
+def test_direct_child_stage_projection_requires_verified_child_custody(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    training = tmp_path / "training"
+    training.mkdir()
+    status_path = training / "v3_refresh_chain_status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "status": "v3_downstream_started",
+                "direct_process_id": 34224,
+                "ooc_process_id": 44460,
+                "release_process_id": 50632,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _Process:
+        def __init__(self, command: str) -> None:
+            self._command = command
+
+        def cmdline(self) -> list[str]:
+            return self._command.split()
+
+    commands = {
+        34224: f"python build_portfolio_ml_direct_numeric_store.py {training}",
+        44460: f"python continue_ml_direct_ooc_after_store.py {training}",
+        50632: f"python continue_ml_release_after_ooc.py {training}",
+    }
+    monkeypatch.setattr(
+        runner.maintenance.psutil,
+        "Process",
+        lambda pid: _Process(commands[pid]),
+    )
+
+    projection = runner._direct_child_stage_projection(
+        training,
+        maintenance_lock_state="verified",
+    )
+
+    assert projection["execution_started"] is True
+    assert projection["direct_child_stage"] == "v3_downstream_started"
+    assert projection["direct_child_custody_verified"] is True
+    assert projection["fit_completion_verified"] is False
+
+
+def test_direct_child_stage_projection_does_not_treat_launcher_or_inner_completion_alone_as_fit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    training = tmp_path / "training"
+    training.mkdir()
+    (training / "v3_refresh_chain_status.json").write_text(
+        json.dumps(
+            {
+                "status": "complete",
+                "ooc_status": {"status": "blocked"},
+                "release_status": {"status": "complete"},
+                "direct_process_id": 34224,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        runner.maintenance.psutil,
+        "Process",
+        lambda _pid: (_ for _ in ()).throw(runner.maintenance.psutil.NoSuchProcess(34224)),
+    )
+
+    projection = runner._direct_child_stage_projection(
+        training,
+        maintenance_lock_state="missing_or_invalid",
+    )
+
+    assert projection["execution_started"] is False
+    assert projection["direct_child_stage_projection"] == "terminal"
+    assert projection["fit_completion_verified"] is False
+
+
 def test_main_delegates_shared_reservation_to_maintainer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

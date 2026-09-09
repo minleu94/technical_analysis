@@ -135,6 +135,50 @@ def test_schedule_contract_is_dst_mapped_from_taipei_decision_window() -> None:
     assert formal["expected_host_at"] == "2026-09-07T21:25:00-07:00"
 
 
+def test_paper_eod_contract_uses_host_0600_and_dst_maps_to_taipei() -> None:
+    now = datetime(2026, 9, 8, 18, 0, tzinfo=timezone.utc)
+    summer_rows = inspect_schedule_contract(
+        target_date=date(2026, 9, 8),
+        now=now,
+    )
+    summer = next(item for item in summer_rows if item["key"] == "paper_eod_replay")
+    assert summer["host_time"] == "06:00"
+    assert summer["taipei_time"] == "21:00"
+    assert summer["expected_host_at"] == "2026-09-08T06:00:00-07:00"
+    assert summer["expected_taipei_at"] == "2026-09-08T21:00:00+08:00"
+
+    winter_rows = inspect_schedule_contract(
+        target_date=date(2026, 12, 8),
+        now=now,
+    )
+    winter = next(item for item in winter_rows if item["key"] == "paper_eod_replay")
+    assert winter["taipei_time"] == "22:00"
+    assert winter["expected_host_at"] == "2026-12-08T06:00:00-08:00"
+    assert winter["expected_taipei_at"] == "2026-12-08T22:00:00+08:00"
+
+
+def test_paper_eod_readiness_waits_until_host_0600_window(
+    tmp_path: Path,
+) -> None:
+    before = audit_formal_operational_readiness(
+        publication_root=tmp_path / "before",
+        now=datetime(2026, 9, 8, 12, 59, tzinfo=timezone.utc),
+        repo_root=Path(__file__).resolve().parents[1],
+    )
+    assert before["phase"] == "between_rule_close_and_paper_eod"
+    assert "paper_eod_source_window_not_reached" in before["blockers"]
+    assert before["windows"]["paper_eod_available_taipei"] == "21:00"
+
+    after = audit_formal_operational_readiness(
+        publication_root=tmp_path / "after",
+        now=datetime(2026, 9, 8, 13, 0, tzinfo=timezone.utc),
+        repo_root=Path(__file__).resolve().parents[1],
+    )
+    assert after["phase"] == "paper_eod_or_later"
+    assert "paper_eod_source_window_not_reached" not in after["blockers"]
+    assert "paper_execution_terminal_receipt_missing" in after["blockers"]
+
+
 def test_persisted_status_rejects_future_and_different_natural_day(tmp_path: Path) -> None:
     path = tmp_path / "status.json"
     now = datetime(2026, 9, 7, 18, 0, tzinfo=timezone.utc)

@@ -514,6 +514,9 @@ def test_pit_schedule_wrappers_encode_safe_pacific_to_taipei_windows() -> None:
     sidecar_cmd = (scheduled / "run_formal_pit_sidecar_postcutoff.cmd").read_text(
         encoding="utf-8"
     )
+    paper_capture_cmd = (
+        scheduled / "run_paper_event_source_capture_daily.cmd"
+    ).read_text(encoding="utf-8")
     formal_cmd = (scheduled / "run_formal_input_producer_daily.cmd").read_text(
         encoding="utf-8"
     )
@@ -522,6 +525,8 @@ def test_pit_schedule_wrappers_encode_safe_pacific_to_taipei_windows() -> None:
     )
     assert "run_pit_sector_membership_preopen_capture.py" in capture_cmd
     assert "run_formal_pit_sidecar_postcutoff.py" in sidecar_cmd
+    assert "run_paper_event_source_capture_daily.py" in sidecar_cmd
+    assert "run_paper_event_source_capture_daily.py" in paper_capture_cmd
     assert "--now" not in capture_cmd + sidecar_cmd
     assert "FORMAL_DAILY_PIT_PREOPEN_ARCHIVE_ROOT" in formal_cmd
     assert "baldr-pit-sector-membership-preopen-capture-daily" in register_cmd

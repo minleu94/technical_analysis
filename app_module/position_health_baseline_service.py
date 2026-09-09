@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 import json
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,37 @@ class PositionHealthBaselineService:
     def build(self, source_path: str | Path) -> dict[str, Any]:
         path = Path(source_path)
         source = json.loads(path.read_text(encoding="utf-8"))
+        return self._build_payload(source, source_path=path)
+
+    def build_from_paper_snapshot(
+        self,
+        *,
+        decision_date: str,
+        source_result_id: str,
+        allocations: Sequence[Mapping[str, Any]],
+        source_path: str | Path,
+    ) -> dict[str, Any]:
+        """Build the same fail-closed contract from a verified Paper snapshot.
+
+        The daily refresh producer reads the snapshot itself in a single
+        read-only transaction, then delegates the position contract to this
+        service.  It therefore cannot silently introduce a second health
+        schema or treat a Paper quantity as a human thesis.
+        """
+
+        source = {
+            "decision_date": decision_date,
+            "source_result_id": source_result_id,
+            "allocations": list(allocations),
+        }
+        return self._build_payload(source, source_path=Path(source_path))
+
+    def _build_payload(
+        self,
+        source: Mapping[str, Any],
+        *,
+        source_path: Path,
+    ) -> dict[str, Any]:
         allocations = source.get("allocations")
         if not isinstance(allocations, list):
             raise ValueError("paper baseline allocations must be a list")
@@ -45,7 +77,7 @@ class PositionHealthBaselineService:
                     "required_human_fields": list(self._REQUIRED_FIELDS),
                     "reasons": [f"missing_{field}" for field in self._REQUIRED_FIELDS],
                     "source_trace": [
-                        f"paper_baseline:{source.get('source_result_id') or path.stem}"
+                        f"paper_baseline:{source.get('source_result_id') or source_path.stem}"
                     ],
                     "auto_action_allowed": False,
                 }
@@ -53,7 +85,7 @@ class PositionHealthBaselineService:
 
         diagnostics = [] if positions else ["no_active_paper_positions"]
         return {
-            "source_path": str(path.resolve()),
+            "source_path": str(source_path.resolve()),
             "decision_date": str(source.get("decision_date") or ""),
             "research_only": True,
             "writes_positions_db": False,

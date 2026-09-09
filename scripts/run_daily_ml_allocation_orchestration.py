@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 import hashlib
 import json
 import os
@@ -171,6 +171,12 @@ def _file_hash(path: Path) -> str:
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return f"sha256:{digest.hexdigest()}"
+
+
+def _utc_now() -> datetime:
+    """Return the real completion clock used by forward shadow gates."""
+
+    return datetime.now(timezone.utc)
 
 
 def _load_promotion_authority_pointer(
@@ -493,6 +499,154 @@ def _strict_previous_trading_day(
     raise RuntimeError("strict_t_minus_one_not_found_within_31_days")
 
 
+def _run_shadow_maturity_refresh(
+    *,
+    database_path: Path,
+    run_root: Path,
+    cutoff_date: date | None,
+) -> dict[str, object]:
+    """回填既有 shadow outcome；不依賴本次 inference 或新 observation。
+
+    ``run_root`` 是呼叫端明確選出的 lane root，因此成熟評估永遠只讀該
+    lane 的 sidecar。缺少 sidecar 代表尚未有來源，保持 pending；市場資料、
+    官方 corporate-action custody 或 sidecar 完整性失敗則留下 blocked 診斷，
+    不會以缺件補出成熟結果或自然 forward credit。
+    """
+
+    collector_root = (run_root / "shadow_evidence_collector").resolve()
+    sidecar_path = collector_root / "shadow_evidence.sqlite"
+    base: dict[str, object] = {
+        "mode": "maturity_only",
+        "run_root": str(run_root.resolve()),
+        "sidecar_database_path": str(sidecar_path),
+        "sidecar_exists": sidecar_path.is_file(),
+        "cutoff_date": (
+            cutoff_date.isoformat() if cutoff_date is not None else None
+        ),
+        "source_database_mode": "ro",
+        "query_only": True,
+        "writes_market_database": False,
+        "natural_day_credit_granted": False,
+        "formal_oos_allowed": False,
+        "production_blend_alpha_bp": 0,
+        "broker_order_allowed": False,
+    }
+    if cutoff_date is None:
+        return {
+            **base,
+            "status": "blocked",
+            "blocker": "maturity_cutoff_unavailable",
+        }
+    if cutoff_date > datetime.now(TAIPEI).date():
+        return {
+            **base,
+            "status": "blocked",
+            "blocker": "maturity_cutoff_future_relative_to_runtime_clock",
+        }
+    if not sidecar_path.is_file():
+        return {
+            **base,
+            "status": "pending_source_missing",
+            "pending_is_normal_wait": True,
+            "outcome_records_appended": 0,
+    }
+    try:
+        before_hash = _file_hash(sidecar_path)
+        availability_cutoff = datetime.now(timezone.utc)
+        collector = MLAllocationShadowCollector.for_maturity_refresh(
+            market_database_path=database_path,
+            sidecar_database_path=sidecar_path,
+            artifact_root=collector_root,
+        )
+        evidence = collector.mature_and_summarize(
+            cutoff_date=cutoff_date,
+            available_at_cutoff=availability_cutoff,
+        )
+        after_hash = _file_hash(sidecar_path)
+        appended = evidence.get("outcome_records_appended")
+        return {
+            **base,
+            "status": "completed",
+            "pending_is_normal_wait": False,
+            "sidecar_file_hash_before": before_hash,
+            "sidecar_file_hash_after": after_hash,
+            "outcome_records_before": evidence.get(
+                "outcome_record_count_before"
+            ),
+            "outcome_records_after": evidence.get(
+                "outcome_record_count_after"
+            ),
+            "outcome_records_appended": evidence.get(
+                "outcome_records_appended"
+            ),
+            "availability_cutoff_at": evidence.get(
+                "available_at_cutoff"
+            ),
+            "observation_count": evidence.get("observation_count"),
+            "matured_observation_count": evidence.get(
+                "matured_observation_count"
+            ),
+            "partial_outcome_count": evidence.get("partial_outcome_count"),
+            "blocked_outcome_count": evidence.get("blocked_outcome_count"),
+            "evidence_status": evidence.get("status"),
+            "evidence_hash": evidence.get("evidence_hash"),
+            "evidence_path": evidence.get("evidence_path"),
+            "promotion_credit_observation_count": evidence.get(
+                "promotion_credit_observation_count"
+            ),
+            "writes_shadow_sidecar": isinstance(appended, int)
+            and not isinstance(appended, bool)
+            and appended > 0,
+        }
+    except Exception as exc:  # noqa: BLE001 - evidence failure stays visible
+        return {
+            **base,
+            "status": "blocked",
+            "pending_is_normal_wait": False,
+            "blocker": f"{type(exc).__name__}:{' '.join(str(exc).split())}",
+            "writes_shadow_sidecar": False,
+        }
+
+
+def run_shadow_maturity_refresh(
+    *,
+    database_path: Path,
+    run_root: Path,
+    cutoff_date: date | None,
+) -> dict[str, object]:
+    """提供給 deadline 後 caller 的成熟回填入口。
+
+    這個入口只消費呼叫端明確指定的 lane root；它不執行每日 inference、
+    不建立 observation，也不授予 natural forward credit。scheduled wrapper
+    應在 child emission deadline 之外呼叫它，並保留回傳的完整 nested result。
+    """
+
+    return _run_shadow_maturity_refresh(
+        database_path=database_path,
+        run_root=run_root,
+        cutoff_date=cutoff_date,
+    )
+
+
+def resolve_shadow_maturity_cutoff(
+    *,
+    calendar: TradingCalendar,
+    decision_date: date,
+) -> tuple[date | None, str | None]:
+    """以官方日曆解析成熟回填的 strict T-1 cutoff。
+
+    caller 若遇到未知日曆，必須保留 ``None``，交給
+    :func:`run_shadow_maturity_refresh` 產生 blocked 結果；不得以平日或
+    ``decision_date - 1`` 猜測交易日。
+    """
+
+    try:
+        cutoff, reason = _strict_previous_trading_day(calendar, decision_date)
+    except Exception as exc:  # noqa: BLE001 - preserve fail-closed contract
+        return None, f"{type(exc).__name__}:{' '.join(str(exc).split())}"
+    return cutoff, reason
+
+
 def _automatic_previous_decision_candidates(
     *,
     calendar: TradingCalendar,
@@ -668,6 +822,9 @@ def _build_post_freeze_input(
     batch_size: int,
     compression_level: int,
     pit_machine_operational_path: Path | None = None,
+    pit_machine_archive_root: Path | None = None,
+    pit_machine_archive_manifest: Path | None = None,
+    pit_machine_archive_manifest_file_hash: str | None = None,
 ) -> Mapping[str, Any]:
     return _build_post_freeze_shadow_input(
         raw_dataset_manifest=raw.dataset_manifest_path,
@@ -682,6 +839,11 @@ def _build_post_freeze_input(
         decision_at=decision_at.isoformat(timespec="seconds"),
         expected_price_date=strict_t_minus_one.isoformat(),
         pit_machine_operational_publication=pit_machine_operational_path,
+        pit_machine_archive_root=pit_machine_archive_root,
+        pit_machine_archive_manifest=pit_machine_archive_manifest,
+        expected_pit_machine_archive_manifest_file_hash=(
+            pit_machine_archive_manifest_file_hash
+        ),
         expected_symbol_count=len(symbols),
         post_freeze_shadow_input_output=input_output,
         audit_output=audit_output,
@@ -790,6 +952,8 @@ def _run_shadow_evidence_collector(
     model_artifact_path: Path | None,
     post_freeze_rows: Sequence[PortfolioMLDatasetRow],
     post_freeze_input_hash: str | None,
+    natural_forward_deadline_at: datetime | None = None,
+    available_at_cutoff: datetime | None = None,
 ) -> Mapping[str, object]:
     collector_root = run_root / "shadow_evidence_collector"
     collector = MLAllocationShadowCollector(
@@ -825,6 +989,12 @@ def _run_shadow_evidence_collector(
         model_artifact_path=model_artifact_path,
         post_freeze_rows=post_freeze_rows,
         post_freeze_input_hash=post_freeze_input_hash,
+        natural_forward_deadline_at=natural_forward_deadline_at,
+        available_at_cutoff=(
+            available_at_cutoff
+            if available_at_cutoff is not None
+            else _utc_now()
+        ),
     )
 
 
@@ -900,6 +1070,8 @@ def _base_status(
         "promotion_status": "not_run",
         "shadow_observation_recorded": False,
         "shadow_day_credit_allowed": False,
+        "natural_forward_deadline_at": None,
+        "natural_forward_completion_clock": None,
         "shadow_observation_hash": None,
         "shadow_observation_path": None,
         "shadow_observation_revision": None,
@@ -944,6 +1116,14 @@ def _base_status(
         "promotion_artifact_file_hash": None,
         "promotion_sidecar_record_hash": None,
         "promotion_sidecar_file_hash": None,
+        "natural_shadow_maturity": None,
+        "natural_shadow_maturity_database_path": None,
+        "natural_shadow_maturity_cutoff_date": None,
+        "natural_shadow_maturity_cutoff_reason": None,
+        "natural_shadow_maturity_degraded": False,
+        "natural_shadow_maturity_exit_code": 0,
+        "natural_shadow_maturity_deferred": False,
+        "natural_shadow_pruning_evidence_deferred": False,
         "writes_source_database": False,
         "changes_portfolio_state": False,
     }
@@ -955,6 +1135,213 @@ def _write_status(
 ) -> dict[str, object]:
     payload_without_hash = dict(status)
     payload_without_hash.pop("status_hash", None)
+    maturity_result_value = payload_without_hash.get(
+        "natural_shadow_maturity"
+    )
+    maturity_database_value = payload_without_hash.get(
+        "natural_shadow_maturity_database_path"
+    )
+    maturity_cutoff_value = payload_without_hash.get(
+        "natural_shadow_maturity_cutoff_date"
+    )
+    forward_deadline_value = payload_without_hash.get(
+        "natural_forward_deadline_at"
+    )
+    defer_sidecar_refresh = (
+        isinstance(forward_deadline_value, str)
+        and bool(forward_deadline_value.strip())
+        and isinstance(maturity_cutoff_value, str)
+        and bool(maturity_cutoff_value.strip())
+    )
+    if (
+        maturity_result_value is None
+        and isinstance(maturity_database_value, str)
+        and maturity_database_value.strip()
+        and (
+            maturity_cutoff_value is None
+            or isinstance(maturity_cutoff_value, str)
+        )
+    ):
+        if defer_sidecar_refresh:
+            maturity_result = {
+                "mode": "maturity_only",
+                "status": "deferred_post_deadline",
+                "run_root": str(run_root.resolve()),
+                "sidecar_database_path": str(
+                    (run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite").resolve()
+                ),
+                "cutoff_date": maturity_cutoff_value,
+                "deferred_until": forward_deadline_value,
+                "post_deadline_refresh_required": True,
+                "natural_day_credit_granted": False,
+                "formal_oos_allowed": False,
+                "production_blend_alpha_bp": 0,
+                "broker_order_allowed": False,
+            }
+        else:
+            try:
+                maturity_result = _run_shadow_maturity_refresh(
+                    database_path=Path(maturity_database_value),
+                    run_root=run_root,
+                    cutoff_date=(
+                        date.fromisoformat(maturity_cutoff_value)
+                        if isinstance(maturity_cutoff_value, str)
+                        else None
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001 - preserve fail-closed status
+                maturity_result = {
+                    "mode": "maturity_only",
+                    "status": "blocked",
+                    "run_root": str(run_root.resolve()),
+                    "sidecar_database_path": str(
+                        (run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite").resolve()
+                    ),
+                    "cutoff_date": maturity_cutoff_value,
+                    "blocker": f"{type(exc).__name__}:{' '.join(str(exc).split())}",
+                    "natural_day_credit_granted": False,
+                    "formal_oos_allowed": False,
+                    "production_blend_alpha_bp": 0,
+                    "broker_order_allowed": False,
+                }
+        payload_without_hash["natural_shadow_maturity"] = maturity_result
+
+    # Keep the nested result and the outer process contract synchronized on
+    # every exit path.  In particular, an already populated result (for
+    # example one attached to a non-forward collector run) must not leave a
+    # stale ``degraded=false``/``exit_code=0`` pair when its status is blocked.
+    final_maturity_result = payload_without_hash.get(
+        "natural_shadow_maturity"
+    )
+    if isinstance(final_maturity_result, Mapping):
+        final_maturity_status = final_maturity_result.get("status")
+        final_maturity_blocked = (
+            isinstance(final_maturity_status, str)
+            and final_maturity_status.startswith("blocked")
+        )
+        payload_without_hash["natural_shadow_maturity_degraded"] = (
+            final_maturity_blocked
+        )
+        payload_without_hash["natural_shadow_maturity_exit_code"] = (
+            2 if final_maturity_blocked else 0
+        )
+        payload_without_hash["natural_shadow_maturity_deferred"] = (
+            final_maturity_result.get("status") == "deferred_post_deadline"
+        )
+        if final_maturity_blocked:
+            raw_reasons = payload_without_hash.get("failed_reasons")
+            reasons = list(raw_reasons) if isinstance(raw_reasons, list) else []
+            marker = "natural_shadow_maturity:blocked"
+            if marker not in reasons:
+                reasons.append(marker)
+            payload_without_hash["failed_reasons"] = reasons
+    elif final_maturity_result is not None:
+        # A malformed nested result is itself an integrity failure.  Preserve
+        # the original value for diagnosis while preventing a false success.
+        payload_without_hash["natural_shadow_maturity_degraded"] = True
+        payload_without_hash["natural_shadow_maturity_exit_code"] = 2
+        payload_without_hash["natural_shadow_maturity_deferred"] = False
+        raw_reasons = payload_without_hash.get("failed_reasons")
+        reasons = list(raw_reasons) if isinstance(raw_reasons, list) else []
+        marker = "natural_shadow_maturity:invalid_result"
+        if marker not in reasons:
+            reasons.append(marker)
+        payload_without_hash["failed_reasons"] = reasons
+    # The collector is append-only and may have already recorded a revision
+    # before a later inference/promotion stage fails.  Non-forward exits run
+    # the natural shadow maturity projector at this common status boundary so
+    # every daily exit (including non-trading and fail-closed exits) gets the
+    # same read-only revision review.  A forward child instead leaves an
+    # explicit post-deadline handoff; the scheduled parent must invoke the
+    # public maturity-only entry point after its subprocess timeout window.
+    decision_at_value = payload_without_hash.get("decision_at")
+    if isinstance(decision_at_value, str) and decision_at_value.strip():
+        defer_projection = defer_sidecar_refresh
+        if defer_projection:
+            payload_without_hash["natural_shadow_pruning_evidence"] = {
+                "schema_version": "natural-shadow-pruning-scheduled-status.v1",
+                "status": "deferred_post_deadline",
+                "as_of_date": payload_without_hash.get(
+                    "natural_shadow_maturity_cutoff_date"
+                ),
+                "integrity_state": "deferred",
+                "exit_code": 0,
+                "read_only": True,
+                "post_deadline_refresh_required": True,
+                "pruning_action_performed": False,
+                "promotion_action_performed": False,
+                "formal_oos_allowed": False,
+                "production_action_allowed": False,
+                "writes_source_database": False,
+                "changes_portfolio_state": False,
+            }
+            payload_without_hash["natural_shadow_pruning_evidence_exit_code"] = 0
+            payload_without_hash["natural_shadow_pruning_evidence_deferred"] = True
+        else:
+            try:
+                decision_at = _aware_datetime(
+                    decision_at_value,
+                    field_name="status.decision_at",
+                )
+                from scripts.natural_shadow_pruning_evidence_runner import (
+                    run_natural_shadow_pruning_evidence,
+                )
+
+                projection_cutoff = decision_at.astimezone(TAIPEI).date()
+                projection_maturity_cutoff_value = payload_without_hash.get(
+                    "natural_shadow_maturity_cutoff_date"
+                )
+                if isinstance(projection_maturity_cutoff_value, str):
+                    try:
+                        projection_cutoff = date.fromisoformat(
+                            projection_maturity_cutoff_value
+                        )
+                    except ValueError:
+                        # Keep the existing decision-date projection fallback;
+                        # the malformed maturity field remains visible in status.
+                        pass
+                pruning_result = run_natural_shadow_pruning_evidence(
+                    sidecar_database_path=(
+                        run_root / "shadow_evidence_collector" / "shadow_evidence.sqlite"
+                    ),
+                    output_root=run_root,
+                    as_of_date=projection_cutoff,
+                )
+            except Exception as exc:  # noqa: BLE001 - status must remain fail-closed
+                pruning_result = {
+                    "schema_version": (
+                        "natural-shadow-pruning-scheduled-status.v1"
+                    ),
+                    "status": "blocked_integrity",
+                    "evidence_status": None,
+                    "as_of_date": decision_at_value,
+                    "integrity_state": "failed",
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "exit_code": 2,
+                    "read_only": True,
+                    "pruning_action_performed": False,
+                    "promotion_action_performed": False,
+                    "formal_oos_allowed": False,
+                    "production_action_allowed": False,
+                    "writes_source_database": False,
+                    "changes_portfolio_state": False,
+                }
+            payload_without_hash["natural_shadow_pruning_evidence"] = pruning_result
+            pruning_exit_code = pruning_result.get("exit_code")
+            if pruning_exit_code not in (0, 2):
+                pruning_exit_code = 2
+            payload_without_hash["natural_shadow_pruning_evidence_exit_code"] = (
+                pruning_exit_code
+            )
+            payload_without_hash["natural_shadow_pruning_evidence_deferred"] = False
+            if pruning_exit_code != 0:
+                raw_reasons = payload_without_hash.get("failed_reasons")
+                reasons = list(raw_reasons) if isinstance(raw_reasons, list) else []
+                marker = "natural_shadow_pruning_evidence:integrity_failed"
+                if marker not in reasons:
+                    reasons.append(marker)
+                payload_without_hash["failed_reasons"] = reasons
     payload = _with_hash(
         payload_without_hash,
         field_name="status_hash",
@@ -1096,6 +1483,11 @@ def run(
     compression_level: int = 6,
     capacity_budget: MLStorageCapacityBudget | None = None,
     pit_machine_operational_path: Path | None = None,
+    pit_machine_operational_publication_file_hash: str | None = None,
+    pit_machine_archive_root: Path | None = None,
+    pit_machine_archive_manifest: Path | None = None,
+    pit_machine_archive_manifest_file_hash: str | None = None,
+    natural_forward_deadline_at: datetime | None = None,
     model_id: str = DEFAULT_MODEL_ID,
     universe_id: str = DEFAULT_UNIVERSE_ID,
     policy_id: str = DEFAULT_POLICY_ID,
@@ -1119,6 +1511,24 @@ def run(
         if requested_decision_at is not None
         else local_decision_at
     )
+    normalized_forward_deadline_at: datetime | None = None
+    if natural_forward_deadline_at is not None:
+        if (
+            natural_forward_deadline_at.tzinfo is None
+            or natural_forward_deadline_at.utcoffset() is None
+        ):
+            raise ValueError(
+                "natural_forward_deadline_at must contain a timezone"
+            )
+        normalized_forward_deadline_at = natural_forward_deadline_at.astimezone(
+            timezone.utc
+        )
+        if normalized_forward_deadline_at < local_decision_at.astimezone(
+            timezone.utc
+        ):
+            raise ValueError(
+                "natural_forward_deadline_at cannot precede decision_at"
+            )
     if not decision_selection_mode.strip():
         raise ValueError("decision_selection_mode must not be empty")
     normalized_symbols = tuple(dict.fromkeys(symbol.strip() for symbol in symbols))
@@ -1132,6 +1542,29 @@ def run(
         else output_root / "paper_portfolio" / "paper_portfolio.sqlite"
     )
     calendar_service = calendar or OfficialTradingCalendar(database_path)
+    maturity_cutoff: date | None = None
+    maturity_cutoff_reason: str | None = None
+    try:
+        candidate_cutoff, maturity_cutoff_reason = (
+            _strict_previous_trading_day(
+                calendar_service,
+                local_decision_at.date(),
+            )
+        )
+        # A caller may supply a future decision session for a dry run.  Keep
+        # the maturity read bounded by the real Taipei calendar date rather
+        # than allowing that request to expose future market rows.
+        current_taipei_date = datetime.now(TAIPEI).date()
+        if candidate_cutoff > current_taipei_date:
+            maturity_cutoff_reason = (
+                "maturity_cutoff_future_relative_to_runtime_clock"
+            )
+        else:
+            maturity_cutoff = candidate_cutoff
+    except Exception as exc:  # noqa: BLE001 - preserve Rule lane visibility
+        maturity_cutoff_reason = (
+            f"{type(exc).__name__}:{' '.join(str(exc).split())}"
+        )
     is_trading_day, calendar_reason = _calendar_day_state(
         calendar_service,
         local_decision_at.date(),
@@ -1144,6 +1577,18 @@ def run(
         requested_decision_at=local_requested_decision_at,
         decision_selection_reason=decision_selection_reason,
         decision_selection_attempts=decision_selection_attempts,
+    )
+    status["natural_shadow_maturity_database_path"] = str(
+        database_path.resolve()
+    )
+    status["natural_shadow_maturity_cutoff_date"] = (
+        maturity_cutoff.isoformat() if maturity_cutoff is not None else None
+    )
+    status["natural_shadow_maturity_cutoff_reason"] = maturity_cutoff_reason
+    status["natural_forward_deadline_at"] = (
+        normalized_forward_deadline_at.isoformat(timespec="microseconds")
+        if normalized_forward_deadline_at is not None
+        else None
     )
 
     if is_trading_day is False:
@@ -1351,6 +1796,19 @@ def run(
 
     pit_machine_publication_resolved: Path | None = None
     pit_machine_publication_file_hash: str | None = None
+    if (
+        pit_machine_operational_path is None
+        and pit_machine_operational_publication_file_hash is not None
+    ):
+        return _fail_closed(
+            run_root=run_root,
+            status=status,
+            stage="post_freeze_input",
+            exc=ValueError(
+                "operational publication file hash requires an operational "
+                "publication path"
+            ),
+        )
     if pit_machine_operational_path is not None:
         pit_machine_publication_resolved = (
             pit_machine_operational_path.expanduser().resolve()
@@ -1369,13 +1827,119 @@ def run(
             pit_machine_publication_file_hash = _file_hash(
                 pit_machine_publication_resolved
             )
-        except OSError as exc:
+            if pit_machine_operational_publication_file_hash is not None:
+                expected_publication_file_hash = _sha256_text(
+                    pit_machine_operational_publication_file_hash,
+                    field_name=(
+                        "pit_machine_operational_publication_file_hash"
+                    ),
+                )
+                if (
+                    pit_machine_publication_file_hash
+                    != expected_publication_file_hash
+                ):
+                    raise ValueError(
+                        "pit machine operational publication file hash mismatch"
+                    )
+            elif normalized_forward_deadline_at is not None:
+                raise ValueError(
+                    "forward operational publication requires a frozen file hash"
+                )
+        except (OSError, TypeError, ValueError) as exc:
             return _fail_closed(
                 run_root=run_root,
                 status=status,
                 stage="post_freeze_input",
                 exc=exc,
             )
+
+    pit_machine_archive_root_resolved: Path | None = None
+    pit_machine_archive_manifest_resolved: Path | None = None
+    pit_machine_archive_manifest_file_hash_resolved: str | None = None
+    archive_arguments = (
+        pit_machine_archive_root,
+        pit_machine_archive_manifest,
+        pit_machine_archive_manifest_file_hash,
+    )
+    if any(value is not None for value in archive_arguments) and not all(
+        value is not None for value in archive_arguments
+    ):
+        return _fail_closed(
+            run_root=run_root,
+            status=status,
+            stage="post_freeze_input",
+            exc=ValueError(
+                "PIT machine archive root, exact manifest and frozen file hash "
+                "must be supplied together"
+            ),
+        )
+    if pit_machine_operational_path is not None and any(
+        value is not None for value in archive_arguments
+    ):
+        return _fail_closed(
+            run_root=run_root,
+            status=status,
+            stage="post_freeze_input",
+            exc=ValueError(
+                "PIT machine operational publication and archive manifest are "
+                "mutually exclusive"
+            ),
+        )
+    if all(value is not None for value in archive_arguments):
+        assert pit_machine_archive_root is not None
+        assert pit_machine_archive_manifest is not None
+        assert pit_machine_archive_manifest_file_hash is not None
+        pit_machine_archive_root_resolved = (
+            pit_machine_archive_root.expanduser().resolve()
+        )
+        pit_machine_archive_manifest_resolved = (
+            pit_machine_archive_manifest.expanduser().resolve()
+        )
+        if not pit_machine_archive_root_resolved.is_dir():
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="post_freeze_input",
+                exc=FileNotFoundError(
+                    "pit machine archive root is missing: "
+                    f"{pit_machine_archive_root_resolved}"
+                ),
+            )
+        if not pit_machine_archive_manifest_resolved.is_file():
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="post_freeze_input",
+                exc=FileNotFoundError(
+                    "pit machine archive manifest is missing: "
+                    f"{pit_machine_archive_manifest_resolved}"
+                ),
+            )
+        try:
+            expected_archive_hash = _sha256_text(
+                pit_machine_archive_manifest_file_hash,
+                field_name="pit_machine_archive_manifest_file_hash",
+            )
+            observed_archive_hash = _file_hash(
+                pit_machine_archive_manifest_resolved
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="post_freeze_input",
+                exc=exc,
+            )
+        if observed_archive_hash != expected_archive_hash:
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="post_freeze_input",
+                exc=ValueError(
+                    "pit machine archive manifest file hash mismatch"
+                ),
+            )
+        pit_machine_archive_manifest_file_hash_resolved = observed_archive_hash
 
     orchestration_run_hash = _payload_hash(
         {
@@ -1425,6 +1989,26 @@ def run(
             "pit_machine_operational_publication_file_hash": (
                 pit_machine_publication_file_hash
             ),
+            "pit_machine_archive_root": (
+                None
+                if pit_machine_archive_root_resolved is None
+                else str(pit_machine_archive_root_resolved)
+            ),
+            "pit_machine_archive_manifest": (
+                None
+                if pit_machine_archive_manifest_resolved is None
+                else str(pit_machine_archive_manifest_resolved)
+            ),
+            "pit_machine_archive_manifest_file_hash": (
+                pit_machine_archive_manifest_file_hash_resolved
+            ),
+            "natural_forward_deadline_at": (
+                None
+                if normalized_forward_deadline_at is None
+                else normalized_forward_deadline_at.isoformat(
+                    timespec="microseconds"
+                )
+            ),
         }
     )
     status["orchestration_run_hash"] = orchestration_run_hash
@@ -1454,6 +2038,11 @@ def run(
             batch_size=batch_size,
             compression_level=compression_level,
             pit_machine_operational_path=pit_machine_operational_path,
+            pit_machine_archive_root=pit_machine_archive_root_resolved,
+            pit_machine_archive_manifest=pit_machine_archive_manifest_resolved,
+            pit_machine_archive_manifest_file_hash=(
+                pit_machine_archive_manifest_file_hash_resolved
+            ),
         )
         _validate_stage_result(
             input_result,
@@ -1500,6 +2089,19 @@ def run(
             ),
             "pit_machine_operational_publication_file_hash": (
                 pit_machine_publication_file_hash
+            ),
+            "pit_machine_archive_root": (
+                None
+                if pit_machine_archive_root_resolved is None
+                else str(pit_machine_archive_root_resolved)
+            ),
+            "pit_machine_archive_manifest": (
+                None
+                if pit_machine_archive_manifest_resolved is None
+                else str(pit_machine_archive_manifest_resolved)
+            ),
+            "pit_machine_archive_manifest_file_hash": (
+                pit_machine_archive_manifest_file_hash_resolved
             ),
             "feature_counts": input_result.get("feature_counts"),
         }
@@ -1571,6 +2173,41 @@ def run(
             exc=exc,
         )
 
+    if normalized_forward_deadline_at is not None:
+        post_inference_completed_at = _utc_now()
+        within_forward_completion_window = (
+            post_inference_completed_at <= normalized_forward_deadline_at
+        )
+        status["natural_forward_completion_clock"] = {
+            "post_inference_completed_at": post_inference_completed_at.isoformat(
+                timespec="microseconds"
+            ),
+            "observation_append_deadline_at": normalized_forward_deadline_at.isoformat(
+                timespec="microseconds"
+            ),
+            "within_forward_completion_window": within_forward_completion_window,
+            "observation_append_attempted": False,
+        }
+        if not within_forward_completion_window:
+            return _fail_closed(
+                run_root=run_root,
+                status=status,
+                stage="shadow_evidence",
+                exc=TimeoutError(
+                    "post-inference completion crossed natural forward observation "
+                    "append deadline; observation was not appended"
+                ),
+            )
+
+    if normalized_forward_deadline_at is not None:
+        completion_clock = status.get("natural_forward_completion_clock")
+        if not isinstance(completion_clock, dict):  # pragma: no cover - guard
+            raise RuntimeError("natural forward completion clock is missing")
+        status["natural_forward_completion_clock"] = {
+            **completion_clock,
+            "observation_append_attempted": True,
+        }
+
     try:
         post_freeze_rows: Sequence[PortfolioMLDatasetRow] = (
             _load_inference_rows(input_output)
@@ -1606,6 +2243,8 @@ def run(
             post_freeze_input_hash=(
                 input_hash if promotion_reference is not None else None
             ),
+            natural_forward_deadline_at=normalized_forward_deadline_at,
+            available_at_cutoff=_utc_now(),
         )
         if shadow.get("status") != "shadow_observation_recorded":
             raise ValueError("shadow collector returned unexpected status")
@@ -1622,6 +2261,33 @@ def run(
             raise ValueError("shadow collector cannot select non-zero alpha")
         if shadow.get("broker_order_allowed") is not False:
             raise ValueError("shadow collector attempted broker authority")
+        if normalized_forward_deadline_at is not None:
+            emitted_value = shadow.get("observation_emitted_at")
+            emitted_at = _aware_datetime(
+                emitted_value,
+                field_name="shadow.observation_emitted_at",
+            )
+            emitted_within_window = (
+                emitted_at.astimezone(timezone.utc)
+                <= normalized_forward_deadline_at
+            )
+            if not emitted_within_window:
+                raise TimeoutError(
+                    "shadow observation emission crossed natural forward deadline"
+                )
+            completion_clock = status.get(
+                "natural_forward_completion_clock",
+                {},
+            )
+            if not isinstance(completion_clock, dict):  # pragma: no cover
+                completion_clock = {}
+            status["natural_forward_completion_clock"] = {
+                **completion_clock,
+                "observation_emitted_at": emitted_at.isoformat(
+                    timespec="microseconds"
+                ),
+                "within_forward_emission_window": True,
+            }
         status["shadow_evidence_status"] = str(
             shadow.get("evidence_status", "insufficient_evidence")
         )
@@ -1705,6 +2371,10 @@ def run(
             "status": "completed",
             "observation_hash": status["shadow_observation_hash"],
             "observation_path": status["shadow_observation_path"],
+            "observation_emitted_at": shadow.get("observation_emitted_at"),
+            "natural_forward_deadline_at": shadow.get(
+                "natural_forward_deadline_at"
+            ),
             "observation_revision": status[
                 "shadow_observation_revision"
             ],
@@ -2064,6 +2734,56 @@ def build_parser() -> argparse.ArgumentParser:
             "decision_at 已達 available_at 後接入 shadow feature snapshot"
         ),
     )
+    parser.add_argument(
+        "--pit-machine-operational-publication-file-hash",
+        help="operational publication bytes 的 frozen sha256:<64 hex>",
+    )
+    parser.add_argument(
+        "--natural-forward-deadline-at",
+        help=(
+            "forward shadow observation emission 的明確 deadline；含時區"
+        ),
+    )
+    parser.add_argument(
+        "--maturity-only",
+        action="store_true",
+        help=(
+            "只在 forward child deadline 之外回填既有 shadow outcome；"
+            "不建立 observation、不執行 inference。"
+        ),
+    )
+    parser.add_argument(
+        "--maturity-run-root",
+        type=Path,
+        help=(
+            "maturity-only 使用的 exact ml_allocation lane root；"
+            "不得由 consumer 自行搜尋 latest。"
+        ),
+    )
+    parser.add_argument(
+        "--maturity-cutoff-date",
+        help=(
+            "maturity-only 的已知 Asia/Taipei cutoff YYYY-MM-DD；"
+            "缺少時 fail closed 並保留 blocked 狀態。"
+        ),
+    )
+    parser.add_argument(
+        "--pit-machine-archive-root",
+        type=Path,
+        help=(
+            "可選的受控 Formal pit_candidate_archive root；必須同時提供 "
+            "exact archive manifest 與其 frozen file hash"
+        ),
+    )
+    parser.add_argument(
+        "--pit-machine-archive-manifest",
+        type=Path,
+        help="已選定且凍結 hash 的 exact archive_manifest.json",
+    )
+    parser.add_argument(
+        "--pit-machine-archive-manifest-file-hash",
+        help="archive_manifest.json bytes 的 sha256:<64 hex>",
+    )
     return parser
 
 
@@ -2082,7 +2802,75 @@ def main(argv: list[str] | None = None) -> int:
     _configure_standard_streams_utf8()
     args = build_parser().parse_args(argv)
     try:
+        if args.maturity_only:
+            maturity_run_root = args.maturity_run_root
+            if maturity_run_root is None:
+                result: dict[str, object] = {
+                    "mode": "maturity_only",
+                    "status": "blocked",
+                    "blocker": "maturity_run_root_required",
+                    "natural_day_credit_granted": False,
+                    "formal_oos_allowed": False,
+                    "production_blend_alpha_bp": 0,
+                    "broker_order_allowed": False,
+                }
+            else:
+                maturity_cutoff: date | None = None
+                if args.maturity_cutoff_date is not None:
+                    try:
+                        maturity_cutoff = date.fromisoformat(
+                            args.maturity_cutoff_date
+                        )
+                    except ValueError:
+                        result = {
+                            "mode": "maturity_only",
+                            "status": "blocked",
+                            "blocker": "maturity_cutoff_date_invalid",
+                            "natural_day_credit_granted": False,
+                            "formal_oos_allowed": False,
+                            "production_blend_alpha_bp": 0,
+                            "broker_order_allowed": False,
+                        }
+                    else:
+                        result = run_shadow_maturity_refresh(
+                            database_path=args.database,
+                            run_root=maturity_run_root,
+                            cutoff_date=maturity_cutoff,
+                        )
+                else:
+                    result = run_shadow_maturity_refresh(
+                        database_path=args.database,
+                        run_root=maturity_run_root,
+                        cutoff_date=None,
+                    )
+            print(
+                json.dumps(
+                    {
+                        "task": "baldr-ml-shadow-maturity-only",
+                        "status": result.get("status"),
+                        "natural_shadow_maturity": result,
+                        "natural_shadow_maturity_degraded": (
+                            result.get("status") == "blocked"
+                        ),
+                        "natural_shadow_maturity_exit_code": (
+                            2 if result.get("status") == "blocked" else 0
+                        ),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 2 if result.get("status") == "blocked" else 0
         requested_decision_at = _parse_decision_at(args.decision_at)
+        natural_forward_deadline_at = (
+            _aware_datetime(
+                args.natural_forward_deadline_at,
+                field_name="natural_forward_deadline_at",
+            )
+            if args.natural_forward_deadline_at is not None
+            else None
+        )
         selected_decision_at = requested_decision_at
         automatic_mode = args.auto_catch_up and args.decision_at is None
         automatic_now = _taipei_now() if automatic_mode else None
@@ -2116,6 +2904,15 @@ def main(argv: list[str] | None = None) -> int:
                 pit_machine_operational_path=(
                     args.pit_machine_operational_publication
                 ),
+                pit_machine_operational_publication_file_hash=(
+                    args.pit_machine_operational_publication_file_hash
+                ),
+                pit_machine_archive_root=args.pit_machine_archive_root,
+                pit_machine_archive_manifest=args.pit_machine_archive_manifest,
+                pit_machine_archive_manifest_file_hash=(
+                    args.pit_machine_archive_manifest_file_hash
+                ),
+                natural_forward_deadline_at=natural_forward_deadline_at,
                 raw_lookback_days=args.raw_lookback_days,
                 batch_size=args.batch_size,
                 compression_level=args.compression_level,
@@ -2230,6 +3027,10 @@ def main(argv: list[str] | None = None) -> int:
             sort_keys=True,
         )
     )
+    if payload.get("natural_shadow_pruning_evidence_exit_code", 0) != 0:
+        return 2
+    if payload.get("natural_shadow_maturity_exit_code", 0) != 0:
+        return 2
     return (
         0
         if str(payload.get("status", "")).startswith(

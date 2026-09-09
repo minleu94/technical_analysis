@@ -386,6 +386,7 @@ def _validated_teacher_input_provenance_v2(
 
     from data_module.teacher_input_source_producer import (  # noqa: PLC0415
         TEACHER_INPUT_PROVENANCE_V2_SCHEMA_VERSION,
+        TEACHER_SOURCE_MANIFEST_V2_SCHEMA_VERSION,
         TEACHER_SOURCE_NAMES,
         TeacherSourceProvenanceError,
         validate_teacher_source_readback,
@@ -569,6 +570,14 @@ def _validated_teacher_input_provenance_v2(
             manifest_path,
             field_name=f"{field_name}.sources.{source_name}.source_manifest",
         )
+        if manifest.get("schema_version") != TEACHER_SOURCE_MANIFEST_V2_SCHEMA_VERSION:
+            raise TargetDiagnosticError(
+                f"{field_name}.sources.{source_name} source manifest schema is invalid"
+            )
+        if manifest.get("storage_mode") != "read_only":
+            raise TargetDiagnosticError(
+                f"{field_name}.sources.{source_name} source manifest custody is not read-only"
+            )
         declared_manifest_hash = _required_sha256(
             raw_source.get("source_manifest_hash"),
             field_name=f"{field_name}.sources.{source_name}.source_manifest_hash",

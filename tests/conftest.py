@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,6 +10,58 @@ pytest_plugins = (
     "tests.fixtures.portfolio_ml_ooc_support",
     "tests.fixtures.ml_allocation_training_support",
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_installed_formal_runtime_binding(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Keep unit fixtures independent from the deployed candidate binding.
+
+    The real Task Scheduler process must read the repository's active binding;
+    pytest fixtures intentionally exercise temporary configs and must not
+    inherit that production v6 map.  Tests that specifically validate binding
+    loading set ``FORMAL_DAILY_RUNTIME_ENVIRONMENT_FILE`` to their own path.
+    """
+
+    from data_module import formal_runtime_config
+
+    monkeypatch.setattr(
+        formal_runtime_config,
+        "DEFAULT_RUNTIME_ENVIRONMENT_FILE",
+        tmp_path / "no-installed-runtime-binding.json",
+    )
+    monkeypatch.delenv("FORMAL_DAILY_RUNTIME_ENVIRONMENT_FILE", raising=False)
+
+
+@pytest.fixture
+def isolated_formal_runtime_subprocess_env(tmp_path: Path) -> dict[str, str]:
+    """Give runtime-loading subprocess tests an explicit fail-closed binding.
+
+    A subprocess does not see the module-level monkeypatch above.  Pointing it
+    at a unique, missing path under repository ``output`` prevents a test
+    process from accidentally loading the active deployed binding while still
+    exercising the production path validation rules.
+    """
+
+    repository_root = Path(__file__).resolve().parents[1]
+    isolated_binding = (
+        repository_root
+        / "output"
+        / "v4_next_formal"
+        / f".missing-subprocess-binding-{tmp_path.name[-8:]}.json"
+    )
+    environment = os.environ.copy()
+    for name in (
+        "FORMAL_DAILY_RUNTIME_CONFIG",
+        "FORMAL_DAILY_RUNTIME_CONFIG_ROOT",
+        "FORMAL_DAILY_ROLLING_CALENDAR_BUNDLE",
+        "FORMAL_DAILY_PORTFOLIO_CLOCK_MANIFEST",
+    ):
+        environment.pop(name, None)
+    environment["FORMAL_DAILY_RUNTIME_ENVIRONMENT_FILE"] = str(isolated_binding)
+    return environment
 
 
 @pytest.fixture(scope="session")

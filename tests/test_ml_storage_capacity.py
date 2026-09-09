@@ -605,6 +605,9 @@ def test_incomplete_checkpoint_keeps_capacity_failure_for_resume(
     tmp_path: Path,
 ) -> None:
     checkpoint_path = tmp_path / "checkpoint.json"
+    computation_dependencies = (
+        direct_store._direct_computation_dependency_payload()
+    )
     capacity = {
         "stage": "year_2024_checkpoint",
         "within_budget": False,
@@ -615,6 +618,10 @@ def test_incomplete_checkpoint_keeps_capacity_failure_for_resume(
         checkpoint_path=checkpoint_path,
         run_id="run-1",
         raw_manifest_hash="sha256:" + "a" * 64,
+        computation_dependency_hash=direct_store._sha256_json(
+            computation_dependencies
+        ),
+        computation_dependencies=computation_dependencies,
         completed={2023: {"year": 2023, "manifest_hash": "sha256:" + "b" * 64}},
         peak_temporary_bytes=42,
         capacity_preflight=capacity,

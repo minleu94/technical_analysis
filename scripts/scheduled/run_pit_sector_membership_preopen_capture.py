@@ -30,6 +30,11 @@ from data_module.formal_daily_input_producer import (  # noqa: E402
 from data_module.pit_prospective_denominator import (  # noqa: E402
     validate_prospective_pit_denominator,
 )
+from data_module.formal_runtime_config import (  # noqa: E402
+    FORMAL_RUNTIME_CONFIG_ENV,
+    FormalRuntimeConfigError,
+    load_optional_formal_runtime_config,
+)
 from scripts.capture_pit_prospective_denominator import (  # noqa: E402
     capture_live_denominator,
 )
@@ -193,6 +198,15 @@ def run_capture(
     injected_clock = now is not None
     observed = now or datetime.now(timezone.utc)
     status_path = status_root / "latest_status.json"
+    runtime_config: dict[str, object] | None = None
+    runtime_config_error: str | None = None
+    try:
+        runtime_config = load_optional_formal_runtime_config(
+            role="pit_preopen_wrapper",
+            observed=observed,
+        )
+    except FormalRuntimeConfigError as error:
+        runtime_config_error = str(error)
     base: dict[str, object] = {
         "schema_version": "pit-preopen-capture-scheduled-status.v1",
         "task": TASK_NAME,
@@ -214,7 +228,35 @@ def run_capture(
         "training_started": False,
         "broker_execution": False,
         "historical_backfill_claimed": False,
+        "formal_runtime_config": (
+            runtime_config
+            if runtime_config is not None
+            else {
+                "status": "absent" if runtime_config_error is None else "invalid",
+                "environment_variable": FORMAL_RUNTIME_CONFIG_ENV,
+                "error": runtime_config_error,
+            }
+        ),
     }
+    if runtime_config_error is not None:
+        payload = {
+            **base,
+            "status": "blocked",
+            "blockers": [f"runtime_config_invalid:{runtime_config_error}"],
+        }
+        _write_status(status_path, payload)
+        return payload, 2
+    if runtime_config is not None and runtime_config.get("activation_status") != "active":
+        payload = {
+            **base,
+            "status": "waiting_for_runtime_config",
+            "blockers": [
+                "runtime_config_waiting_for_activation:"
+                f"{runtime_config.get('activation_trading_day')}"
+            ],
+        }
+        _write_status(status_path, payload)
+        return payload, 2
     try:
         try:
             result = reuse_pit_candidate_archive_before_cutoff(

@@ -21,6 +21,12 @@ PAPER_TRADE_EVENT_STATUSES = frozenset(
     {"filled", "partially_filled", "rejected", "cancelled"}
 )
 PAPER_TRADE_SIDES = frozenset({"buy", "sell"})
+# ``source_event_id`` comes from an importing source and is unique within a
+# paper portfolio.  ``fill_id`` remains the ledger-wide primary key.  Keeping
+# the domain in the identity check allows two portfolios to import the same
+# source-system event namespace without falsely colliding, while the Formal
+# single-portfolio consumer still rejects cross-portfolio input explicitly.
+PAPER_TRADE_SOURCE_IDENTITY_SCOPE = "portfolio_id:source_event_id"
 MONEY_QUANTUM = Decimal("0.01")
 
 
@@ -218,9 +224,49 @@ class PaperTradeLedgerRepository:
         entries = tuple(fills)
         if not entries:
             raise ValueError("at least one paper trade fill is required")
+        fill_ids = tuple(item.fill_id for item in entries)
+        source_event_keys = tuple(
+            (item.portfolio_id, item.source_event_id) for item in entries
+        )
+        if len(set(fill_ids)) != len(fill_ids):
+            raise ValueError("paper trade fill already exists: duplicate fill_id in batch")
+        if len(set(source_event_keys)) != len(source_event_keys):
+            raise ValueError(
+                "paper trade fill already exists: duplicate portfolio/source_event_id in batch"
+            )
+        connection = sqlite3.connect(self.db_path)
         try:
-            with sqlite3.connect(self.db_path) as conn:
-                conn.executemany(
+            # Serialize the identity check with the insert.  A retry after a
+            # process crash can then either observe the complete batch
+            # (handled by the producer's exact readback) or fail closed.
+            connection.execute("BEGIN IMMEDIATE")
+            fill_placeholders = ",".join("?" for _ in fill_ids)
+            existing = connection.execute(
+                "SELECT fill_id FROM paper_trade_ledger "
+                f"WHERE fill_id IN ({fill_placeholders})",
+                fill_ids,
+            ).fetchall()
+            if not existing:
+                source_clauses = " OR ".join(
+                    "(portfolio_id = ? AND source_event_id = ?)"
+                    for _ in source_event_keys
+                )
+                source_params = tuple(
+                    value
+                    for portfolio_id, source_event_id in source_event_keys
+                    for value in (portfolio_id, source_event_id)
+                )
+                existing = connection.execute(
+                    "SELECT fill_id FROM paper_trade_ledger WHERE "
+                    + source_clauses,
+                    source_params,
+                ).fetchall()
+            if existing:
+                raise ValueError(
+                    "paper trade fill already exists: fill_id or "
+                    "portfolio/source_event_id"
+                )
+            connection.executemany(
                     """
                     INSERT INTO paper_trade_ledger (
                         schema_version, fill_id, order_id, portfolio_id, event_date,
@@ -260,8 +306,15 @@ class PaperTradeLedgerRepository:
                         for item in entries
                     ),
                 )
+            connection.commit()
         except sqlite3.IntegrityError as exc:
+            connection.rollback()
             raise ValueError("paper trade fill already exists") from exc
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def list(
         self,
@@ -283,14 +336,18 @@ class PaperTradeLedgerRepository:
             + " AND ".join(clauses)
             + " ORDER BY event_date, fill_id"
         )
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(query, tuple(params)).fetchall()
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(query, tuple(params)).fetchall()
+        finally:
+            connection.close()
         return tuple(_row_to_fill(row) for row in rows)
 
     def _ensure_schema(self) -> None:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.executescript(
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS paper_trade_ledger (
                     schema_version TEXT NOT NULL,
@@ -319,8 +376,12 @@ class PaperTradeLedgerRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_paper_trade_ledger_portfolio_date
                     ON paper_trade_ledger (portfolio_id, event_date, fill_id);
+                CREATE INDEX IF NOT EXISTS idx_paper_trade_ledger_source_event
+                    ON paper_trade_ledger (source_event_id);
                 """
             )
+        finally:
+            connection.close()
 
 
 def _row_to_fill(row: sqlite3.Row) -> PaperTradeFill:
@@ -355,6 +416,7 @@ def _row_to_fill(row: sqlite3.Row) -> PaperTradeFill:
 __all__ = [
     "PAPER_TRADE_EVENT_STATUSES",
     "PAPER_TRADE_LEDGER_SCHEMA_VERSION",
+    "PAPER_TRADE_SOURCE_IDENTITY_SCOPE",
     "PaperTradeFill",
     "PaperTradeLedgerRepository",
 ]

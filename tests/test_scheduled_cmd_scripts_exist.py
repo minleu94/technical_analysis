@@ -11,6 +11,8 @@ REQUIRED_CMD_FILES = (
     "run_paper_execution_daily.cmd",
     "run_paper_execution_daily_isolated.cmd",
     "run_paper_execution_daily_isolated.py",
+    "run_paper_event_source_capture_daily.cmd",
+    "run_paper_event_source_capture_daily.py",
     "run_daily_data_update_quick.cmd",
     "run_daily_data_update_quick.py",
     "run_daily_data_freshness_check.cmd",
@@ -43,6 +45,7 @@ FORMAL_PAPER_WINDOWS_WRAPPERS = (
     "run_formal_input_producer_daily.cmd",
     "run_formal_rule_source_preopen.cmd",
     "run_formal_pit_sidecar_postcutoff.cmd",
+    "run_paper_event_source_capture_daily.cmd",
     "run_pit_sector_membership_preopen_capture.cmd",
     "run_paper_execution_daily.cmd",
     "run_paper_execution_daily_isolated.cmd",
@@ -75,3 +78,12 @@ def test_formal_paper_windows_wrappers_use_crlf_line_endings() -> None:
             offenders.append(name)
 
     assert offenders == []
+
+
+def test_evidence_dry_run_cmd_enables_bounded_exit_effectiveness_child() -> None:
+    text = (SCHEDULED_DIR / "run_evidence_pipeline_dry_run.cmd").read_text(
+        encoding="utf-8"
+    )
+
+    assert "run_scheduled_evidence_pipeline_dry_run.py" in text
+    assert "--run-exit-effectiveness" in text

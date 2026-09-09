@@ -1,0 +1,92 @@
+{
+  "schema_version": "ml-forward-task-registration-plan.v1",
+  "prepared_at": "2026-09-08T11:40:00Z",
+  "status": "registered_verified",
+  "task_name": "baldr-ml-allocation-forward-daily",
+  "host_timezone": "Pacific Standard Time",
+  "schedule": {
+    "type": "daily",
+    "pacific_local_time": "16:15",
+    "taipei_mapping": {
+      "PDT": "07:15 next day",
+      "PST": "08:15 next day"
+    },
+    "wrapper_waits_for": "Asia/Taipei 08:30 natural decision clock",
+    "late_start_policy": "blocked after Asia/Taipei 08:35; no catch-up credit"
+  },
+  "action": {
+    "executable": "cmd.exe",
+    "arguments": "/c \"C:\\Projects\\PythonProjects\\technical_analysis\\scripts\\scheduled\\run_ml_allocation_forward_daily.cmd\"",
+    "working_directory": "C:\\Projects\\PythonProjects\\technical_analysis"
+  },
+  "principal": {
+    "user": "DESKTOP-4663E62\\archi",
+    "sid": "S-1-5-21-2805941452-3626721260-854237343-1001",
+    "logon_type": "InteractiveToken",
+    "run_level": "LeastPrivilege",
+    "resolution_rule": "At deployment, re-query the existing Paper Portfolio task and abort on principal/SID mismatch; do not hard-code a different account."
+  },
+  "settings": {
+    "multiple_instances": "IgnoreNew",
+    "execution_time_limit": "PT2H",
+    "disallow_start_if_on_batteries": true,
+    "stop_if_going_on_batteries": true,
+    "start_when_available": false,
+    "wake_to_run": false,
+    "network_required": false,
+    "reason": "The wrapper may wait up to 75 minutes from the Pacific wake to Taipei 08:30 and gives the child until 08:35; PT2H leaves bounded overhead without enabling catch-up."
+  },
+  "forward_environment": {
+    "ML_FORWARD_CONFIG_ROOT": "C:\\Projects\\PythonProjects\\technical_analysis\\output\\v4_ml_forward_scheduler",
+    "ML_FORWARD_DATABASE": "D:\\Min\\Python\\Project\\FA_Data\\sqlite\\twstock.db",
+    "ML_FORWARD_OUTPUT_ROOT": "C:\\Projects\\PythonProjects\\technical_analysis\\output\\v4_ml_daily_derived_shadow_real_v2",
+    "ML_FORWARD_PAPER_STATE_DB": "C:\\Projects\\PythonProjects\\technical_analysis\\output\\paper_execution_eod_replay\\paper_portfolio\\paper_portfolio.sqlite",
+    "BALDR_ML_RELEASE_ROOT": "C:\\Projects\\PythonProjects\\technical_analysis\\output\\v4_ml_derived_h5_20260907_real_v2",
+    "BALDR_ML_RELEASE_MANIFEST_FILE_HASH": "sha256:c306c1ea53ccef112204a8412a605b575e4d107b4503b2b5be5d6d5ee50910ea",
+    "ML_FORWARD_ARCHIVE_ROOT": "C:\\Projects\\PythonProjects\\technical_analysis\\output\\formal_daily_publications\\pit_candidate_archive",
+    "ML_FORWARD_CALENDAR_CACHE_ROOT": "C:\\Projects\\PythonProjects\\technical_analysis\\output\\paper_execution_eod_replay\\calendar_cache"
+  },
+  "preconditions": [
+    "The exact forward child contract is accepted: full outer payload, nested daily_orchestration.natural_forward_completion_clock, outer failure status takes precedence.",
+    "The daily producer has an offline verified official calendar cache and one-session freshness policy; unknown calendar or stale archive fails closed.",
+    "The V2 release root and manifest hash above pass a fresh readback; replacement blocks before child start.",
+    "The existing baldr-ml-allocation-copilot-daily 05:20 catch-up task remains unchanged.",
+    "Deployment is performed only after a dry-run query proves the task is absent or the exact requested task is being added; query errors do not permit create/replace."
+  ],
+  "deployment_sequence": [
+    "Query host timezone and existing Paper Portfolio principal/settings; save before XML.",
+    "Run run_ml_allocation_forward_daily.cmd preflight and verify V2 release hash, repo output paths, calendar cache and wrapper parser tests; this mode never waits or runs the producer/child.",
+    "Import ml_forward_task_registration.xml or create the exact task with schtasks; apply only the settings in this plan.",
+    "Query the new task /V and export after XML; verify 16:15 Pacific, action, InteractiveToken principal, IgnoreNew, PT2H, battery restrictions, StartWhenAvailable=false and WakeToRun=false.",
+    "Do not invoke the wrapper as a production forward run during registration; do not register if the archive/config/frozen release gate is not ready."
+  ],
+  "registration_evidence": {
+    "task_name": "baldr-ml-allocation-forward-daily",
+    "registered_at_utc": "2026-09-08T11:43:54.3798658Z",
+    "status": "Ready",
+    "enabled": true,
+    "next_run_pacific": "2026/9/8 16:15:00",
+    "last_run_pacific": "1999/11/30 00:00:00",
+    "last_result": "267011",
+    "before_query": "output/v4_next_ops/ml_forward_task_before_20260908.txt",
+    "failed_encoding_attempt": "output/v4_next_ops/ml_forward_task_register_failed_encoding_20260908.txt",
+    "registration_result": "output/v4_next_ops/ml_forward_task_register_result_20260908.txt",
+    "after_query": "output/v4_next_ops/ml_forward_task_after_20260908.txt",
+    "after_xml": "output/v4_next_ops/ml_forward_task_after_20260908.xml",
+    "settings_compare": "output/v4_next_ops/ml_forward_task_settings_after_20260908.json",
+    "verification": "Exact action, repository working directory, SID 1001 InteractiveToken principal, daily 16:15 Pacific trigger, IgnoreNew, PT2H, battery restrictions, StartWhenAvailable=false and WakeToRun=false were read back after registration. The task has never run; no forward child was launched during registration."
+  },
+  "rollback": {
+    "task_delete": "schtasks.exe /Delete /TN baldr-ml-allocation-forward-daily /F",
+    "condition": "Only remove this newly added task after an after-query confirms the task name; never use aggregate unregister for other BALDR tasks.",
+    "evidence": "Save delete result and post-delete query before declaring rollback complete."
+  },
+  "safety": {
+    "registered": true,
+    "broker_order_allowed": false,
+    "production_action_allowed": false,
+    "forward_credit_granted": false,
+    "writes_market_database": false,
+    "notes": "This plan prepares a candidate-only shadow caller. It does not grant formal OOS credit, production alpha, or broker access."
+  }
+}

@@ -17,6 +17,10 @@ from app_module.paper_portfolio_snapshot_repository import (
     PaperPortfolioSnapshotRepository,
 )
 from app_module.paper_portfolio_policy import PaperPortfolioPolicyConfig
+from data_module.portfolio_ml_dataset_assembler import (
+    SECTOR_MEMBERSHIP_MANIFEST_SCHEMA_VERSION,
+    SECTOR_MEMBERSHIP_SIDECAR_SCHEMA_VERSION,
+)
 from data_module.paper_daily_execution_producer import (
     PaperExecutionPaths,
     _Position,
@@ -45,6 +49,53 @@ EOD_REPLAY_NOW = datetime(2026, 9, 7, 15, 0, tzinfo=TAIPEI)
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_sector_sidecar(path: Path) -> str:
+    rows = [
+        {
+            "symbol": "2330",
+            "sector_id": "SEMICONDUCTOR",
+            "available_at": "2026-01-01T00:00:00+00:00",
+            "effective_from": "2026-01-01",
+            "effective_to": None,
+            "status": "accepted",
+            "source_id": "official:twse:t187ap03_L",
+            "license_id": "twse-open-data-license-v1",
+            "source_hash": "sha256:" + ("1" * 64),
+        }
+    ]
+    canonical = lambda value: json.dumps(  # noqa: E731 - fixture canonicalizer
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    rows_hash = "sha256:" + hashlib.sha256(canonical(rows)).hexdigest()
+    manifest_body = {
+        "schema_version": SECTOR_MEMBERSHIP_MANIFEST_SCHEMA_VERSION,
+        "row_count": len(rows),
+        "rows_hash": rows_hash,
+    }
+    manifest = {
+        **manifest_body,
+        "canonical_hash": "sha256:" + hashlib.sha256(
+            canonical(
+                {
+                    "sidecar_schema_version": SECTOR_MEMBERSHIP_SIDECAR_SCHEMA_VERSION,
+                    "manifest": manifest_body,
+                }
+            )
+        ).hexdigest(),
+    }
+    payload = {
+        "schema_version": SECTOR_MEMBERSHIP_SIDECAR_SCHEMA_VERSION,
+        "manifest": manifest,
+        "rows": rows,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(canonical(payload) + b"\n")
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 class _Calendar:
@@ -221,11 +272,18 @@ def _paths(
         execution_volume=execution_volume,
         with_calendar=with_calendar,
     )
+    ledger = tmp_path / "paper-ledger.sqlite"
+    PaperTradeLedgerRepository(ledger)
+    sector_path = tmp_path / "sector-membership.json"
+    sector_hash = _write_sector_sidecar(sector_path)
     return PaperExecutionPaths(
         recommendation_json=recommendation,
         state_db=state,
         market_db=market,
         output_root=tmp_path / "candidate",
+        ledger_db=ledger,
+        sector_membership_path=sector_path,
+        sector_membership_file_hash=sector_hash,
     )
 
 
@@ -388,8 +446,8 @@ def test_existing_preopen_snapshot_can_append_after_candidate_and_retry_once(
 ) -> None:
     paths = _paths(tmp_path)
     _state(paths.state_db, decision_date=EXECUTION_DATE)
-    ledger = tmp_path / "paper-ledger.sqlite"
-    paths = PaperExecutionPaths(**{**paths.__dict__, "ledger_db": ledger})
+    ledger = paths.ledger_db
+    assert ledger is not None
     state_before = _sha256(paths.state_db)
 
     candidate = run_paper_execution_daily(
@@ -401,7 +459,7 @@ def test_existing_preopen_snapshot_can_append_after_candidate_and_retry_once(
     assert candidate["status"] == "machine_verified_candidate"
     assert candidate["ledger"]["appended"] is False
     assert _sha256(paths.state_db) == state_before
-    assert not ledger.exists()
+    assert PaperTradeLedgerRepository(ledger).list() == ()
 
     appended = run_paper_execution_daily(
         PaperExecutionPaths(**{**paths.__dict__, "output_root": tmp_path / "appended"}),
@@ -421,8 +479,8 @@ def test_explicit_append_is_exactly_idempotent_after_preopen_snapshot_exists(
     tmp_path: Path,
 ) -> None:
     paths = _paths(tmp_path)
-    ledger = tmp_path / "paper-ledger.sqlite"
-    paths = PaperExecutionPaths(**{**paths.__dict__, "ledger_db": ledger})
+    ledger = paths.ledger_db
+    assert ledger is not None
     first = run_paper_execution_daily(
         paths,
         now=EOD_REPLAY_NOW,
@@ -440,6 +498,8 @@ def test_explicit_append_is_exactly_idempotent_after_preopen_snapshot_exists(
         market_db=paths.market_db,
         output_root=tmp_path / "retry-candidate",
         ledger_db=ledger,
+        sector_membership_path=paths.sector_membership_path,
+        sector_membership_file_hash=paths.sector_membership_file_hash,
     )
     second = run_paper_execution_daily(
         retry_paths,
@@ -456,8 +516,6 @@ def test_explicit_append_is_exactly_idempotent_after_preopen_snapshot_exists(
 
 def test_missing_append_confirmation_does_not_create_ledger(tmp_path: Path) -> None:
     paths = _paths(tmp_path)
-    ledger = tmp_path / "paper-ledger.sqlite"
-    paths = PaperExecutionPaths(**{**paths.__dict__, "ledger_db": ledger})
     result = run_paper_execution_daily(
         paths,
         now=EOD_REPLAY_NOW,
@@ -466,7 +524,9 @@ def test_missing_append_confirmation_does_not_create_ledger(tmp_path: Path) -> N
 
     assert result["status"] == "machine_verified_candidate"
     assert result["append_requested"] is False
-    assert not ledger.exists()
+    assert result["ledger"]["appended"] is False
+    assert paths.ledger_db is not None
+    assert PaperTradeLedgerRepository(paths.ledger_db).list() == ()
 
 
 def test_zero_liquidity_cap_is_order_level_rejection(
@@ -677,12 +737,15 @@ def test_queue_selects_due_frozen_recommendation_and_persists_processed_receipt(
     queued_recommendation.write_bytes(input_paths.recommendation_json.read_bytes())
     receipts = tmp_path / "receipts"
     ledger = tmp_path / "paper-ledger.sqlite"
+    PaperTradeLedgerRepository(ledger)
     queue_paths = PaperExecutionPaths(
         recommendation_json=tmp_path / "unused-placeholder.json",
         state_db=input_paths.state_db,
         market_db=input_paths.market_db,
         output_root=tmp_path / "queue-candidate",
         ledger_db=ledger,
+        sector_membership_path=input_paths.sector_membership_path,
+        sector_membership_file_hash=input_paths.sector_membership_file_hash,
     )
 
     selected, reason = resolve_pending_recommendation(
@@ -723,6 +786,292 @@ def test_queue_selects_due_frozen_recommendation_and_persists_processed_receipt(
     )
     assert selected_again is None
     assert reason_again == "no_pending_recommendation"
+
+
+def test_same_day_retry_keeps_first_pending_recommendation_when_newer_source_arrives(
+    tmp_path: Path,
+) -> None:
+    """EOD retry must keep the durable frozen decision for one session."""
+
+    input_root = tmp_path / "inputs"
+    input_root.mkdir()
+    input_paths = _paths(input_root)
+    recommendation_root = tmp_path / "recommendation-queue"
+    recommendation_root.mkdir()
+    original = recommendation_root / "original.json"
+    original.write_bytes(input_paths.recommendation_json.read_bytes())
+    receipts = tmp_path / "receipts"
+    queue_paths = PaperExecutionPaths(
+        recommendation_json=tmp_path / "unused-placeholder.json",
+        state_db=input_paths.state_db,
+        market_db=input_paths.market_db,
+        output_root=tmp_path / "waiting-candidate",
+        ledger_db=tmp_path / "paper-ledger.sqlite",
+        sector_membership_path=input_paths.sector_membership_path,
+        sector_membership_file_hash=input_paths.sector_membership_file_hash,
+    )
+    PaperTradeLedgerRepository(queue_paths.ledger_db)
+
+    waiting = run_paper_execution_daily_from_queue(
+        queue_paths,
+        recommendation_root=recommendation_root,
+        receipt_root=receipts,
+        now=NOW,
+        calendar=_open_calendar(),
+        confirm_append=True,
+    )
+    assert waiting["status"] == "waiting_for_execution_source"
+    waiting_receipt = waiting["operational_receipt"]
+    assert isinstance(waiting_receipt, dict)
+    assert waiting_receipt["queue_state"] == "pending_execution"
+
+    newer = recommendation_root / "newer.json"
+    _recommendation(newer, created_at="2026-09-04T21:00:00+08:00")
+    selected, reason = resolve_pending_recommendation(
+        recommendation_root,
+        observed=EOD_REPLAY_NOW,
+        market_db=input_paths.market_db,
+        calendar=_open_calendar(),
+        receipt_root=receipts,
+    )
+    assert selected == original
+    assert reason == "pending_execution_retry"
+    assert not any(
+        json.loads(path.read_text(encoding="utf-8")).get("queue_state") == "superseded"
+        for path in receipts.glob("*.json")
+    )
+
+    retry = run_paper_execution_daily_from_queue(
+        PaperExecutionPaths(
+            **{
+                **queue_paths.__dict__,
+                "output_root": tmp_path / "retry-candidate",
+            }
+        ),
+        recommendation_root=recommendation_root,
+        receipt_root=receipts,
+        now=EOD_REPLAY_NOW,
+        calendar=_open_calendar(),
+        confirm_append=True,
+    )
+    assert retry["status"] == "machine_verified_candidate"
+    assert retry["recommendation"]["path"] == str(original)
+    assert retry["ledger"]["readback_verified"] is True
+
+
+def test_retryable_missing_execution_source_is_pinned_until_market_row_arrives(
+    tmp_path: Path,
+) -> None:
+    """A 15:05 source miss remains a legal same-day retry at 21:00."""
+
+    input_root = tmp_path / "inputs"
+    input_root.mkdir()
+    input_paths = _paths(input_root)
+    recommendation_root = tmp_path / "recommendation-queue"
+    recommendation_root.mkdir()
+    queued = recommendation_root / "queued.json"
+    queued.write_bytes(input_paths.recommendation_json.read_bytes())
+    with sqlite3.connect(input_paths.market_db) as connection:
+        connection.execute(
+            "DELETE FROM daily_prices WHERE 日期 = ? AND 證券代號 = ?",
+            ("20260907", "2330"),
+        )
+    receipts = tmp_path / "receipts"
+    queue_paths = PaperExecutionPaths(
+        recommendation_json=tmp_path / "unused-placeholder.json",
+        state_db=input_paths.state_db,
+        market_db=input_paths.market_db,
+        output_root=tmp_path / "failed-candidate",
+        ledger_db=tmp_path / "paper-ledger.sqlite",
+        sector_membership_path=input_paths.sector_membership_path,
+        sector_membership_file_hash=input_paths.sector_membership_file_hash,
+    )
+    PaperTradeLedgerRepository(queue_paths.ledger_db)
+    failed = run_paper_execution_daily_from_queue(
+        queue_paths,
+        recommendation_root=recommendation_root,
+        receipt_root=receipts,
+        now=EOD_REPLAY_NOW,
+        calendar=_open_calendar(),
+        confirm_append=True,
+    )
+    assert failed["status"] == "blocked"
+    assert failed["retryable"] is True
+    failed_receipt = failed["operational_receipt"]
+    assert isinstance(failed_receipt, dict)
+    assert failed_receipt["queue_state"] == "pending_execution"
+    # Simulate a receipt written by the pre-pending producer: keep the original
+    # immutable source/candidate payload, but retain its legacy ``failed``
+    # queue state and omit the newer retryable marker.
+    failed_receipt_path = Path(str(failed_receipt["path"]))
+    legacy = json.loads(failed_receipt_path.read_text(encoding="utf-8"))
+    legacy["queue_state"] = "failed"
+    legacy["result"].pop("retryable", None)
+    unsigned_legacy = dict(legacy)
+    unsigned_legacy.pop("content_sha256")
+    legacy["content_sha256"] = "sha256:" + hashlib.sha256(
+        json.dumps(
+            unsigned_legacy,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    failed_receipt_path.write_text(
+        json.dumps(legacy, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    legacy_bytes_before_retry = failed_receipt_path.read_bytes()
+
+    with sqlite3.connect(input_paths.market_db) as connection:
+        connection.execute(
+            "INSERT INTO daily_prices VALUES (?, ?, ?, ?, ?, ?)",
+            ("20260907", "2330", "測試公司", "10.20", "10.50", 100000),
+        )
+    selected, reason = resolve_pending_recommendation(
+        recommendation_root,
+        observed=datetime(2026, 9, 7, 21, 0, tzinfo=TAIPEI),
+        market_db=input_paths.market_db,
+        calendar=_open_calendar(),
+        receipt_root=receipts,
+    )
+    assert selected == queued
+    assert reason == "pending_execution_retry"
+    assert failed_receipt_path.read_bytes() == legacy_bytes_before_retry
+
+    retried = run_paper_execution_daily_from_queue(
+        PaperExecutionPaths(
+            **{
+                **queue_paths.__dict__,
+                "output_root": tmp_path / "retried-candidate",
+            }
+        ),
+        recommendation_root=recommendation_root,
+        receipt_root=receipts,
+        now=datetime(2026, 9, 7, 21, 0, tzinfo=TAIPEI),
+        calendar=_open_calendar(),
+        confirm_append=True,
+    )
+    assert retried["status"] == "machine_verified_candidate"
+    assert retried["operational_receipt"]["queue_state"] == "processed"
+
+
+def test_legacy_pending_adoption_rejects_mixed_source_and_identity_blockers(
+    tmp_path: Path,
+) -> None:
+    """A missing row cannot mask a clock/identity violation in a receipt."""
+
+    input_root = tmp_path / "inputs"
+    input_root.mkdir()
+    input_paths = _paths(input_root)
+    recommendation_root = tmp_path / "recommendation-queue"
+    recommendation_root.mkdir()
+    queued = recommendation_root / "queued.json"
+    queued.write_bytes(input_paths.recommendation_json.read_bytes())
+    with sqlite3.connect(input_paths.market_db) as connection:
+        connection.execute(
+            "DELETE FROM daily_prices WHERE 日期 = ? AND 證券代號 = ?",
+            ("20260907", "2330"),
+        )
+    receipts = tmp_path / "receipts"
+    result = run_paper_execution_daily_from_queue(
+        PaperExecutionPaths(
+            recommendation_json=tmp_path / "unused-placeholder.json",
+            state_db=input_paths.state_db,
+            market_db=input_paths.market_db,
+            output_root=tmp_path / "candidate",
+            ledger_db=tmp_path / "paper-ledger.sqlite",
+        ),
+        recommendation_root=recommendation_root,
+        receipt_root=receipts,
+        now=EOD_REPLAY_NOW,
+        calendar=_open_calendar(),
+        confirm_append=True,
+    )
+    receipt = result["operational_receipt"]
+    assert isinstance(receipt, dict)
+    receipt_path = Path(str(receipt["path"]))
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    payload["queue_state"] = "failed"
+    payload["result"].pop("retryable", None)
+    payload["result"]["blockers"].append("clock identity mismatch")
+    unsigned = dict(payload)
+    unsigned.pop("content_sha256")
+    payload["content_sha256"] = "sha256:" + hashlib.sha256(
+        json.dumps(
+            unsigned,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    receipt_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    selected, reason = resolve_pending_recommendation(
+        recommendation_root,
+        observed=EOD_REPLAY_NOW,
+        market_db=input_paths.market_db,
+        calendar=_open_calendar(),
+        receipt_root=receipts,
+    )
+    assert selected == queued
+    assert reason == "next_official_session_due"
+
+
+def test_pending_execution_session_missed_blocks_cross_day_source_switch(
+    tmp_path: Path,
+) -> None:
+    """A late pending session is explicit no-credit, never silently replaced."""
+
+    input_root = tmp_path / "inputs"
+    input_root.mkdir()
+    input_paths = _paths(input_root)
+    recommendation_root = tmp_path / "recommendation-queue"
+    recommendation_root.mkdir()
+    original = recommendation_root / "original.json"
+    original.write_bytes(input_paths.recommendation_json.read_bytes())
+    receipts = tmp_path / "receipts"
+    queue_paths = PaperExecutionPaths(
+        recommendation_json=tmp_path / "unused-placeholder.json",
+        state_db=input_paths.state_db,
+        market_db=input_paths.market_db,
+        output_root=tmp_path / "waiting-candidate",
+        ledger_db=tmp_path / "paper-ledger.sqlite",
+    )
+    waiting = run_paper_execution_daily_from_queue(
+        queue_paths,
+        recommendation_root=recommendation_root,
+        receipt_root=receipts,
+        now=NOW,
+        calendar=_open_calendar(),
+        confirm_append=True,
+    )
+    waiting_receipt = waiting["operational_receipt"]
+    assert isinstance(waiting_receipt, dict)
+    receipt_path = Path(str(waiting_receipt["path"]))
+    receipt_bytes = receipt_path.read_bytes()
+
+    # A later decision maps to the next official session.  The stale 9/7
+    # pending source must stop queue selection before that new source can win.
+    newer = recommendation_root / "next-session.json"
+    _recommendation(
+        newer,
+        created_at="2026-09-07T20:00:00+08:00",
+        decision_date="2026-09-07",
+    )
+    selected, reason = resolve_pending_recommendation(
+        recommendation_root,
+        observed=datetime(2026, 9, 8, 10, 0, tzinfo=TAIPEI),
+        market_db=input_paths.market_db,
+        calendar=_Calendar({DECISION_DATE, EXECUTION_DATE, "2026-09-08"}),
+        receipt_root=receipts,
+    )
+    assert selected is None
+    assert reason == "pending_execution_session_missed:2026-09-07"
+    assert receipt_path.read_bytes() == receipt_bytes
 
 
 def test_missing_queue_is_observable_and_persists_skipped_receipt(
@@ -772,7 +1121,10 @@ def test_queue_freezes_one_latest_recommendation_per_execution_session(
         market_db=input_paths.market_db,
         output_root=tmp_path / "queue-candidate",
         ledger_db=tmp_path / "paper-ledger.sqlite",
+        sector_membership_path=input_paths.sector_membership_path,
+        sector_membership_file_hash=input_paths.sector_membership_file_hash,
     )
+    PaperTradeLedgerRepository(queue_paths.ledger_db)
 
     selected, reason = resolve_pending_recommendation(
         recommendation_root,
@@ -834,7 +1186,10 @@ def test_rehashed_processed_receipt_with_false_ledger_readback_does_not_skip(
         market_db=input_paths.market_db,
         output_root=tmp_path / "queue-candidate",
         ledger_db=tmp_path / "paper-ledger.sqlite",
+        sector_membership_path=input_paths.sector_membership_path,
+        sector_membership_file_hash=input_paths.sector_membership_file_hash,
     )
+    PaperTradeLedgerRepository(queue_paths.ledger_db)
     result = run_paper_execution_daily_from_queue(
         queue_paths,
         recommendation_root=recommendation_root,

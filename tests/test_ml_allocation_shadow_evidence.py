@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import json
@@ -9,6 +9,7 @@ import sqlite3
 
 import pytest
 
+from app_module import ml_allocation_shadow_evidence as evidence_module
 from app_module.ml_allocation_shadow_evidence import (
     MLAllocationShadowCollector,
     SHADOW_ALPHA_LANES_BP,
@@ -478,6 +479,7 @@ def test_collector_records_four_lanes_then_matures_all_four_horizons(
         artifact_root=tmp_path / "artifacts",
         official_market_event_pointer_path=official_event_pointer,
     )
+    forward_deadline = datetime.now(timezone.utc) + timedelta(minutes=1)
 
     first = collector.record_and_mature(
         decision_date=decision_date,
@@ -491,6 +493,7 @@ def test_collector_records_four_lanes_then_matures_all_four_horizons(
         release_training_manifest_file_hash=f"sha256:{'a' * 64}",
         raw_publication_manifest_hash=f"sha256:{'b' * 64}",
         inference_universe_hash=f"sha256:{'c' * 64}",
+        natural_forward_deadline_at=forward_deadline,
     )
     replay = collector.record_and_mature(
         decision_date=decision_date,
@@ -504,6 +507,7 @@ def test_collector_records_four_lanes_then_matures_all_four_horizons(
         release_training_manifest_file_hash=f"sha256:{'a' * 64}",
         raw_publication_manifest_hash=f"sha256:{'b' * 64}",
         inference_universe_hash=f"sha256:{'c' * 64}",
+        natural_forward_deadline_at=forward_deadline,
     )
     matured = collector.mature_and_summarize(
         cutoff_date=decision_date + timedelta(days=59)
@@ -516,6 +520,11 @@ def test_collector_records_four_lanes_then_matures_all_four_horizons(
     assert first["formal_oos_allowed"] is False
     assert first["selected_alpha_bp"] == 0
     assert first["broker_order_allowed"] is False
+    assert isinstance(first["observation_emitted_at"], str)
+    assert datetime.fromisoformat(
+        str(first["observation_emitted_at"])
+    ) <= forward_deadline
+    assert first["maturity_deferred_for_forward_deadline"] is True
     assert replay["observation_idempotent"] is True
     assert replay["observation_hash"] == first["observation_hash"]
     assert matured["matured_observation_count"] == 0
@@ -570,6 +579,64 @@ def test_collector_records_four_lanes_then_matures_all_four_horizons(
         assert lane["advice"]["broker_order_allowed"] is False
         assert all(row["why"] for row in lane["advice"]["rows"])
         assert all(row["why_not"] for row in lane["advice"]["rows"])
+
+
+def test_forward_deadline_rolls_back_slow_observation_emission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """append 跨越 08:35 時，repository transaction 必須 rollback。"""
+
+    market_db = tmp_path / "market.sqlite"
+    decision_date, strict_t_minus_one = _make_market_db(market_db)
+    paper_db = tmp_path / "paper.sqlite"
+    _make_paper_db(
+        paper_db,
+        snapshot_date=strict_t_minus_one - timedelta(days=1),
+    )
+    proposal_path = tmp_path / "proposal.json"
+    proposal_hash, replay_hash = _write_proposal(
+        proposal_path,
+        decision_date=decision_date,
+    )
+    proposal_file_hash = (
+        "sha256:" + hashlib.sha256(proposal_path.read_bytes()).hexdigest()
+    )
+    official_event_pointer = _make_official_event_pointer(tmp_path)
+    collector = MLAllocationShadowCollector(
+        market_database_path=market_db,
+        paper_state_db_path=paper_db,
+        sidecar_database_path=tmp_path / "shadow.sqlite",
+        artifact_root=tmp_path / "artifacts",
+        official_market_event_pointer_path=official_event_pointer,
+    )
+    deadline = datetime(2026, 2, 2, 23, 0, tzinfo=timezone.utc)
+    before = deadline - timedelta(seconds=1)
+    after = deadline + timedelta(seconds=1)
+    clock = iter((before, before, before, after))
+    monkeypatch.setattr(evidence_module, "_utc_now", lambda: next(clock))
+
+    with pytest.raises(
+        TimeoutError,
+        match="emission crossed deadline",
+    ):
+        collector.record_and_mature(
+            decision_date=decision_date,
+            strict_t_minus_one=strict_t_minus_one,
+            proposal_path=proposal_path,
+            proposal_hash=proposal_hash,
+            proposal_file_hash=proposal_file_hash,
+            replay_hash=replay_hash,
+            orchestration_run_hash=f"sha256:{'8' * 64}",
+            rule_policy_hash=f"sha256:{'9' * 64}",
+            release_training_manifest_file_hash=f"sha256:{'a' * 64}",
+            raw_publication_manifest_hash=f"sha256:{'b' * 64}",
+            inference_universe_hash=f"sha256:{'c' * 64}",
+            natural_forward_deadline_at=deadline,
+        )
+
+    repository = ShadowEvidenceRepository(tmp_path / "shadow.sqlite")
+    assert repository.observations() == ()
 
 
 @pytest.mark.parametrize(
@@ -801,6 +868,59 @@ def test_horizon_outcome_hash_is_prefix_stable_and_revisions_append(
         cutoff_date=decision_date + timedelta(days=59)
     )
     assert len(repository.outcomes()) == 3
+
+
+def test_maturity_refresh_excludes_future_eod_rows_until_available(
+    tmp_path: Path,
+) -> None:
+    market_db = tmp_path / "market.sqlite"
+    decision_date, _ = _make_market_db(market_db)
+    sidecar = tmp_path / "shadow.sqlite"
+    observation = _append_minimal_observation(
+        sidecar,
+        decision_date=decision_date,
+        symbols=("2330",),
+    )
+    pointer = _make_official_event_pointer(tmp_path)
+    collector = MLAllocationShadowCollector(
+        market_database_path=market_db,
+        paper_state_db_path=None,
+        sidecar_database_path=sidecar,
+        artifact_root=tmp_path / "artifacts",
+        official_market_event_pointer_path=pointer,
+    )
+
+    before_eod = collector.mature_and_summarize(
+        cutoff_date=decision_date + timedelta(days=59),
+        available_at_cutoff=datetime(
+            2026,
+            2,
+            2,
+            15,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+    assert before_eod["status"] == "insufficient_evidence"
+    assert before_eod["matured_observation_count"] == 0
+
+    after_eod = collector.mature_and_summarize(
+        cutoff_date=decision_date + timedelta(days=59),
+        available_at_cutoff=datetime(
+            2026,
+            4,
+            10,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+    assert after_eod["matured_observation_count"] == 1
+    assert after_eod["outcome_records_appended"] == 1
+    outcomes = ShadowEvidenceRepository(sidecar).latest_outcomes(
+        observation_hashes=(str(observation["record_hash"]),)
+    )
+    assert outcomes[0]["status"] == "matured_all_horizons"
 
 
 def test_reference_metrics_are_immutable_and_have_hash_bound_latest_pointer(

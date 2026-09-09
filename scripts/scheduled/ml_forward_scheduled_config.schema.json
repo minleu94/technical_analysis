@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://baldr.local/schemas/ml-forward-scheduled-config.v1.json",
+  "title": "BALDR ML forward scheduled caller configuration",
+  "description": "A frozen, date-bound configuration for the non-registered 16:15 Pacific forward shadow preparation wrapper.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_name",
+    "decision_timezone",
+    "decision_time",
+    "scheduled_wake_local",
+    "run_date",
+    "database",
+    "paper_state_db",
+    "output_root",
+    "release_root",
+    "release_manifest_file_hash",
+    "natural_forward_deadline_at",
+    "source"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "ml-forward-scheduled-config.v1"
+    },
+    "task_name": {
+      "const": "baldr-ml-allocation-forward-daily"
+    },
+    "decision_timezone": {
+      "const": "Asia/Taipei"
+    },
+    "decision_time": {
+      "const": "08:30"
+    },
+    "scheduled_wake_local": {
+      "const": "16:15"
+    },
+    "run_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "database": {
+      "type": "string",
+      "minLength": 1
+    },
+    "paper_state_db": {
+      "type": "string",
+      "minLength": 1
+    },
+    "output_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release_manifest_file_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-fA-F]{64}$"
+    },
+    "natural_forward_deadline_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "oneOf": [
+        {
+          "title": "Operational publication source",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "path", "file_hash"],
+          "properties": {
+            "kind": {
+              "const": "operational_publication"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "file_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-fA-F]{64}$"
+            }
+          }
+        },
+        {
+          "title": "Durable archive source",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "root",
+            "manifest",
+            "manifest_file_hash"
+          ],
+          "properties": {
+            "kind": {
+              "const": "archive"
+            },
+            "root": {
+              "type": "string",
+              "minLength": 1
+            },
+            "manifest": {
+              "type": "string",
+              "minLength": 1
+            },
+            "manifest_file_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-fA-F]{64}$"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

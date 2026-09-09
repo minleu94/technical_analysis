@@ -43,6 +43,10 @@ from data_module.daily_price_source_guard import (
     validate_aggregate_receipt_payload,
     validate_daily_price_frame_date,
 )
+from data_module.official_trading_calendar import (
+    OfficialTradingCalendar,
+    OfficialTradingCalendarError,
+)
 
 
 def _monthly_revenue_status_today() -> str:
@@ -462,13 +466,17 @@ class UpdateService :
                 df =self ._load_csv_for_sqlite (self .config .market_index_file ,require_date =True )
                 df =normalize_market_index_frame (df )if not df .empty else df
                 table_name ='market_indices'
-                replace_table =True
-                delete_date_keys =False
+                # The CSV is a historical snapshot, but syncing it must not
+                # DELETE the whole SQLite table.  Replace only the date keys
+                # represented by the validated source frame so an interrupted
+                # or partial source cannot erase older rows.
+                replace_table =False
+                delete_date_keys =True
             elif normalized =='industry_index':
                 df =self ._load_csv_for_sqlite (self .config .industry_index_file ,require_date =True )
                 table_name ='industry_indices'
-                replace_table =True
-                delete_date_keys =False
+                replace_table =False
+                delete_date_keys =True
             elif normalized =='broker_branch_files':
                 df =self ._load_broker_branch_files_for_sqlite (start_date ,end_date )
                 table_name ='broker_flows'
@@ -558,16 +566,17 @@ class UpdateService :
                 date_keys =self ._iter_weekday_date_keys (start_date ,end_date )
                 if not date_keys :
                     return {
-                    'success':False ,
-                    'message':'TPEX daily price request dates invalid: empty trading-date range',
+                    'success':True ,
+                    'message':'TPEX 每日股價區間沒有官方交易日，已略過（非資料失敗）',
                     'updated_dates':[],
                     'fallback_dates':[],
                     'failed_dates':[],
                     'tpex_rows':0 ,
                     'skipped_rows':0 ,
-                    'diagnostic_count':1 ,
+                    'diagnostic_count':0 ,
                     'source_date':None ,
                     'output_file':None ,
+                    'no_op':True ,
                     }
                 effective_target =date_keys [-1 ]
 
@@ -703,8 +712,8 @@ class UpdateService :
             date_keys =self ._iter_weekday_date_keys (start_date ,end_date )
             if not date_keys :
                 return {
-                'success':False ,
-                'message':'TPEX daily price request dates invalid: empty trading-date range',
+                'success':True ,
+                'message':'TPEX 每日股價區間沒有官方交易日，已略過（非資料失敗）',
                 'updated_dates':[],
                 'fallback_dates':[],
                 'skipped_dates':[],
@@ -713,6 +722,8 @@ class UpdateService :
                 'skipped_rows':0 ,
                 'diagnostic_count':0 ,
                 'source_dates':[],
+                'sync_summary':None ,
+                'no_op':True ,
                 }
 
             source =self ._create_tpex_daily_price_source ()
@@ -926,9 +937,50 @@ class UpdateService :
             }
 
     def _iter_weekday_date_keys (self ,start_date :str ,end_date :str )->list [str ]:
-        return update_data_normalization .iter_weekday_date_keys (
-        start_date ,end_date ,date_key_fn =self ._date_key
+        """Return official trading dates for an update range.
+
+        The historical method name is retained for callers and UI contracts,
+        but production execution is now fail-closed on the shared official
+        TWSE calendar.  The small ``__new__`` compatibility path is only for
+        legacy unit doubles that intentionally do not carry a config object.
+        """
+
+        if not hasattr(self, "config"):
+            return update_data_normalization .iter_weekday_date_keys (
+                start_date, end_date, date_key_fn=self ._date_key
+            )
+
+        start_key = self._date_key(start_date)
+        end_key = self._date_key(end_date)
+        start_day = date.fromisoformat(
+            f"{start_key[:4]}-{start_key[4:6]}-{start_key[6:8]}"
         )
+        end_day = date.fromisoformat(
+            f"{end_key[:4]}-{end_key[4:6]}-{end_key[6:8]}"
+        )
+        calendar = OfficialTradingCalendar(
+            db_path=getattr(self.config, "db_file", None),
+            calendar_cache_path=(
+                self.project_root / "output" / "paper_execution_eod_replay" / "calendar_cache"
+                if (
+                    self.project_root / "output" / "paper_execution_eod_replay" / "calendar_cache"
+                ).is_dir()
+                else None
+            ),
+        )
+        try:
+            records = calendar.require_trading_days_in_range(
+                start_day,
+                end_day,
+                allow_online_probe=True,
+            )
+        except OfficialTradingCalendarError:
+            raise
+        return [
+            str(record["date_str"]).replace("-", "")
+            for record in records
+            if record.get("is_trading_day") is True
+        ]
 
     def _load_csv_for_sqlite (self ,path :Path ,require_date :bool =False )->Any :
         import pandas as pd # type: ignore[import-untyped]
@@ -1846,17 +1898,15 @@ class UpdateService :
             missing_dates :list [str ]=[]
             _emit_update_progress(progress_callback, "檢查 TWSE 每日股價缺漏", 0)
             loader =DataLoader (self .config )
-            start_dt =datetime .strptime (start_date ,'%Y-%m-%d')
-            end_dt =datetime .strptime (end_date ,'%Y-%m-%d')
-            current_dt =start_dt
-            while current_dt <=end_dt :
+            official_date_keys = self._iter_weekday_date_keys(start_date, end_date)
+            for trade_date_key in official_date_keys:
                 if _is_cancel_requested(cancel_callback):
                     return cancelled_result("TWSE 每日股價更新已取消（檢查日期缺漏時）")
-                if current_dt .weekday ()<5 :
-                    trade_date =current_dt .strftime ('%Y-%m-%d')
-                    if not loader .get_daily_price_file (trade_date ).exists ():
-                        missing_dates .append (trade_date )
-                current_dt +=timedelta (days =1 )
+                trade_date = (
+                    f"{trade_date_key[:4]}-{trade_date_key[4:6]}-{trade_date_key[6:8]}"
+                )
+                if not loader .get_daily_price_file (trade_date ).exists ():
+                    missing_dates .append (trade_date )
 
             if not missing_dates :
                 logger .info ("[UpdateService] 目標區間每日股價檔案皆已存在，跳過 batch 更新")
@@ -1885,6 +1935,12 @@ class UpdateService :
             '--end-date',end_date ,
             '--delay-min',str (delay_seconds ),
             '--delay-max',str (delay_seconds )]
+            configured_data_root =getattr(self .config ,'data_root',None )
+            configured_output_root =getattr(self .config ,'output_root',None )
+            if configured_data_root is not None:
+                command[4:4] =['--data-root',str (configured_data_root )]
+            if configured_output_root is not None:
+                command[4:4] =['--output-root',str (configured_output_root )]
             cancellation_requested =False
             if progress_callback is None and cancel_callback is None:
                 # 無 UI callback 時保留既有 run() 路徑，讓外部 service double／CLI
@@ -2103,13 +2159,20 @@ class UpdateService :
                     'updated_dates':result .get ('updated_dates',[]),
                     'failed_dates':result .get ('failed_dates',[])
                     }
-                else :
-                # 如果返回的不是 dict，假設成功
+                elif isinstance (result ,bool ):
                     return {
-                    'success':True ,
-                    'message':'大盤指數更新完成',
+                    'success':result ,
+                    'message':'大盤指數更新完成' if result else '大盤指數更新失敗（批次更新回傳失敗）',
                     'updated_dates':[],
-                    'failed_dates':[]
+                    'failed_dates':[] if result else [start_date]
+                    }
+                else :
+                # 不認得的回傳型別不能假設成功，避免吞掉批次失敗
+                    return {
+                    'success':False ,
+                    'message':f'大盤指數更新失敗（批次回傳型別無法辨識: {type(result).__name__}）',
+                    'updated_dates':[],
+                    'failed_dates':[start_date]
                     }
             except Exception as e :
                 error_msg =f"執行大盤指數更新函數時發生錯誤: {str(e)}"
@@ -2247,12 +2310,19 @@ class UpdateService :
                     'updated_dates':result .get ('updated_dates',[]),
                     'failed_dates':result .get ('failed_dates',[])
                     }
+                elif isinstance (result ,bool ):
+                    return {
+                    'success':result ,
+                    'message':'產業指數更新完成' if result else '產業指數更新失敗（批次更新回傳失敗）',
+                    'updated_dates':[],
+                    'failed_dates':[] if result else [start_date]
+                    }
                 else :
                     return {
-                    'success':True ,
-                    'message':'產業指數更新完成',
+                    'success':False ,
+                    'message':f'產業指數更新失敗（批次回傳型別無法辨識: {type(result).__name__}）',
                     'updated_dates':[],
-                    'failed_dates':[]
+                    'failed_dates':[start_date]
                     }
             except Exception as e :
                 error_msg =f"執行產業指數更新函數時發生錯誤: {str(e)}"
@@ -2285,6 +2355,23 @@ class UpdateService :
         if not db_file:
             return False
         return Path(str(db_file)).is_file()
+
+    def _read_freshness_receipt(self) -> Dict[str, Any] | None:
+        """唯讀載入 scheduled freshness receipt，供既有更新頁 status projection 使用。"""
+
+        output_root = getattr(self.config, "output_root", None)
+        if output_root is None:
+            return None
+        path = Path(str(output_root)) / "scheduled" / "data_freshness" / "latest_status.json"
+        if not path.is_file():
+            return None
+        try:
+            import json
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return None
+        return payload if isinstance(payload, dict) else None
 
     def _sqlite_unavailable_status(self) -> Dict[str, Any]:
         """回傳明確 unavailable payload，讓 UI／一鍵更新不會假裝成功。"""
@@ -2780,7 +2867,8 @@ class UpdateService :
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                }, apply_freshness=True, include_contract=True)
+                }, apply_freshness=True, include_contract=True,
+                   freshness_receipt=self._read_freshness_receipt())
                 logger .info ("[UpdateService] 成功從 SQLite 資料庫極速獲取數據狀態！")
                 return result
             except Exception as sql_err :
@@ -2975,7 +3063,8 @@ class UpdateService :
                 'broker_branch':self ._broker_status_from_sqlite (),
                 'technical_indicators':self ._technical_status_from_sqlite (),
                 'monthly_revenue':self ._monthly_revenue_status_from_sqlite (),
-                },is_overview =True ,apply_freshness =True ,include_contract =True )
+                },is_overview =True ,apply_freshness =True ,include_contract =True,
+                   freshness_receipt=self._read_freshness_receipt())
                 return overview
             except Exception as sql_err :
                 import logging
@@ -3157,6 +3246,7 @@ class UpdateService :
                         {"daily_data": reference, normalized: detail},
                         apply_freshness=True,
                         include_contract=True,
+                        freshness_receipt=self._read_freshness_receipt(),
                     ).get(normalized, detail)
                 return enrich_status_mapping({normalized: detail}).get(normalized, detail)
             except Exception as sql_err :

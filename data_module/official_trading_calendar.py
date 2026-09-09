@@ -491,3 +491,104 @@ class OfficialTradingCalendar:
             })
             current += timedelta(days=1)
         return results
+
+    def require_trading_days_in_range(
+        self,
+        start_date: date,
+        end_date: date,
+        *,
+        allow_online_probe: bool = True,
+    ) -> list[dict[str, object]]:
+        """Return only dates with a resolved official-calendar decision.
+
+        The existing ``get_trading_days_in_range`` method intentionally keeps
+        ``None`` results so callers can inspect an unknown calendar.  Update
+        jobs need a stricter boundary: an unavailable annual schedule must not
+        silently turn into a Monday--Friday date list.  This helper therefore
+        raises a typed error when any date is unresolved and returns the same
+        evidence-rich records for callers that need to persist the decision.
+        """
+
+        if start_date > end_date:
+            raise ValueError("start_date must be <= end_date")
+
+        results = self.get_trading_days_in_range(
+            start_date,
+            end_date,
+            allow_online_probe=allow_online_probe,
+        )
+        unknown = [
+            str(item["date_str"])
+            for item in results
+            if item.get("is_trading_day") is None
+        ]
+        if unknown:
+            raise OfficialTradingCalendarError(
+                "official trading calendar unresolved: " + ", ".join(unknown)
+            )
+        for item in results:
+            target = item.get("date")
+            if isinstance(target, date):
+                item["evidence"] = self.evidence_for(target)
+        return results
+
+    def get_recent_official_trading_days(
+        self,
+        reference_date: date,
+        count: int,
+        *,
+        include_reference: bool = True,
+        allow_online_probe: bool = True,
+        max_lookback_days: int = 92,
+    ) -> list[dict[str, object]]:
+        """Return the most recent resolved official sessions in ascending order.
+
+        ``reference_date`` may be a weekend or an exchange holiday.  The
+        method walks calendar dates and asks the official resolver for every
+        date; it never treats a weekday as a session.  A calendar ``None`` is
+        an operational error because the caller cannot establish a safe
+        freshness window.
+        """
+
+        if count <= 0:
+            return []
+        if max_lookback_days < count:
+            raise ValueError("max_lookback_days must be >= count")
+
+        selected: list[dict[str, object]] = []
+        current = reference_date
+        scanned = 0
+        while scanned <= max_lookback_days and len(selected) < count:
+            is_trading, reason = self.is_official_trading_day(
+                current,
+                allow_online_probe=allow_online_probe,
+            )
+            if is_trading is None:
+                raise OfficialTradingCalendarError(
+                    f"official trading calendar unresolved: {current.isoformat()} ({reason})"
+                )
+            if is_trading and (include_reference or current != reference_date):
+                selected.append(
+                    {
+                        "date": current,
+                        "date_str": current.isoformat(),
+                        "is_trading_day": True,
+                        "reason_code": reason,
+                        "evidence": self.evidence_for(current),
+                    }
+                )
+            current -= timedelta(days=1)
+            scanned += 1
+
+        if len(selected) < count:
+            raise OfficialTradingCalendarError(
+                "official trading calendar lookback exhausted: "
+                f"requested={count}, resolved={len(selected)}, "
+                f"reference={reference_date.isoformat()}"
+            )
+        selected.reverse()
+        return selected
+
+
+class OfficialTradingCalendarError(RuntimeError):
+    """Raised when an update cannot establish an official trading-day set."""

@@ -23,7 +23,7 @@ PACIFIC = ZoneInfo("America/Los_Angeles")
 PIT_CUTOFF = time(8, 30)
 RULE_SESSION_OPEN = time(9, 0)
 RULE_SESSION_CLOSE = time(13, 30)
-PAPER_EOD_AVAILABLE = time(15, 0)
+PAPER_EOD_HOST_TIME = time(6, 0)
 SCHEMA_VERSION = "formal-operational-readiness.v1"
 AUDITOR_VERSION = "machine:formal-operational-readiness-auditor.v1"
 
@@ -59,8 +59,8 @@ SCHEDULE_CONTRACTS: tuple[dict[str, str], ...] = (
         "key": "paper_eod_replay",
         "task_name": "baldr-paper-execution-eod-replay-daily",
         "wrapper": "scripts/scheduled/run_paper_execution_daily_isolated.cmd",
-        "taipei_time": "15:05",
-        "purpose": "consume delayed EOD Paper execution source",
+        "host_time": "06:00",
+        "purpose": "consume delayed EOD Paper execution source after host 06:00 Pacific",
     },
 )
 
@@ -240,7 +240,7 @@ def _registration_operational_blockers(
     return blockers
 
 
-def _phase(local_time: time) -> str:
+def _phase(local_time: time, *, paper_eod_time: time) -> str:
     plain = local_time.replace(tzinfo=None)
     if plain < PIT_CUTOFF:
         return "before_pit_cutoff"
@@ -248,7 +248,7 @@ def _phase(local_time: time) -> str:
         return "pit_postcutoff_before_rule_open"
     if plain <= RULE_SESSION_CLOSE:
         return "rule_session"
-    if plain < PAPER_EOD_AVAILABLE:
+    if plain < paper_eod_time:
         return "between_rule_close_and_paper_eod"
     return "paper_eod_or_later"
 
@@ -272,12 +272,21 @@ def inspect_schedule_contract(
 
     result: list[dict[str, object]] = []
     for contract in SCHEDULE_CONTRACTS:
-        taipei_time = _parse_hhmm(contract["taipei_time"])
-        taipei_at = datetime.combine(target_date, taipei_time, tzinfo=TAIPEI)
-        host_at = taipei_at.astimezone(PACIFIC)
+        host_time_value = contract.get("host_time")
+        if host_time_value:
+            host_time = _parse_hhmm(host_time_value)
+            host_at = datetime.combine(target_date, host_time, tzinfo=PACIFIC)
+            taipei_at = host_at.astimezone(TAIPEI)
+        else:
+            taipei_time = _parse_hhmm(contract["taipei_time"])
+            taipei_at = datetime.combine(target_date, taipei_time, tzinfo=TAIPEI)
+            host_at = taipei_at.astimezone(PACIFIC)
         result.append(
             {
                 **contract,
+                "taipei_time": taipei_at.timetz().replace(tzinfo=None).isoformat(
+                    timespec="minutes"
+                ),
                 "target_taipei_date": target_date.isoformat(),
                 "expected_taipei_at": taipei_at.isoformat(),
                 "expected_host_at": host_at.isoformat(),
@@ -838,7 +847,16 @@ def audit_formal_operational_readiness(
         target_date=target_date,
     )
 
-    phase = _phase(local.timetz().replace(tzinfo=None))
+    paper_eod_at = datetime.combine(
+        target_date,
+        PAPER_EOD_HOST_TIME,
+        tzinfo=PACIFIC,
+    ).astimezone(TAIPEI)
+    paper_eod_time = paper_eod_at.timetz().replace(tzinfo=None)
+    phase = _phase(
+        local.timetz().replace(tzinfo=None),
+        paper_eod_time=paper_eod_time,
+    )
     blockers: list[str] = []
     blockers.extend(_string_items(registration.get("blockers")))
     blockers.extend(_registration_operational_blockers(registration, schedule))
@@ -902,7 +920,13 @@ def audit_formal_operational_readiness(
             "pit_cutoff_taipei": "08:30",
             "rule_open_taipei": "09:00",
             "rule_close_taipei": "13:30",
-            "paper_eod_available_taipei": "15:00",
+            "paper_eod_available_taipei": paper_eod_time.isoformat(
+                timespec="minutes"
+            ),
+            "paper_eod_host_time": PAPER_EOD_HOST_TIME.isoformat(
+                timespec="minutes"
+            ),
+            "paper_eod_host_timezone": "America/Los_Angeles",
         },
         "schedule_contract": schedule,
         "scheduler_registration": registration,

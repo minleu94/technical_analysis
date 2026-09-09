@@ -50,6 +50,21 @@ DEFAULT_LICENSE_URLS: dict[str, str] = {
 _SOURCE_MARKETS = ("twse", "tpex")
 _SHA256_PREFIX = "sha256:"
 
+# This is an explicit compatibility entry for the durable 2026-09-08 archive
+# ``85f71a355f707404-284d54b9ccedbfea``.  That archive was produced by the same
+# v1 producer and has independently verified official raw custody; the only
+# subsequent change to this module is the readback clock fix that keeps
+# ``effective_from`` bound to immutable ``captured_at`` after Taipei midnight.
+# New artifacts always carry the current whole-module hash.  Do not infer this
+# allowlist from an archive's self-declared value, and do not add unknown hashes.
+_AUDITED_LEGACY_MACHINE_CODE_HASHES: frozenset[str] = frozenset(
+    {
+        "sha256:a84c39142e89fd771f38d9179d7da243b9c0a58c55772810bdf6bf59d886b546",
+    }
+)
+_MACHINE_CODE_HASH_CURRENT = "current"
+_MACHINE_CODE_HASH_AUDITED_LEGACY = "audited_legacy"
+
 
 class MachinePITSourceError(ValueError):
     """官方 PIT machine source 或 receipt 不符合契約。"""
@@ -381,8 +396,7 @@ def validate_machine_pit_publication(
     producer_code = _required_sha256(
         payload.get("producer_code_sha256"), "producer_code_sha256"
     )
-    if producer_code != _producer_code_sha256():
-        raise MachinePITSourceError("machine PIT producer code hash mismatch")
+    _machine_code_hash_mode(producer_code, "producer_code_sha256")
     if payload.get("input_schema_version") != MACHINE_PIT_INPUT_SCHEMA_VERSION:
         raise MachinePITSourceError("machine PIT input schema is invalid")
     for field_name, expected in (
@@ -535,7 +549,13 @@ def validate_machine_pit_publication(
             universe_hash=universe_hash,
             available_at=captured,
             effective_from=capture_date,
-            now=observed_now,
+            # First-seen ``effective_from`` is defined by the publication's
+            # capture natural day.  Readback may happen after Taipei
+            # midnight; current wall time remains the guard for future
+            # capture/raw metadata above, while the prospective builder must
+            # validate its capture-day effective date against the immutable
+            # capture instant rather than today's date.
+            now=captured,
         )
     except (TypeError, ValueError) as error:
         raise MachinePITSourceError(str(error)) from error
@@ -724,8 +744,7 @@ def validate_machine_pit_receipt(
     consumer_code = _required_sha256(
         payload.get("consumer_code_sha256"), "receipt.consumer_code_sha256"
     )
-    if consumer_code != _consumer_code_sha256():
-        raise MachinePITSourceError("machine PIT consumer code hash mismatch")
+    _machine_code_hash_mode(consumer_code, "receipt.consumer_code_sha256")
     evaluated = _aware_datetime(payload.get("evaluated_at"), "receipt.evaluated_at")
     observed_now = _aware_datetime(
         now if now is not None else datetime.now(timezone.utc), "now"
@@ -953,6 +972,25 @@ def _required_sha256(value: object, field_name: str) -> str:
     except ValueError as error:
         raise MachinePITSourceError(f"{field_name} must be sha256") from error
     return value
+
+
+def _machine_code_hash_mode(value: object, field_name: str) -> str:
+    """Return the explicit compatibility mode for a machine v1 code hash.
+
+    The current hash is generated from this module at runtime.  The one
+    audited legacy hash above is accepted only because its v1 envelope, source
+    identity and raw-row rebuild are still checked by the normal validators.
+    Every other hash remains fail-closed.
+    """
+
+    candidate = _required_sha256(value, field_name)
+    if candidate == _producer_code_sha256():
+        return _MACHINE_CODE_HASH_CURRENT
+    if candidate in _AUDITED_LEGACY_MACHINE_CODE_HASHES:
+        return _MACHINE_CODE_HASH_AUDITED_LEGACY
+    raise MachinePITSourceError(
+        f"{field_name} is neither current nor an audited legacy machine code hash"
+    )
 
 
 def _require_exact(

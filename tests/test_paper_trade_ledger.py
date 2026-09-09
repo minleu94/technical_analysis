@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 
@@ -104,3 +106,61 @@ def test_append_many_is_atomic_when_duplicate_fill_id_is_present(tmp_path: Path)
         repository.append_many((_fill("fill-1"), _fill("fill-1")))
 
     assert repository.list() == ()
+
+
+def test_source_event_identity_is_scoped_to_portfolio_but_unique_within_it(
+    tmp_path: Path,
+) -> None:
+    repository = PaperTradeLedgerRepository(tmp_path / "paper_trade.sqlite")
+    shared_event = "source-system-event-1"
+    first = replace(
+        _fill("portfolio-a-fill"),
+        portfolio_id="portfolio-a",
+        source_event_id=shared_event,
+    )
+    second = replace(
+        _fill("portfolio-b-fill"),
+        portfolio_id="portfolio-b",
+        source_event_id=shared_event,
+    )
+    repository.append_many((first, second))
+    assert repository.list(portfolio_id="portfolio-a") == (first,)
+    assert repository.list(portfolio_id="portfolio-b") == (second,)
+
+    conflicting = replace(
+        _fill("portfolio-a-conflict"),
+        portfolio_id="portfolio-a",
+        source_event_id=shared_event,
+    )
+    with pytest.raises(ValueError, match="portfolio/source_event_id"):
+        repository.append(conflicting)
+    assert repository.list(portfolio_id="portfolio-a") == (first,)
+
+
+def test_begin_immediate_serializes_concurrent_writers_and_preserves_one_batch(
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "paper_trade.sqlite"
+    fill = _fill("concurrent-fill")
+
+    def append_once() -> str:
+        try:
+            PaperTradeLedgerRepository(db_path).append(fill)
+        except ValueError as error:
+            return str(error)
+        return "committed"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = tuple(pool.map(lambda _: append_once(), range(2)))
+
+    assert sorted(outcomes) == [
+        "committed",
+        "paper trade fill already exists: fill_id or portfolio/source_event_id",
+    ]
+    loaded = PaperTradeLedgerRepository(db_path).list()
+    assert loaded == (fill,)
+    # The persisted values are the exact Decimal ledger values used by the
+    # producer's cash projection; no partial second commit is present.
+    assert loaded[0].gross_amount + loaded[0].cash_settlement_cost == Decimal(
+        "100095.00"
+    )

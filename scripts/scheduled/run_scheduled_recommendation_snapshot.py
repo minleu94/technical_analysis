@@ -15,6 +15,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app_module.dtos import RecommendationResultDTO
+from app_module.forward_position_thesis_candidate_producer import (
+    ForwardPositionThesisCandidateProducer,
+)
 from app_module.recommendation_repository import RecommendationRepository
 from app_module.recommendation_service import RecommendationService
 from data_module.config import TWStockConfig
@@ -93,6 +96,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--max-stocks", type=int, default=200)
     parser.add_argument("--top-n", type=int, default=50)
+    parser.add_argument(
+        "--forward-candidate-output-root",
+        help="repository-isolated output for forward thesis candidate packets",
+    )
+    parser.add_argument(
+        "--forward-thesis-policy-path",
+        help="optional explicit versioned invalidation/horizon policy JSON",
+    )
+    parser.add_argument(
+        "--forward-calendar-cache-path",
+        help="optional official calendar cache path used by the policy validator",
+    )
     return parser
 
 
@@ -198,6 +213,31 @@ def main(argv: list[str] | None = None) -> int:
         if not recommendations:
             warnings.append("no_recommendations_returned")
 
+        forward_candidate: dict[str, Any] | None = None
+        if args.forward_candidate_output_root:
+            source_path = repository.runs_dir / f"{result_id}.json"
+            if source_path.is_file():
+                forward_candidate = ForwardPositionThesisCandidateProducer(
+                    args.forward_candidate_output_root,
+                    calendar_cache_path=args.forward_calendar_cache_path,
+                ).produce(
+                    source_path,
+                    policy_path=args.forward_thesis_policy_path,
+                )
+                if str(forward_candidate.get("status")) == "blocked":
+                    warnings.append("forward_position_thesis_candidate_blocked")
+                elif str(forward_candidate.get("status")) == "degraded":
+                    warnings.append("forward_position_thesis_candidate_degraded")
+            else:
+                forward_candidate = {
+                    "status": "skipped_source_missing",
+                    "source_path": str(source_path),
+                    "candidate_count": 0,
+                    "warnings": ["recommendation_result_file_missing_after_save"],
+                    "blockers": [],
+                }
+                warnings.append("forward_position_thesis_source_missing")
+
         payload.update(
             {
                 "status": "passed",
@@ -211,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                 "exclusion_quality": result.exclusion_quality,
                 "exclusion_warnings": list(result.exclusion_warnings_json),
                 "warnings": warnings,
+                "forward_position_thesis": forward_candidate,
                 "db_path": str(repository.db_path),
                 "runs_dir": str(repository.runs_dir),
                 "writes_recommendation_result": True,

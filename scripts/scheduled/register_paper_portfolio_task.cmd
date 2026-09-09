@@ -12,12 +12,12 @@ for %%I in ("%SCRIPT_DIR%..\..") do set "REPO_ROOT=%%~fI"
 set "PAPER_PORTFOLIO_TASK=baldr-paper-portfolio-daily"
 set "PAPER_PORTFOLIO_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_paper_portfolio_daily.cmd"
 set "PAPER_PORTFOLIO_ACTION=cmd.exe /c ""%PAPER_PORTFOLIO_SCRIPT%"""
-set "PAPER_PORTFOLIO_TIME=16:30"
+set "PAPER_PORTFOLIO_TIME=16:15"
 if not defined BALDR_SCHTASKS_EXE set "BALDR_SCHTASKS_EXE=schtasks.exe"
 
-rem Task Scheduler uses host local time. 16:30 Pacific maps to 07:30 Taipei
-rem during PDT and 08:30 during PST. The adapter waits on the real Taipei
-rem 08:30 cutoff when PDT is in effect; it never treats 09:30 as preopen.
+rem Task Scheduler uses host local time. 16:15 Pacific maps to 07:15 Taipei
+rem during PDT and 08:15 during PST. The adapter waits on the real Taipei
+rem 08:30 cutoff in both offsets; this keeps the hook before the market open.
 set "LOCAL_TIME_ZONE="
 for /f "delims=" %%Z in ('tzutil /g 2^>nul') do set "LOCAL_TIME_ZONE=%%Z"
 if /I not "%LOCAL_TIME_ZONE%"=="Pacific Standard Time" (
@@ -28,7 +28,7 @@ if /I not "%LOCAL_TIME_ZONE%"=="Pacific Standard Time" (
 echo Mode: %MODE%
 echo Task: %PAPER_PORTFOLIO_TASK%
 echo   Schedule: DAILY %PAPER_PORTFOLIO_TIME% Pacific local time
-echo   Taipei mapping: 07:30 PDT / 08:30 PST; adapter waits for Taipei 08:30
+echo   Taipei mapping: 07:15 PDT / 08:15 PST; adapter waits for Taipei 08:30
 echo   Execution policy: existing principal/settings preserved; adapter polls cutoff in up to 60-second slices
 echo   Scope: research-only repo-isolated Paper state; D source and market are read-only
 echo   Action: %PAPER_PORTFOLIO_ACTION%

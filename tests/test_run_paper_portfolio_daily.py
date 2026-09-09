@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import hashlib
 import io
 import json
 from decimal import Decimal
@@ -20,6 +21,10 @@ from app_module.paper_portfolio_snapshot_repository import PaperPortfolioSnapsho
 from data_module.paper_daily_execution_producer import (
     PaperExecutionPaths,
     run_paper_execution_daily,
+)
+from data_module.portfolio_ml_dataset_assembler import (
+    SECTOR_MEMBERSHIP_MANIFEST_SCHEMA_VERSION,
+    SECTOR_MEMBERSHIP_SIDECAR_SCHEMA_VERSION,
 )
 
 
@@ -52,6 +57,56 @@ class _PaperT1Calendar:
             key in self._open_dates,
             "test_official_schedule_open" if key in self._open_dates else "test_closed",
         )
+
+
+def _sector_sidecar(path: Path, symbol: str = "2330") -> str:
+    rows = [
+        {
+            "symbol": symbol,
+            "sector_id": "SEMICONDUCTOR",
+            "available_at": "2026-01-01T00:00:00+00:00",
+            "effective_from": "2026-01-01",
+            "effective_to": None,
+            "status": "accepted",
+            "source_id": "official:twse:t187ap03_L",
+            "license_id": "twse-open-data-license-v1",
+            "source_hash": "sha256:" + "a" * 64,
+        }
+    ]
+    manifest_body = {
+        "schema_version": SECTOR_MEMBERSHIP_MANIFEST_SCHEMA_VERSION,
+        "row_count": len(rows),
+        "rows_hash": "sha256:"
+        + hashlib.sha256(
+            json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+    }
+    manifest = {
+        **manifest_body,
+        "canonical_hash": "sha256:"
+        + hashlib.sha256(
+            json.dumps(
+                {
+                    "sidecar_schema_version": SECTOR_MEMBERSHIP_SIDECAR_SCHEMA_VERSION,
+                    "manifest": manifest_body,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest(),
+    }
+    payload = {
+        "schema_version": SECTOR_MEMBERSHIP_SIDECAR_SCHEMA_VERSION,
+        "manifest": manifest,
+        "rows": rows,
+    }
+    path.write_bytes(
+        (
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            + "\n"
+        ).encode("utf-8")
+    )
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _baseline(path: Path) -> None:
@@ -322,6 +377,8 @@ def test_scheduled_preopen_eod_retry_and_next_preopen_form_one_causal_chain(
         )
     state_db = output_root / "paper_portfolio" / "paper.sqlite"
     ledger_db = output_root / "paper_portfolio" / "paper-ledger.sqlite"
+    sector_path = tmp_path / "pit-sector.json"
+    sector_hash = _sector_sidecar(sector_path)
     calendar = _PaperT1Calendar()
 
     preopen = run(
@@ -340,6 +397,9 @@ def test_scheduled_preopen_eod_retry_and_next_preopen_form_one_causal_chain(
     )
     assert snapshot_before is not None
     state_bytes_before = state_db.read_bytes()
+    # The policy adapter is read-only but requires an explicit append-only
+    # ledger schema, including when this first candidate has no prior fills.
+    PaperTradeLedgerRepository(ledger_db)
 
     execution_paths = PaperExecutionPaths(
         recommendation_json=recommendation,
@@ -347,6 +407,8 @@ def test_scheduled_preopen_eod_retry_and_next_preopen_form_one_causal_chain(
         market_db=market_db,
         output_root=tmp_path / "execution-candidate",
         ledger_db=ledger_db,
+        sector_membership_path=sector_path,
+        sector_membership_file_hash=sector_hash,
     )
     candidate = run_paper_execution_daily(
         execution_paths,
@@ -357,7 +419,11 @@ def test_scheduled_preopen_eod_retry_and_next_preopen_form_one_causal_chain(
     assert candidate["status"] == "machine_verified_candidate"
     assert candidate["state_source"]["execution_snapshot_exists"] is True
     assert candidate["ledger"]["appended"] is False
-    assert not ledger_db.exists()
+    # The policy adapter consumes an explicit append-only ledger source even
+    # for a candidate-only run.  The producer must leave that pre-created
+    # schema empty until the explicit append pass.
+    assert ledger_db.is_file()
+    assert PaperTradeLedgerRepository(ledger_db).list() == ()
 
     appended = run_paper_execution_daily(
         PaperExecutionPaths(
@@ -432,6 +498,8 @@ def test_scheduled_preopen_eod_retry_and_next_preopen_form_one_causal_chain(
             market_db=market_db,
             output_root=tmp_path / "next-execution",
             ledger_db=ledger_db,
+            sector_membership_path=sector_path,
+            sector_membership_file_hash=sector_hash,
         ),
         now=datetime.fromisoformat("2026-09-08T15:00:04+08:00"),
         calendar=calendar,

@@ -307,6 +307,7 @@ def test_eod_scope_preflight_reads_seeded_repository_state_after_preopen(
     monkeypatch.setattr(eod_adapter, "RECEIPT_ROOT", operation_root / "receipts")
     monkeypatch.setattr(eod_adapter, "LEDGER_DB", operation_root / "paper_trade_ledger.sqlite")
     monkeypatch.setattr(eod_adapter, "SCOPE_MANIFEST", operation_root / "scope_manifest_v2.json")
+    monkeypatch.setattr(eod_adapter, "EVENT_CAPTURE_ROOT", operation_root / "event_captures")
     observed = eod_adapter._scope_preflight()
     assert observed["state"]["path"] == str(state.resolve())  # type: ignore[index]
     assert observed["state_seed"]["status"] == "existing_verified"  # type: ignore[index]
@@ -359,10 +360,10 @@ def test_paper_portfolio_schedule_wakes_before_or_at_taipei_cutoff_in_both_dst_m
         taipei = trigger.astimezone(ZoneInfo("Asia/Taipei"))
         if local_day == "2026-01-12":
             assert taipei.timetz().replace(tzinfo=None) == datetime.strptime(
-                "08:30", "%H:%M"
+                "08:15", "%H:%M"
             ).time()
         else:
             assert taipei.timetz().replace(tzinfo=None) == datetime.strptime(
-                "07:30", "%H:%M"
+                "07:15", "%H:%M"
             ).time()
         assert taipei.date().isoformat() > local_day

@@ -6,7 +6,12 @@ if "%MODE%"=="" set "MODE=dryrun"
 if /I "%MODE%"=="weekly-unregister" goto weekly_unregister
 if /I not "%MODE%"=="dryrun" if /I not "%MODE%"=="unregister" goto usage
 
-set TASKS=baldr-paper-execution-eod-replay-daily baldr-data-update-quick-daily baldr-official-market-events-daily baldr-data-freshness-check-daily baldr-ml-raw-pit-refresh-daily baldr-ml-direct-chain-maintainer baldr-recommendation-snapshot-daily baldr-evidence-pipeline-dry-run-daily baldr-ml-promotion-evidence-daily baldr-ml-promotion-authority-daily baldr-ml-allocation-copilot-daily baldr-decision-evidence-capture-daily baldr-paper-portfolio-daily baldr-formal-input-producer-daily baldr-evidence-working-copy-smoke-manual
+set TASKS=baldr-paper-execution-eod-replay-daily baldr-data-update-quick-daily baldr-official-market-events-daily baldr-data-freshness-check-daily baldr-ml-raw-pit-refresh-daily baldr-ml-direct-chain-maintainer baldr-recommendation-snapshot-daily baldr-evidence-pipeline-dry-run-daily baldr-ml-promotion-evidence-daily baldr-ml-promotion-authority-daily baldr-ml-allocation-copilot-daily baldr-decision-evidence-capture-daily baldr-paper-portfolio-daily baldr-pit-sector-membership-preopen-capture-daily baldr-formal-pit-sidecar-postcutoff-daily baldr-formal-input-producer-daily baldr-evidence-working-copy-smoke-manual
+
+rem The forward task is deliberately outside this destructive aggregate list.
+rem It is managed by its exact XML plan and can only be removed by the
+rem dedicated rollback command after a task-name query.
+set "FORWARD_TASK=baldr-ml-allocation-forward-daily"
 
 echo Mode: %MODE%
 for %%T in (%TASKS%) do (
@@ -20,6 +25,16 @@ for %%T in (%TASKS%) do (
       if errorlevel 1 exit /b 1
     )
   )
+)
+
+echo.
+echo ===== %FORWARD_TASK% =====
+schtasks.exe /Query /TN "%FORWARD_TASK%" >nul 2>nul
+if errorlevel 1 (
+  echo Task not found: %FORWARD_TASK%
+) else (
+  echo Task found: %FORWARD_TASK%
+  echo Forward task is excluded from aggregate removal; use its dedicated XML rollback.
 )
 
 if /I "%MODE%"=="dryrun" echo Dryrun only. No scheduled task was removed.

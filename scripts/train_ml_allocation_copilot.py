@@ -439,6 +439,8 @@ def _load_jsonl_shard(path: Path) -> _FrozenShard:
             "assembly_blockers",
             "feature_registry_hash",
             "source_manifest_hashes",
+            "price_availability",
+            "source_quality",
             "portfolio_state_policy",
             "corporate_action_custody",
             "label_policy",
@@ -446,6 +448,23 @@ def _load_jsonl_shard(path: Path) -> _FrozenShard:
         },
         field_name="jsonl header",
     )
+    source_quality = header.get("source_quality")
+    if source_quality is not None:
+        source_quality_mapping = _as_mapping(
+            source_quality, field_name="source_quality"
+        )
+        research_only = _required_json_bool(
+            source_quality_mapping.get("research_only"),
+            field_name="source_quality.research_only",
+        )
+        formal_training_allowed = _required_json_bool(
+            source_quality_mapping.get("formal_training_allowed"),
+            field_name="source_quality.formal_training_allowed",
+        )
+        if research_only or not formal_training_allowed:
+            raise ValueError(
+                "JSONL source quality is research-only and cannot be trained"
+            )
     if header.get("schema_version") != JSONL_INPUT_SCHEMA_VERSION:
         raise ValueError(
             f"JSONL schema_version must equal {JSONL_INPUT_SCHEMA_VERSION}"
@@ -1084,6 +1103,12 @@ def _as_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
 def _text(value: Any, *, field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise TypeError(f"{field_name} must be a non-empty string")
+    return value
+
+
+def _required_json_bool(value: Any, *, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{field_name} must be a JSON boolean")
     return value
 
 

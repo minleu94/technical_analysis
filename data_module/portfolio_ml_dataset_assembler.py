@@ -63,6 +63,10 @@ from data_module.ml_pit_shared_block_resolver import (
     pit_dataset_feature_contract_hash,
     resolve_pit_shard_record,
 )
+from data_module.ml_price_availability_contract import (
+    PRICE_AVAILABILITY_CONTRACT_VERSION,
+    validate_price_unavailable_research_contract,
+)
 
 
 TRAINING_JSONL_SCHEMA_VERSION = "allocation-training-jsonl-v2"
@@ -451,6 +455,9 @@ class PortfolioMLDatasetAssembler:
         manifest_path = request.dataset_manifest_path.resolve()
         raw_manifest = _read_json(manifest_path)
         _validate_raw_dataset_manifest(raw_manifest)
+        raw_source_quality = _raw_source_quality_for_assembler(
+            manifest_path, raw_manifest
+        )
         shared_contract = _validate_shared_block_dataset_manifest(raw_manifest)
         if (
             shared_contract is not None
@@ -512,6 +519,7 @@ class PortfolioMLDatasetAssembler:
                 shared_block_store_root=request.shared_block_store_root,
                 progress_callback=request.capacity_callback,
             )
+            price_availability = _price_availability_summary(connection)
             _finalize_long_format_definitions(
                 runtime_definitions=runtime_definitions,
                 base_definitions=base_definitions,
@@ -640,6 +648,7 @@ class PortfolioMLDatasetAssembler:
                 {
                     "schema_version": TRAINING_JSONL_SCHEMA_VERSION,
                     "raw_dataset_manifest_hash": raw_manifest["manifest_hash"],
+                    "raw_source_quality": raw_source_quality,
                     "raw_content_digest": (
                         f"sha256:{source_digest.hexdigest()}"
                     ),
@@ -664,6 +673,7 @@ class PortfolioMLDatasetAssembler:
                     "corporate_action_excluded_label_count": (
                         corporate_action_excluded_label_count
                     ),
+                    "price_availability": price_availability,
                     "teacher_policy": "100bp_constrained_grid",
                     "formal_consumer_marker_policy": "explicit_fail_closed_v1",
                 }
@@ -683,6 +693,7 @@ class PortfolioMLDatasetAssembler:
                 ),
                 "dataset_identity_hash": dataset_identity_hash,
                 "training_as_of": cutoff.isoformat(),
+                "source_quality": raw_source_quality,
                 "horizons": list(SUPPORTED_HORIZONS),
                 "feature_packs": feature_packs,
                 "folds": [asdict(window) for window in fold_windows],
@@ -691,6 +702,7 @@ class PortfolioMLDatasetAssembler:
                 "source_manifest_hashes": [
                     list(item) for item in source_manifest_hashes
                 ],
+                "price_availability": price_availability,
                 "portfolio_state_policy": {
                     **portfolio_state_policy,
                     "reads_same_day_advice": False,
@@ -855,6 +867,7 @@ class PortfolioMLDatasetAssembler:
                     "raw_value_count": raw_value_count,
                     "streaming_jsonl": True,
                 },
+                "source_quality": raw_source_quality,
                 "feature_packs": header_common["feature_packs"],
                 "feature_registry": feature_registry_payload,
                 "feature_count": sum(
@@ -886,6 +899,7 @@ class PortfolioMLDatasetAssembler:
                     _CORPORATE_ACTION_EXCLUSION_REASON
                 ),
                 "portfolio_state_policy": portfolio_state_policy,
+                "price_availability": price_availability,
                 "assembly_blockers": sorted(assembly_blockers),
                 "formal_oos_allowed": False,
                 "research_only": False,
@@ -913,7 +927,10 @@ class PortfolioMLDatasetAssembler:
                     "sector_membership_accepted_only": True,
                     "sector_membership_canonical_manifest_verified": True,
                     "current_company_snapshot_backfill_allowed": False,
+                    "raw_source_quality_verified": raw_source_quality is not None,
                     "missing_values_zero_filled": False,
+                    "price_availability_contract_verified": True,
+                    "price_gap_horizons_are_not_bridged": True,
                     "sqlite_source_write": False,
                     "atomic_manifest_last_publish": True,
                 },
@@ -1016,6 +1033,7 @@ class PortfolioMLDatasetAssembler:
         raw_value_count = 0
         observation_batch: list[tuple[object, ...]] = []
         price_batch: list[tuple[object, ...]] = []
+        price_gap_batch: list[tuple[object, ...]] = []
         for shard in _mapping_sequence(
             manifest.get("shards"), field_name="shards"
         ):
@@ -1087,6 +1105,39 @@ class PortfolioMLDatasetAssembler:
                         table_name=table_name,
                         entity_id=entity_id,
                     )
+                    price_availability_contract = row.get(
+                        "price_availability_contract"
+                    )
+                    if price_availability_contract is not None:
+                        if table_name != "daily_prices":
+                            raise ValueError(
+                                "price availability contract requires daily_prices"
+                            )
+                        contract = _as_mapping(
+                            price_availability_contract,
+                            field_name="price_availability_contract",
+                        )
+                        contract_symbol, contract_date, _ = (
+                            validate_price_unavailable_research_contract(
+                                contract
+                            )
+                        )
+                        if contract_symbol != entity_key:
+                            raise ValueError(
+                                "price availability contract symbol mismatch"
+                            )
+                        if contract_date != event_at[:10]:
+                            raise ValueError(
+                                "price availability contract date mismatch"
+                            )
+                        price_gap_batch.append(
+                            (
+                                scope,
+                                entity_key,
+                                contract_date,
+                                _sha256_json(contract),
+                            )
+                        )
                     value_mappings = _mapping_sequence(
                         row.get("values"), field_name="values"
                     )
@@ -1239,6 +1290,16 @@ class PortfolioMLDatasetAssembler:
                         if progress_callback is not None:
                             connection.commit()
                             progress_callback("raw_spool_prices_batch_written")
+                    if len(price_gap_batch) >= batch_size:
+                        _insert_price_availability_gaps(
+                            connection, price_gap_batch
+                        )
+                        price_gap_batch.clear()
+                        if progress_callback is not None:
+                            connection.commit()
+                            progress_callback(
+                                "raw_spool_price_availability_batch_written"
+                            )
             if (
                 f"sha256:{content_digest.hexdigest()}"
                 != str(shard["content_sha256"])
@@ -1267,6 +1328,16 @@ class PortfolioMLDatasetAssembler:
                 if progress_callback is not None:
                     connection.commit()
                     progress_callback("raw_spool_prices_batch_written")
+            if price_gap_batch:
+                _insert_price_availability_gaps(
+                    connection, price_gap_batch
+                )
+                price_gap_batch.clear()
+                if progress_callback is not None:
+                    connection.commit()
+                    progress_callback(
+                        "raw_spool_price_availability_batch_written"
+                    )
             connection.commit()
             if progress_callback is not None:
                 progress_callback(
@@ -1283,6 +1354,15 @@ class PortfolioMLDatasetAssembler:
             if progress_callback is not None:
                 connection.commit()
                 progress_callback("raw_spool_prices_final_batch_written")
+        if price_gap_batch:
+            _insert_price_availability_gaps(
+                connection, price_gap_batch
+            )
+            if progress_callback is not None:
+                connection.commit()
+                progress_callback(
+                    "raw_spool_price_availability_final_batch_written"
+                )
         connection.commit()
         return raw_row_count, raw_value_count
 
@@ -1683,6 +1763,17 @@ def _initialize_spool(connection: sqlite3.Connection) -> None:
             source_row_hash TEXT NOT NULL,
             PRIMARY KEY(scope, entity_key, event_date)
         ) WITHOUT ROWID;
+        -- A raw shard may carry a partial OHLC row whose open/close are
+        -- usable while another price field is unavailable.  Keep the
+        -- validated contract separately so label construction cannot infer a
+        -- contiguous path from the lossy prices projection.
+        CREATE TABLE price_availability_gaps (
+            scope TEXT NOT NULL,
+            entity_key TEXT NOT NULL,
+            event_date TEXT NOT NULL,
+            contract_hash TEXT NOT NULL,
+            PRIMARY KEY(scope, entity_key, event_date, contract_hash)
+        ) WITHOUT ROWID;
         -- The WITHOUT ROWID primary-key B-tree already serves the exact
         -- scope/entity/date access pattern used by the label builder.  Do not
         -- maintain a duplicate index for every annual spool price insert.
@@ -1972,6 +2063,57 @@ def _insert_prices(
     )
 
 
+def _insert_price_availability_gaps(
+    connection: sqlite3.Connection,
+    rows: Sequence[tuple[object, ...]],
+) -> None:
+    connection.executemany(
+        """
+        INSERT OR IGNORE INTO price_availability_gaps(
+            scope, entity_key, event_date, contract_hash
+        ) VALUES (?, ?, ?, ?)
+        """,
+        rows,
+    )
+
+
+def _price_availability_summary(
+    connection: sqlite3.Connection,
+) -> dict[str, Any]:
+    cursor = connection.execute(
+        """
+        SELECT scope, entity_key, event_date, contract_hash
+        FROM price_availability_gaps
+        ORDER BY scope, entity_key, event_date, contract_hash
+        """
+    )
+    digest = hashlib.sha256()
+    gap_count = 0
+    for row in cursor:
+        gap_count += 1
+        digest.update(
+            (
+                _canonical_json(
+                    {
+                        "scope": str(row["scope"]),
+                        "entity_key": str(row["entity_key"]),
+                        "event_date": str(row["event_date"]),
+                        "contract_hash": str(row["contract_hash"]),
+                    }
+                )
+                + "\n"
+            ).encode("utf-8")
+        )
+    return {
+        "contract_schema_version": PRICE_AVAILABILITY_CONTRACT_VERSION,
+        "gap_count": gap_count,
+        "gap_digest": f"sha256:{digest.hexdigest()}",
+        "research_only": True,
+        "formal_training_allowed": False,
+        "label_horizons_never_bridge_gap": True,
+    }
+
+
 def _spool_sector_memberships(
     connection: sqlite3.Connection,
     path: Path | None,
@@ -1979,17 +2121,33 @@ def _spool_sector_memberships(
     training_as_of: datetime | None = None,
     machine_operational_path: Path | None = None,
     machine_now: datetime | None = None,
+    machine_archive_rows: Sequence[Mapping[str, Any]] | None = None,
+    machine_archive_manifest_hash: str | None = None,
 ) -> tuple[str, int]:
     """把 validated sidecar 或明確指定的 machine candidate spool 到暫存 DB。
 
     ``machine_operational_path`` 僅供 daily shadow dispatch 的 in-memory
     connection 使用；正式 ``PortfolioMLDatasetAssembler.build`` 不會傳入它，
     所以 candidate 不會被投影成 formal training publication。
+    ``machine_archive_rows`` 只接受 ML archive adapter 已完成 custody readback
+    的 rows 與 archive manifest hash；它不讀任意 archive 檔案，也不改寫
+    durable archive。
     """
 
-    if path is not None and machine_operational_path is not None:
+    machine_input_count = sum(
+        value is not None
+        for value in (
+            machine_operational_path,
+            machine_archive_rows,
+        )
+    )
+    if path is not None and machine_input_count:
         raise ValueError(
-            "sector membership sidecar and machine operational path are mutually exclusive"
+            "sector membership sidecar and machine machine input are mutually exclusive"
+        )
+    if machine_input_count > 1:
+        raise ValueError(
+            "machine operational path and machine archive rows are mutually exclusive"
         )
     if machine_operational_path is not None:
         if training_as_of is None:
@@ -2018,6 +2176,18 @@ def _spool_sector_memberships(
             raise ValueError("machine operational sector candidate hash is missing")
         payloads: Sequence[Mapping[str, Any]] = candidate_rows
         canonical_manifest_hash = operational_hash
+    elif machine_archive_rows is not None:
+        if training_as_of is None:
+            raise ValueError(
+                "machine archive sector candidate requires decision_at"
+            )
+        if (
+            not isinstance(machine_archive_manifest_hash, str)
+            or not machine_archive_manifest_hash.startswith("sha256:")
+        ):
+            raise ValueError("machine archive manifest hash is missing")
+        payloads = machine_archive_rows
+        canonical_manifest_hash = machine_archive_manifest_hash
     elif path is None:
         return _ZERO_SHA256, 0
     else:
@@ -2907,7 +3077,7 @@ def _build_label_spool(
     benchmark_returns: dict[tuple[str, int], tuple[int, str, str]] = {}
     for index, decision_date in enumerate(calendar):
         entry = benchmark_by_date[decision_date]
-        if not _positive_price(entry["open_int"], entry["open_scale"]):
+        if not _price_row_complete(entry):
             continue
         for horizon in horizons:
             end_index = index + horizon - 1
@@ -2915,7 +3085,8 @@ def _build_label_spool(
                 continue
             end_date = calendar[end_index]
             exit_row = benchmark_by_date[end_date]
-            if not _positive_price(exit_row["close_int"], exit_row["close_scale"]):
+            path_rows = [benchmark_by_date[day] for day in calendar[index : end_index + 1]]
+            if any(not _price_row_complete(path_row) for path_row in path_rows):
                 continue
             available = max(
                 str(entry["available_at"]), str(exit_row["available_at"])
@@ -2953,6 +3124,21 @@ def _build_label_spool(
     last_progress_ns = monotonic_ns()
     processed_symbols = 0
     for symbol in symbols:
+        # Keep gap state bounded by the one symbol currently being assembled;
+        # the primary key makes this lookup deterministic without retaining a
+        # set spanning the full history.
+        price_gap_dates = {
+            str(row["event_date"])
+            for row in connection.execute(
+                """
+                SELECT event_date
+                FROM price_availability_gaps
+                WHERE scope='stock' AND entity_key=?
+                ORDER BY event_date
+                """,
+                (symbol,),
+            )
+        }
         stock_rows = tuple(
             connection.execute(
                 """
@@ -2994,9 +3180,7 @@ def _build_label_spool(
                     )
                     last_progress_ns = now_ns
             entry = stock_by_date.get(decision_date)
-            if entry is None or not _positive_price(
-                entry["open_int"], entry["open_scale"]
-            ):
+            if entry is None or not _price_row_complete(entry):
                 continue
             labels: list[tuple[object, ...]] = []
             for horizon in horizons:
@@ -3005,9 +3189,7 @@ def _build_label_spool(
                     continue
                 benchmark_return, end_date, benchmark_available = benchmark
                 exit_row = stock_by_date.get(end_date)
-                if exit_row is None or not _positive_price(
-                    exit_row["close_int"], exit_row["close_scale"]
-                ):
+                if exit_row is None or not _price_row_complete(exit_row):
                     continue
                 available_at = max(
                     str(entry["available_at"]),
@@ -3147,7 +3329,15 @@ def _build_label_spool(
                 path_rows = [
                     stock_by_date.get(path_date) for path_date in path_dates
                 ]
-                if any(path_row is None for path_row in path_rows):
+                if any(
+                    path_row is None or not _price_row_complete(path_row)
+                    for path_row in path_rows
+                ):
+                    continue
+                if any(
+                    path_date in price_gap_dates
+                    for path_date in path_dates
+                ):
                     continue
                 concrete_path = [
                     path_row for path_row in path_rows if path_row is not None
@@ -4210,7 +4400,66 @@ def _validate_raw_dataset_manifest(manifest: Mapping[str, Any]) -> None:
         field_name="safety.raw_float_persistence_allowed",
     ):
         raise ValueError("raw dataset allows float persistence")
+    if manifest.get("source_quality") is not None:
+        _validated_raw_source_quality(manifest["source_quality"])
     _mapping_sequence(manifest.get("features"), field_name="features")
+
+
+def _validated_raw_source_quality(value: Any) -> dict[str, Any]:
+    payload = dict(
+        _as_mapping(value, field_name="source_quality")
+    )
+    research_only = _required_json_bool(
+        payload.get("research_only"),
+        field_name="source_quality.research_only",
+    )
+    formal_training_allowed = _required_json_bool(
+        payload.get("formal_training_allowed"),
+        field_name="source_quality.formal_training_allowed",
+    )
+    if research_only or not formal_training_allowed:
+        raise ValueError(
+            "raw dataset source quality is research-only and cannot become "
+            "formal training input"
+        )
+    return payload
+
+
+def _raw_source_quality_for_assembler(
+    manifest_path: Path,
+    manifest: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    local = manifest.get("source_quality")
+    if local is not None:
+        return _validated_raw_source_quality(local)
+
+    # Older publications stored source_quality only on the parent publication
+    # manifest.  Read it through the bounded, hash-checked parent so a
+    # research-only source cannot be upgraded merely by selecting its child
+    # dataset manifest.
+    publication_path = manifest_path.parent.parent / "manifest.json"
+    if not publication_path.is_file():
+        return None
+    publication = _read_json(publication_path)
+    expected_hash = str(publication.get("manifest_hash", ""))
+    publication_payload = dict(publication)
+    publication_payload.pop("manifest_hash", None)
+    if expected_hash != _sha256_json(publication_payload):
+        raise ValueError("raw publication manifest hash mismatch")
+    parent_quality = publication.get("source_quality")
+    if parent_quality is None:
+        return None
+    datasets = _as_mapping(
+        publication.get("datasets"), field_name="raw publication datasets"
+    )
+    dataset_meta = datasets.get(str(manifest.get("dataset_id")))
+    if dataset_meta is not None:
+        dataset_mapping = _as_mapping(
+            dataset_meta, field_name="raw publication dataset"
+        )
+        if dataset_mapping.get("manifest_hash") != manifest.get("manifest_hash"):
+            raise ValueError("raw publication child manifest hash mismatch")
+    return _validated_raw_source_quality(parent_quality)
 
 
 def _validate_shared_block_dataset_manifest(
@@ -4538,6 +4787,18 @@ def _positive_price(value: object, scale: object) -> bool:
         and not isinstance(scale, bool)
         and isinstance(scale, int)
         and scale > 0
+    )
+
+
+def _price_row_complete(row: sqlite3.Row) -> bool:
+    return all(
+        _positive_price(row[value_field], row[scale_field])
+        for value_field, scale_field in (
+            ("open_int", "open_scale"),
+            ("high_int", "high_scale"),
+            ("low_int", "low_scale"),
+            ("close_int", "close_scale"),
+        )
     )
 
 

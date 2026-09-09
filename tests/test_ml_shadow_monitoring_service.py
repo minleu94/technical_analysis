@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from ml_module.drift_champion_comparison import MLFeatureDriftResult
 from ml_module.model_lifecycle_registry import (
     ModelLifecycleEvent,
@@ -123,3 +125,45 @@ def test_stable_drift_never_reenables_a_disabled_shadow_model(tmp_path: Path) ->
     assert report.status == "lifecycle_disabled"
     assert report.overlay_allowed is False
     assert report.formal_rule_unchanged is True
+
+
+def test_monitoring_rollback_path_is_crash_consistent_and_recoverable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    registry = _registry(tmp_path)
+    service = ShadowModelMonitoringService(registry)
+    original_insert = registry._insert_event
+    calls = 0
+
+    def fail_after_first(conn, event, payload_json) -> None:
+        nonlocal calls
+        calls += 1
+        original_insert(conn, event, payload_json)
+        if calls == 1:
+            raise RuntimeError("injected rollback evidence crash")
+
+    monkeypatch.setattr(registry, "_insert_event", fail_after_first)
+    with pytest.raises(RuntimeError, match="injected rollback evidence crash"):
+        service.simulate_rollback(
+            model_id="model-1",
+            dataset_id="dataset-1",
+            requested_at="2026-07-13T13:00:00+00:00",
+            reason="operator fixture rollback",
+        )
+    assert tuple(event.event_type for event in registry.list_events("model-1")) == (
+        "activated_for_shadow",
+    )
+
+    monkeypatch.setattr(registry, "_insert_event", original_insert)
+    report = service.simulate_rollback(
+        model_id="model-1",
+        dataset_id="dataset-1",
+        requested_at="2026-07-13T13:00:00+00:00",
+        reason="operator fixture rollback",
+    )
+    assert report.status == "rollback_simulated_disabled"
+    assert tuple(event.event_type for event in registry.list_events("model-1")) == (
+        "activated_for_shadow",
+        "rollback_requested",
+        "disabled",
+    )

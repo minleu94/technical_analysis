@@ -16,6 +16,10 @@ if str(REPO_ROOT) not in sys.path:
 from app_module.update_service import UpdateService
 from app_module.update_status_history import append_update_status_history
 from data_module.config import TWStockConfig
+from data_module.official_trading_calendar import (
+    OfficialTradingCalendar,
+    OfficialTradingCalendarError,
+)
 from scripts.scheduled.scheduled_clock import scheduled_now
 
 
@@ -34,21 +38,58 @@ def _parse_date(value: object) -> datetime | None:
     return None
 
 
-def _scheduled_target_weekday(today: date) -> date:
-    candidate = today
-    while candidate.weekday() >= 5:
-        candidate -= timedelta(days=1)
-    return candidate
+def _calendar_records_for_window(
+    reference_date: date,
+    days: int,
+    *,
+    calendar: OfficialTradingCalendar | None = None,
+) -> list[dict[str, Any]]:
+    resolver = calendar or OfficialTradingCalendar(
+        calendar_cache_path=_default_calendar_cache_path(),
+    )
+    return resolver.get_recent_official_trading_days(
+        reference_date,
+        max(1, int(days)),
+        include_reference=True,
+        allow_online_probe=True,
+    )
 
 
-def _weekday_window(end_day: date, days: int) -> tuple[str, str]:
-    selected: list[date] = []
-    current = end_day
-    while len(selected) < days:
-        if current.weekday() < 5:
-            selected.append(current)
-        current -= timedelta(days=1)
-    return selected[-1].isoformat(), selected[0].isoformat()
+def _scheduled_target_weekday(
+    today: date,
+    calendar: OfficialTradingCalendar | None = None,
+) -> date:
+    """Compatibility name for the latest official session selector."""
+
+    records = _calendar_records_for_window(today, 1, calendar=calendar)
+    return date.fromisoformat(str(records[-1]["date_str"]))
+
+
+def _weekday_window(
+    end_day: date,
+    days: int,
+    calendar: OfficialTradingCalendar | None = None,
+) -> tuple[str, str]:
+    """Compatibility name for an official-calendar update window."""
+
+    records = _calendar_records_for_window(end_day, days, calendar=calendar)
+    return str(records[0]["date_str"]), str(records[-1]["date_str"])
+
+
+def _serializable_calendar_records(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in record.items() if key != "date"}
+        for record in records
+    ]
+
+
+def _default_calendar_cache_path() -> Path | None:
+    """Use the existing immutable official-calendar cache when available."""
+
+    path = REPO_ROOT / "output" / "paper_execution_eod_replay" / "calendar_cache"
+    return path if path.is_dir() else None
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -200,13 +241,6 @@ def main(argv: list[str] | None = None) -> int:
     log_path = Path(args.log_path) if args.log_path else run_root / f"{today_key}_data_update_quick.log"
     _setup_logging(log_path)
 
-    if args.start_date and args.end_date:
-        start_date = args.start_date
-        end_date = args.end_date
-    else:
-        end_day = _scheduled_target_weekday(run_date)
-        start_date, end_date = _weekday_window(end_day, max(1, args.window_weekdays))
-
     config = TWStockConfig(
         data_root=Path(args.data_root),
         output_root=output_root,
@@ -218,6 +252,58 @@ def main(argv: list[str] | None = None) -> int:
         config.technical_process_pool_max_in_flight = args.technical_process_pool_max_in_flight
     if args.technical_process_pool_max_retries is not None:
         config.technical_process_pool_max_retries = args.technical_process_pool_max_retries
+
+    calendar = OfficialTradingCalendar(
+        db_path=config.db_file,
+        calendar_cache_path=_default_calendar_cache_path(),
+    )
+    calendar_records: list[dict[str, Any]] = []
+    try:
+        if args.start_date and args.end_date:
+            start_date = args.start_date
+            end_date = args.end_date
+            calendar_records = calendar.require_trading_days_in_range(
+                date.fromisoformat(start_date),
+                date.fromisoformat(end_date),
+                allow_online_probe=True,
+            )
+        else:
+            calendar_records = _calendar_records_for_window(
+                run_date,
+                max(1, args.window_weekdays),
+                calendar=calendar,
+            )
+            start_date = str(calendar_records[0]["date_str"])
+            end_date = str(calendar_records[-1]["date_str"])
+    except (OfficialTradingCalendarError, ValueError) as exc:
+        completed_at = scheduled_now()
+        failure_payload = {
+            "task": "baldr-data-update-quick-daily",
+            "status": "failed",
+            "run_id": f"{today_key}-{os.getpid()}",
+            "started_at": run_now.isoformat(timespec="seconds"),
+            "completed_at": completed_at.isoformat(timespec="seconds"),
+            "checked_at": completed_at.isoformat(timespec="seconds"),
+            "process_id": os.getpid(),
+            "data_root": str(config.data_root),
+            "output_root": str(config.output_root),
+            "start_date": args.start_date,
+            "end_date": args.end_date,
+            "calendar_resolution": [],
+            "steps": [],
+            "warnings": [],
+            "errors": [f"official_trading_calendar_unavailable:{type(exc).__name__}:{exc}"],
+            "writes_market_data_db": False,
+            "writes_evidence_db": False,
+            "auto_trading": False,
+            "auto_lifecycle_action": False,
+            "history_path": str(history_path),
+        }
+        failure_payload["history"] = _append_history_safely(history_path, failure_payload)
+        _write_json(status_path, failure_payload)
+        logging.error(failure_payload["errors"][0])
+        return 1
+
     service = UpdateService(config)
     steps: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -236,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_root": str(config.output_root),
         "start_date": start_date,
         "end_date": end_date,
+        "calendar_resolution": _serializable_calendar_records(calendar_records),
         "log_path": str(log_path),
         "steps": [],
         "warnings": [],
@@ -361,6 +448,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_root": str(config.output_root),
         "start_date": start_date,
         "end_date": end_date,
+        "calendar_resolution": _serializable_calendar_records(calendar_records),
         "log_path": str(log_path),
         "steps": steps,
         "warnings": warnings,

@@ -681,6 +681,14 @@ def validate_teacher_source_readback(
 
     if source_name not in TEACHER_SOURCE_NAMES:
         raise TeacherSourceProvenanceError("unknown source in teacher receipt")
+    if manifest.get("schema_version") != TEACHER_SOURCE_MANIFEST_V2_SCHEMA_VERSION:
+        raise TeacherSourceProvenanceError(
+            f"{source_name} source manifest schema_version is invalid"
+        )
+    if manifest.get("storage_mode") != "read_only":
+        raise TeacherSourceProvenanceError(
+            f"{source_name} source manifest is not read-only custody"
+        )
     source_path_text = source_meta.get("source_artifact_path")
     if not isinstance(source_path_text, str) or not source_path_text:
         identity = readback.get("source_identity")

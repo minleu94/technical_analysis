@@ -23,7 +23,6 @@ DEFAULT_TIMEOUT_SECONDS = 15
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED_TASKS: tuple[dict[str, str], ...] = (
-    {"name": "baldr-paper-execution-eod-replay-daily", "schedule": "DAILY 00:05", "required": "true"},
     {"name": "baldr-data-update-quick-daily", "schedule": "DAILY 04:20", "required": "true"},
     {"name": "baldr-official-market-events-daily", "schedule": "DAILY 04:50", "required": "true"},
     {"name": "baldr-data-freshness-check-daily", "schedule": "DAILY 05:00", "required": "true"},
@@ -34,11 +33,13 @@ EXPECTED_TASKS: tuple[dict[str, str], ...] = (
     {"name": "baldr-ml-promotion-authority-daily", "schedule": "DAILY 05:18", "required": "true"},
     {"name": "baldr-ml-allocation-copilot-daily", "schedule": "DAILY 05:20", "required": "true"},
     {"name": "baldr-decision-evidence-capture-daily", "schedule": "DAILY 05:25", "required": "true"},
-    {"name": "baldr-paper-portfolio-daily", "schedule": "DAILY 05:28", "required": "true"},
+    {"name": "baldr-ml-direct-chain-maintainer", "schedule": "DAILY 05:30", "required": "true"},
+    {"name": "baldr-paper-execution-eod-replay-daily", "schedule": "DAILY 06:00", "required": "true"},
     {"name": "baldr-pit-sector-membership-preopen-capture-daily", "schedule": "DAILY 16:00", "required": "true"},
+    {"name": "baldr-paper-portfolio-daily", "schedule": "DAILY 16:15", "required": "true"},
+    {"name": "baldr-ml-allocation-forward-daily", "schedule": "DAILY 16:15", "required": "true"},
     {"name": "baldr-formal-pit-sidecar-postcutoff-daily", "schedule": "DAILY 18:00", "required": "true"},
     {"name": "baldr-formal-input-producer-daily", "schedule": "DAILY 21:25", "required": "true"},
-    {"name": "baldr-ml-direct-chain-maintainer", "schedule": "DAILY 05:30", "required": "true"},
     {"name": "baldr-v2-2-weekly-collection", "schedule": "WEEKLY SUN 18:00", "required": "true"},
 )
 
@@ -55,6 +56,7 @@ TASK_WRAPPER_PATHS: dict[str, str] = {
     "baldr-ml-allocation-copilot-daily": "scripts/scheduled/run_ml_allocation_copilot.cmd",
     "baldr-decision-evidence-capture-daily": "scripts/scheduled/run_decision_evidence_capture.cmd",
     "baldr-paper-portfolio-daily": "scripts/scheduled/run_paper_portfolio_daily.cmd",
+    "baldr-ml-allocation-forward-daily": "scripts/scheduled/run_ml_allocation_forward_daily.cmd",
     "baldr-pit-sector-membership-preopen-capture-daily": "scripts/scheduled/run_pit_sector_membership_preopen_capture.cmd",
     "baldr-formal-pit-sidecar-postcutoff-daily": "scripts/scheduled/run_formal_pit_sidecar_postcutoff.cmd",
     "baldr-formal-input-producer-daily": "scripts/scheduled/run_formal_input_producer_daily.cmd",
@@ -76,6 +78,9 @@ _SAFE_SUMMARY_KEYS = (
     "scheduled_task_state",
     "execution_time_limit",
     "multiple_instances_policy",
+    "schedule_type",
+    "start_time",
+    "days",
 )
 
 
@@ -158,9 +163,17 @@ def inspect_scheduled_task_registration(
     action_unobserved_count = sum(
         item.get("action_matches_wrapper") is None for item in task_results
     )
+    schedule_mismatch_count = sum(
+        item.get("schedule_matches") is False for item in task_results
+    )
+    schedule_unobserved_count = sum(
+        item.get("schedule_matches") is None for item in task_results
+    )
     all_wrappers_present = wrapper_missing_count == 0
     all_actions_match = action_mismatch_count == 0
     all_actions_observed = action_unobserved_count == 0
+    all_schedules_match = schedule_mismatch_count == 0
+    all_schedules_observed = schedule_unobserved_count == 0
     return {
         "schema_version": SCHEMA_VERSION,
         "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -179,11 +192,17 @@ def inspect_scheduled_task_registration(
         "action_unobserved_count": action_unobserved_count,
         "all_actions_observed": all_actions_observed,
         "all_actions_match": all_actions_match,
+        "schedule_mismatch_count": schedule_mismatch_count,
+        "schedule_unobserved_count": schedule_unobserved_count,
+        "all_schedules_observed": all_schedules_observed,
+        "all_schedules_match": all_schedules_match,
         "configuration_ready": (
             missing_count == 0
             and all_wrappers_present
             and all_actions_observed
             and all_actions_match
+            and all_schedules_observed
+            and all_schedules_match
         ),
         "tasks": task_results,
     }
@@ -211,6 +230,10 @@ def _task_result(
         summary.get("task_to_run") if summary else None,
         repo_root=repo_root,
         wrapper_path=wrapper.get("wrapper_path"),
+    )
+    payload["schedule_matches"] = _schedule_matches(
+        summary,
+        expected_schedule=spec.get("schedule"),
     )
     if returncode is not None:
         payload["returncode"] = returncode
@@ -283,6 +306,59 @@ def _parse_list_summary(output: str) -> dict[str, str]:
         if text:
             values[normalized_key] = text[:240]
     return values
+
+
+def _schedule_matches(
+    summary: Mapping[str, str] | None,
+    *,
+    expected_schedule: object,
+) -> bool | None:
+    """比較 schtasks 實際 trigger；欄位缺失時回傳 None 而非猜測。"""
+
+    if not summary or not isinstance(expected_schedule, str):
+        return None
+    parts = expected_schedule.split()
+    if len(parts) != 2 and len(parts) != 3:
+        return None
+    schedule_type = summary.get("schedule_type")
+    start_time = summary.get("start_time")
+    if not schedule_type or not start_time:
+        return None
+    expected_type = parts[0].lower()
+    observed_type = schedule_type.strip().lower()
+    if expected_type not in observed_type:
+        return False
+    observed_time = _normalise_start_time(start_time)
+    if observed_time is None or observed_time != parts[-1]:
+        return False
+    if expected_type == "weekly":
+        expected_day = parts[1].upper()
+        observed_days = (summary.get("days") or "").upper()
+        if expected_day not in observed_days:
+            return False
+    return True
+
+
+def _normalise_start_time(value: str) -> str | None:
+    """將中英文 Windows locale 的 Start Time 轉成 24 小時 HH:MM。"""
+
+    import re
+
+    match = re.search(r"(?<!\d)(\d{1,2}):(\d{2})(?::\d{2})?", value)
+    if match is None:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    lower = value.lower()
+    if any(marker in value for marker in ("下午", "午後")) or "pm" in lower:
+        if hour < 12:
+            hour += 12
+    elif any(marker in value for marker in ("上午", "午前")) or "am" in lower:
+        if hour == 12:
+            hour = 0
+    if hour > 23 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
 
 
 def _compact_error(value: str) -> str | None:

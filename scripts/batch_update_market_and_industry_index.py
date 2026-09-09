@@ -36,6 +36,16 @@ except ImportError as e:
 
 from data_module.config import TWStockConfig
 from data_module.data_loader import DataLoader
+from data_module.official_trading_calendar import (
+    OfficialTradingCalendar,
+    OfficialTradingCalendarError,
+)
+
+
+def _default_calendar_cache_path() -> Path | None:
+    cache = project_root / "output" / "paper_execution_eod_replay" / "calendar_cache"
+    return cache if cache.is_dir() else None
+
 
 def setup_logging():
     """設置日誌"""
@@ -45,12 +55,25 @@ def setup_logging():
     )
     return logging.getLogger(__name__)
 
-def is_trading_day(date: datetime) -> bool:
-    """檢查是否為交易日（排除週末）"""
-    # 週一=0, 週日=6
-    return date.weekday() < 5  # 週一到週五
+def is_trading_day(
+    value: datetime,
+    *,
+    calendar: OfficialTradingCalendar | None = None,
+) -> bool:
+    """以官方日曆判定交易日；日曆未知時維持 fail-closed。"""
 
-def get_trading_days(start_date: str, end_date: str | None = None) -> list[str]:
+    resolver = calendar or OfficialTradingCalendar(
+        calendar_cache_path=_default_calendar_cache_path(),
+    )
+    result, _reason = resolver.is_official_trading_day(value.date())
+    return result is True
+
+def get_trading_days(
+    start_date: str,
+    end_date: str | None = None,
+    *,
+    calendar: OfficialTradingCalendar | None = None,
+) -> list[str]:
     """獲取交易日列表
     
     Args:
@@ -63,13 +86,19 @@ def get_trading_days(start_date: str, end_date: str | None = None) -> list[str]:
     start = datetime.strptime(start_date, '%Y-%m-%d')
     end = datetime.strptime(end_date, '%Y-%m-%d')
     
-    trading_days = []
-    current = start
-    
-    while current <= end:
-        if is_trading_day(current):
-            trading_days.append(current.strftime('%Y-%m-%d'))
-        current += timedelta(days=1)
+    resolver = calendar or OfficialTradingCalendar(
+        calendar_cache_path=_default_calendar_cache_path(),
+    )
+    records = resolver.require_trading_days_in_range(
+        start.date(),
+        end.date(),
+        allow_online_probe=True,
+    )
+    trading_days = [
+        str(record["date_str"])
+        for record in records
+        if record.get("is_trading_day") is True
+    ]
     
     return trading_days
 
@@ -171,11 +200,22 @@ def batch_update_market_index(start_date: str, end_date: str = None,
     loader = DataLoader(config)
     
     # 獲取交易日列表
-    trading_days = get_trading_days(start_date, end_date)
+    try:
+        trading_days = get_trading_days(
+            start_date,
+            end_date,
+            calendar=OfficialTradingCalendar(
+                db_path=config.db_file,
+                calendar_cache_path=_default_calendar_cache_path(),
+            ),
+        )
+    except OfficialTradingCalendarError as exc:
+        logger.error("官方交易日曆無法解析，停止大盤批次更新：%s", exc)
+        return False
     
     if not trading_days:
         logger.warning("沒有找到需要更新的交易日")
-        return
+        return True
     
     # 獲取已存在的日期集合，避免重複下載，並支持歷史數據回補
     existing_dates = get_existing_dates(config.market_index_file)
@@ -185,7 +225,7 @@ def batch_update_market_index(start_date: str, end_date: str = None,
     
     if not trading_days:
         logger.info("所有數據已是最新，無需更新")
-        return
+        return True
     
     logger.info(f"準備更新從 {trading_days[0]} 到 {trading_days[-1]} 的大盤指數數據")
     logger.info(f"共 {len(trading_days)} 個交易日需要更新")
@@ -248,6 +288,7 @@ def batch_update_market_index(start_date: str, end_date: str = None,
         config.create_backup(config.market_index_file)
     
     logger.info("=" * 60)
+    return fail_count == 0
 
 def batch_update_industry_index(start_date: str, end_date: str = None, 
                                 delay_min: float = 4.0, delay_max: float = 4.0,
@@ -267,11 +308,22 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
     loader = DataLoader(config)
     
     # 獲取交易日列表
-    trading_days = get_trading_days(start_date, end_date)
+    try:
+        trading_days = get_trading_days(
+            start_date,
+            end_date,
+            calendar=OfficialTradingCalendar(
+                db_path=config.db_file,
+                calendar_cache_path=_default_calendar_cache_path(),
+            ),
+        )
+    except OfficialTradingCalendarError as exc:
+        logger.error("官方交易日曆無法解析，停止產業批次更新：%s", exc)
+        return False
     
     if not trading_days:
         logger.warning("沒有找到需要更新的交易日")
-        return
+        return True
     
     # 獲取已存在的日期集合，避免重複下載，並支持歷史數據回補
     existing_dates = get_existing_dates(config.industry_index_file)
@@ -281,7 +333,7 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
     
     if not trading_days:
         logger.info("所有數據已是最新，無需更新")
-        return
+        return True
     
     logger.info(f"準備更新從 {trading_days[0]} 到 {trading_days[-1]} 的產業指數數據")
     logger.info(f"共 {len(trading_days)} 個交易日需要更新")
@@ -344,6 +396,7 @@ def batch_update_industry_index(start_date: str, end_date: str = None,
         config.create_backup(config.industry_index_file)
     
     logger.info("=" * 60)
+    return fail_count == 0
 
 def main():
     """主函數"""
@@ -398,6 +451,8 @@ def main():
         default=4.0,
         help='最大延遲時間（秒），預設 4.0'
     )
+    parser.add_argument('--data-root', type=str, help='覆蓋資料根目錄')
+    parser.add_argument('--output-root', type=str, help='覆蓋輸出根目錄')
     
     args = parser.parse_args()
     
@@ -425,10 +480,16 @@ def main():
         print("錯誤：最小延遲時間不能大於最大延遲時間")
         sys.exit(1)
     
+    config_kwargs = {}
+    if args.data_root:
+        config_kwargs['data_root'] = Path(args.data_root)
+    if args.output_root:
+        config_kwargs['output_root'] = Path(args.output_root)
+    config = TWStockConfig(**config_kwargs) if config_kwargs else TWStockConfig()
+
     # 確定開始日期
     if args.start_date is None:
         # 從現有數據的最新日期開始
-        config = TWStockConfig()
         if args.type in ['market', 'both']:
             latest_market = get_latest_date(config.market_index_file)
             if latest_market:
@@ -446,21 +507,26 @@ def main():
                     args.start_date = "2024-01-01"  # 預設起始日期
     
     # 執行更新
+    results = []
     if args.type in ['market', 'both']:
-        batch_update_market_index(
+        results.append(batch_update_market_index(
             args.start_date,
             args.end_date,
             args.delay_min,
-            args.delay_max
-        )
+            args.delay_max,
+            config=config,
+        ))
     
     if args.type in ['industry', 'both']:
-        batch_update_industry_index(
+        results.append(batch_update_industry_index(
             args.start_date,
             args.end_date,
             args.delay_min,
-            args.delay_max
-        )
+            args.delay_max,
+            config=config,
+        ))
+    if any(result is False for result in results):
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()

@@ -50,6 +50,9 @@ from data_module.portfolio_ml_dataset_assembler import (  # noqa: E402
     _spool_sector_memberships,
     _validate_raw_dataset_manifest,
 )
+from ml_module.pit_archive_consumer import (  # noqa: E402
+    consume_pit_candidate_archive,
+)
 from data_module.company_registry import (  # noqa: E402
     INDUSTRY_CODE_TO_CATEGORY,
 )
@@ -151,6 +154,20 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--pit-machine-archive-root",
+        type=Path,
+        help="受控 Formal pit_candidate_archive root；必須配合 exact manifest 使用",
+    )
+    parser.add_argument(
+        "--pit-machine-archive-manifest",
+        type=Path,
+        help="已選定且凍結 hash 的 exact archive_manifest.json",
+    )
+    parser.add_argument(
+        "--expected-pit-machine-archive-manifest-file-hash",
+        help="archive_manifest.json bytes 的 sha256:<64 hex>",
+    )
+    parser.add_argument(
         "--expected-symbol-count",
         type=int,
         default=11,
@@ -194,6 +211,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             pit_machine_operational_publication=(
                 args.pit_machine_operational_publication
             ),
+            pit_machine_archive_root=args.pit_machine_archive_root,
+            pit_machine_archive_manifest=args.pit_machine_archive_manifest,
+            expected_pit_machine_archive_manifest_file_hash=(
+                args.expected_pit_machine_archive_manifest_file_hash
+            ),
             expected_symbol_count=args.expected_symbol_count,
             post_freeze_shadow_input_output=(
                 args.post_freeze_shadow_input_output
@@ -236,6 +258,9 @@ def _run(
     decision_at: str,
     expected_price_date: str,
     pit_machine_operational_publication: Path | None,
+    pit_machine_archive_root: Path | None,
+    pit_machine_archive_manifest: Path | None,
+    expected_pit_machine_archive_manifest_file_hash: str | None,
     expected_symbol_count: int,
     post_freeze_shadow_input_output: Path,
     audit_output: Path,
@@ -294,6 +319,53 @@ def _run(
         post_freeze_shadow_input_output=post_freeze_shadow_input_output,
         audit_output=audit_output,
     )
+    archive_arguments = (
+        pit_machine_archive_root,
+        pit_machine_archive_manifest,
+        expected_pit_machine_archive_manifest_file_hash,
+    )
+    if any(value is not None for value in archive_arguments) and not all(
+        value is not None for value in archive_arguments
+    ):
+        raise ValueError(
+            "PIT machine archive root, exact manifest and frozen file hash "
+            "must be supplied together"
+        )
+    if pit_machine_operational_publication is not None and any(
+        value is not None for value in archive_arguments
+    ):
+        raise ValueError(
+            "PIT machine operational publication and archive manifest are mutually exclusive"
+        )
+    machine_archive_result: Mapping[str, object] | None = None
+    if (
+        pit_machine_archive_root is not None
+        and pit_machine_archive_manifest is not None
+        and expected_pit_machine_archive_manifest_file_hash is not None
+    ):
+        machine_archive_result = consume_pit_candidate_archive(
+            archive_root=pit_machine_archive_root,
+            manifest_path=pit_machine_archive_manifest,
+            expected_manifest_file_hash=(
+                expected_pit_machine_archive_manifest_file_hash
+            ),
+            decision_at=requested_decision,
+        )
+    machine_archive_rows: Sequence[Mapping[str, Any]] | None = None
+    machine_archive_manifest_hash: str | None = None
+    if machine_archive_result is not None:
+        archive_rows = machine_archive_result.get("rows")
+        if not isinstance(archive_rows, list) or any(
+            not isinstance(row, Mapping) for row in archive_rows
+        ):
+            raise ValueError("PIT machine archive adapter rows are invalid")
+        archive_hash = machine_archive_result.get("archive_manifest_hash")
+        if not isinstance(archive_hash, str) or not archive_hash.startswith(
+            "sha256:"
+        ):
+            raise ValueError("PIT machine archive adapter manifest hash is invalid")
+        machine_archive_rows = tuple(dict(row) for row in archive_rows)
+        machine_archive_manifest_hash = archive_hash
 
     raw_manifest = _load_json_object(
         raw_dataset_manifest,
@@ -443,9 +515,12 @@ def _run(
             source_manifest_hashes=model_source_hashes,
             batch_size=batch_size,
             machine_operational_path=pit_machine_operational_publication,
+            machine_archive_rows=machine_archive_rows,
+            machine_archive_manifest_hash=machine_archive_manifest_hash,
             machine_now=(
                 datetime.now(timezone.utc)
                 if pit_machine_operational_publication is not None
+                or machine_archive_result is not None
                 else None
             ),
         )
@@ -470,6 +545,15 @@ def _run(
         }
         for row_payload in input_payload["rows"]
     ]
+    machine_source_kind = (
+        "archive"
+        if machine_archive_result is not None
+        else (
+            "operational"
+            if pit_machine_operational_publication is not None
+            else None
+        )
+    )
 
     audit_without_hash: dict[str, Any] = {
         "schema_version": AUDIT_SCHEMA_VERSION,
@@ -526,6 +610,27 @@ def _run(
             None
             if pit_machine_operational_publication is None
             else str(pit_machine_operational_publication.resolve())
+        ),
+        "pit_machine_source_kind": machine_source_kind,
+        "pit_machine_archive_root": (
+            None
+            if machine_archive_result is None
+            else machine_archive_result.get("archive_root")
+        ),
+        "pit_machine_archive_manifest": (
+            None
+            if machine_archive_result is None
+            else machine_archive_result.get("archive_manifest_path")
+        ),
+        "pit_machine_archive_manifest_file_hash": (
+            None
+            if machine_archive_result is None
+            else machine_archive_result.get("archive_manifest_file_hash")
+        ),
+        "pit_machine_archive_manifest_hash": (
+            None
+            if machine_archive_result is None
+            else machine_archive_result.get("archive_manifest_hash")
         ),
         "row_payload_hashes": row_payload_hashes,
         "portfolio_state_hash": state.state_hash,
@@ -954,6 +1059,8 @@ def _assemble_shadow_rows(
     source_manifest_hashes: tuple[tuple[str, str], ...],
     batch_size: int,
     machine_operational_path: Path | None = None,
+    machine_archive_rows: Sequence[Mapping[str, Any]] | None = None,
+    machine_archive_manifest_hash: str | None = None,
     machine_now: datetime | None = None,
 ) -> tuple[
     tuple[PortfolioMLDatasetRow, ...],
@@ -962,7 +1069,10 @@ def _assemble_shadow_rows(
 ]:
     machine_sector_manifest_hash: str | None = None
     machine_sector_count = 0
-    if machine_operational_path is not None:
+    machine_input_enabled = (
+        machine_operational_path is not None or machine_archive_rows is not None
+    )
+    if machine_input_enabled:
         machine_sector_manifest_hash, machine_sector_count = (
             _spool_sector_memberships(
                 connection,
@@ -970,6 +1080,8 @@ def _assemble_shadow_rows(
                 training_as_of=decision_at,
                 machine_operational_path=machine_operational_path,
                 machine_now=machine_now,
+                machine_archive_rows=machine_archive_rows,
+                machine_archive_manifest_hash=machine_archive_manifest_hash,
             )
         )
     _advance_current_features(
@@ -1025,7 +1137,7 @@ def _assemble_shadow_rows(
     industry_index_kind: str | None = None
     industry_index_contract: tuple[str, str] | None = None
     industry_index_market_scope: str | None = None
-    if machine_operational_path is not None:
+    if machine_input_enabled:
         decision_date = decision_at.astimezone(_TAIPEI).date().isoformat()
         sectors = _sectors_for_decision(
             connection,
@@ -1105,7 +1217,7 @@ def _assemble_shadow_rows(
     missing_by_family: dict[str, int] = {}
     decision_scope = (
         post_freeze_shadow_decision_scope()
-        if machine_operational_path is not None
+        if machine_input_enabled
         else nullcontext()
     )
     with decision_scope:
@@ -1129,13 +1241,13 @@ def _assemble_shadow_rows(
                 market_current=market_current,
                 industry_current=(
                     industry_current_by_sector.get(sectors.get(symbol, ""), {})
-                    if machine_operational_path is not None
+                    if machine_input_enabled
                     and symbol_markets.get(symbol) == "TWSE"
                     else {}
                 ),
                 industry_missing_reason=(
                     None
-                    if machine_operational_path is None
+                    if not machine_input_enabled
                     or symbol_markets.get(symbol) == "TWSE"
                     else (
                         "industry_scope_mismatch:registry=TWSE:"
@@ -1169,7 +1281,7 @@ def _assemble_shadow_rows(
             if missing_families != exact_missing_families:
                 raise ValueError("derived missing-family mask mismatch")
             if (
-                machine_operational_path is not None
+                machine_input_enabled
                 and symbol_markets.get(symbol) != "TWSE"
                 and any(
                     feature.feature_id in industry_feature_ids

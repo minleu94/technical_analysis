@@ -479,6 +479,52 @@ def test_source_bytes_tamper_is_rejected_after_valid_hash_receipt(
         _gate(provenance)
 
 
+def test_source_manifest_custody_tamper_is_rejected_after_rebinding_receipts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Manifest custody/schema cannot be changed while keeping receipt hashes valid."""
+
+    monkeypatch.setenv("RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY", _KEY.decode())
+    monkeypatch.setenv("RULE_CHAMPION_CONTROLLED_STORE_ID", _STORE_ID)
+    sources = _source_fixture(tmp_path)
+    provenance = build_teacher_source_row_provenance_for_assembly(
+        source_paths=sources,
+        output_root=tmp_path / "provenance",
+        decision_dates=(DECISION_DATE,),
+        decision_cutoffs={DECISION_DATE: CUTOFF},
+        decision_rows=_decision_rows(),
+    )
+
+    source_meta = provenance["sources"]["pit_sector_membership"]
+    manifest_path = Path(str(source_meta["source_manifest_path"]))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_body = dict(manifest)
+    manifest_body.pop("manifest_hash", None)
+    manifest_body["storage_mode"] = "read_write"
+    manifest = {**manifest_body, "manifest_hash": _hash(manifest_body)}
+    _write_json(manifest_path, manifest)
+
+    readback_path = Path(str(source_meta["readback_path"]))
+    readback = json.loads(readback_path.read_text(encoding="utf-8"))
+    readback_body = dict(readback)
+    readback_body.pop("receipt_hash", None)
+    readback_body["source_manifest_hash"] = manifest["manifest_hash"]
+    _write_json(
+        readback_path,
+        {**readback_body, "receipt_hash": _hash(readback_body)},
+    )
+    source_meta["source_manifest_hash"] = manifest["manifest_hash"]
+    source_meta["source_manifest_file_sha256"] = _file_hash(manifest_path)
+    source_meta["readback_file_sha256"] = _file_hash(readback_path)
+
+    with pytest.raises(
+        TargetDiagnosticError,
+        match="source manifest custody is not read-only",
+    ):
+        _gate(provenance)
+
+
 def test_missing_ledger_availability_is_a_blocked_gate_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

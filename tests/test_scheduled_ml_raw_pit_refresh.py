@@ -10,10 +10,12 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from data_module import portfolio_ml_dataset_assembler as dataset_assembler
+from data_module.ml_daily_price_source_quality import DailyPriceSourceQualityError
 from data_module.ml_storage_capacity import (
     SCHEDULED_REQUIRED_FREE_BYTES,
     SCHEDULED_SAFETY_RESERVE_BYTES,
 )
+from scripts import build_ml_pit_year_shards as pit_builder
 from scripts.scheduled import run_ml_raw_pit_refresh as runner
 
 
@@ -131,6 +133,244 @@ def test_core_freshness_proof_requires_current_core_dates(
     assert proof.latest_core_date.isoformat() == "2026-08-12"
     assert proof.decision_at == "2026-08-12T08:30:00+08:00"
     assert proof.data_update_status == "passed"
+
+
+def test_extract_source_quality_summary_keeps_only_bounded_builder_payload() -> None:
+    summary = {
+        "candidate_count": 4_476_508,
+        "classification_counts": {
+            "canonical_daily_row_missing": 1,
+            "sqlite_row_mismatch_against_canonical_daily_csv": 1,
+        },
+        "samples": [{"symbol": "2330", "date": "2026-09-08"}],
+    }
+
+    extracted = runner._extract_source_quality_summary(
+        "diagnostic line\n"
+        + json.dumps(
+            {
+                "status": "blocked",
+                "source_quality_summary": summary,
+                "candidates": ["the full report is never emitted"],
+            }
+        )
+    )
+
+    assert extracted == summary
+
+
+def test_builder_quality_summary_bounds_candidates_and_keeps_report_hash() -> None:
+    report = {
+        "schema_version": "quality.v1",
+        "status": "quarantine_required",
+        "read_only": True,
+        "repair_performed": False,
+        "formal_training_allowed": False,
+        "candidate_count": 4_476_508,
+        "classification_counts": {
+            "canonical_daily_row_missing": 4_476_507,
+            "sqlite_row_mismatch_against_canonical_daily_csv": 1,
+        },
+        "affected_date_counts": {
+            "2026-09-07": 4_476_507,
+            "2026-09-08": 1,
+        },
+        "report_hash": "sha256:" + "a" * 64,
+        "candidates": [
+            {
+                "symbol": "2330",
+                "date": "2026-09-07",
+                "classification": "canonical_daily_row_missing",
+                "differing_fields": ["open"],
+                "detector": {
+                    "previous_close": "100",
+                    "current_open": "10",
+                    "next_open": None,
+                    "threshold_factor": "10",
+                    "policy_version": "guard.v1",
+                    "future_source_row_used": False,
+                },
+                "canonical_file": {
+                    "path": "D:/daily_price/20260907.csv",
+                    "status": "missing",
+                    "file_sha256": None,
+                },
+                "canonical_candidates": [
+                    {
+                        "row": {},
+                        "file": {
+                            "path": "D:/daily_price_tpex/20260907.csv",
+                            "status": "valid",
+                            "file_sha256": "sha256:" + "c" * 64,
+                            "market": "TPEX",
+                            "source_directory": "D:/daily_price_tpex",
+                        },
+                    }
+                ],
+            }
+        ],
+    }
+
+    summary = pit_builder._compact_source_quality_summary(report)
+
+    assert summary["candidate_count"] == 4_476_508
+    assert summary["classification_counts"] == report["classification_counts"]
+    assert summary["affected_date_count"] == 2
+    samples = summary["samples"]
+    assert isinstance(samples, list)
+    assert len(samples) == 1
+    assert summary["report_hash"] == report["report_hash"]
+    assert "candidates" not in summary
+    assert summary["samples"][0]["canonical_candidates"][0]["market"] == "TPEX"
+
+
+def test_builder_cli_emits_compact_quality_summary_on_guard_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    report = {
+        "schema_version": "quality.v1",
+        "status": "quarantine_required",
+        "read_only": True,
+        "repair_performed": False,
+        "formal_training_allowed": False,
+        "candidate_count": 2,
+        "classification_counts": {"canonical_daily_row_missing": 2},
+        "affected_date_counts": {"2026-08-12": 2},
+        "report_hash": "sha256:" + "b" * 64,
+        "candidates": [
+            {
+                "symbol": "2330",
+                "date": "2026-08-12",
+                "classification": "canonical_daily_row_missing",
+            }
+        ],
+    }
+
+    def raise_quality_error(*_args: object, **_kwargs: object) -> object:
+        raise DailyPriceSourceQualityError(
+            "daily price source quality quarantine required: 2 candidate rows",
+            report=report,
+        )
+
+    monkeypatch.setattr(pit_builder.PITYearShardExporter, "build", raise_quality_error)
+    database = tmp_path / "source.db"
+    database.write_bytes(b"sqlite-placeholder")
+
+    exit_code = pit_builder.main(
+        [
+            "--database",
+            str(database),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--decision-at",
+            "2026-08-12T08:30:00+08:00",
+            "--symbols",
+            "2330",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["error_type"] == "DailyPriceSourceQualityError"
+    assert payload["source_quality_summary"]["candidate_count"] == 2
+    assert "candidates" not in payload["source_quality_summary"]
+
+
+def test_main_persists_bounded_source_quality_summary_on_builder_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root = tmp_path / "FA_Data"
+    output_root = data_root / "output"
+    _write_freshness_status(output_root)
+    database = data_root / "sqlite" / "twstock.db"
+    database.parent.mkdir(parents=True, exist_ok=True)
+    database.write_bytes(b"sqlite-placeholder")
+    monkeypatch.setattr(
+        runner,
+        "_taipei_now",
+        lambda: datetime(2026, 8, 12, 12, 0, tzinfo=_TAIPEI),
+    )
+    monkeypatch.setattr(
+        runner.shutil,
+        "disk_usage",
+        lambda _path: SimpleNamespace(
+            total=700 * 1024**3,
+            used=100 * 1024**3,
+            free=600 * 1024**3,
+        ),
+    )
+    monkeypatch.setattr(runner, "_direct_chain_instance_lock_present", lambda _root: False)
+
+    class _FakeLock:
+        owner_pid = 424_242
+
+        def authorize_child(self, _child_pid: int) -> None:
+            return None
+
+    fake_lock = _FakeLock()
+    monkeypatch.setattr(runner, "_acquire_lock", lambda _path: fake_lock)
+    monkeypatch.setattr(runner, "_release_lock", lambda _lock: None)
+    monkeypatch.setattr(
+        runner,
+        "build_heavy_chain_reservation_handoff_environment",
+        lambda _lock, *, environment, parent_pid: environment,
+    )
+    summary = {
+        "candidate_count": 4_476_508,
+        "classification_counts": {
+            "canonical_daily_row_missing": 6_488,
+            "sqlite_row_mismatch_against_canonical_daily_csv": 990,
+        },
+        "samples": [{"symbol": "2330", "classification": "test"}],
+    }
+
+    class _FakeBuilderProcess:
+        pid = 424_243
+        returncode = 2
+
+        def communicate(self) -> tuple[str, str]:
+            return (
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "error_type": "DailyPriceSourceQualityError",
+                        "source_quality_summary": summary,
+                    }
+                ),
+                "",
+            )
+
+    monkeypatch.setattr(
+        runner.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: _FakeBuilderProcess(),
+    )
+
+    exit_code = runner.main(
+        [
+            "--data-root",
+            str(data_root),
+            "--output-root",
+            str(output_root),
+            "--database",
+            str(database),
+        ]
+    )
+
+    receipt = json.loads(
+        (
+            output_root
+            / "scheduled"
+            / "ml_raw_pit_refresh"
+            / "latest_status.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert exit_code == 1
+    assert receipt["status"] == "failed"
+    assert receipt["builder_returncode"] == 2
+    assert receipt["source_quality_summary"] == summary
 
 
 def test_core_freshness_proof_blocks_lagging_technical_date(
@@ -310,6 +550,16 @@ def test_main_runs_builder_and_validates_new_publication(
     assert "--all-universe" in command
     assert command[command.index("--decision-at") + 1] == "2026-08-12T08:30:00+08:00"
     assert command[command.index("--database") + 1] == str(database.resolve())
+    source_flags = [
+        command[index + 1]
+        for index, value in enumerate(command)
+        if value == "--daily-price-source-dir"
+    ]
+    assert source_flags == [
+        str((data_root / "daily_price").resolve()),
+        str((data_root / "daily_price_tpex").resolve()),
+    ]
+    assert refresh_payload["daily_price_source_dirs"] == source_flags
     assert json.loads(status_path.read_text(encoding="utf-8"))["status"] == "passed"
 
 

@@ -162,6 +162,21 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--calendar-cache-path",
+        type=Path,
+        default=None,
+        help=(
+            "可選的 hash-bound TWSE annual calendar cache；"
+            "提供時不得退回以 DB 列存在推定交易日"
+        ),
+    )
+    parser.add_argument(
+        "--temporary-closure-path",
+        type=Path,
+        default=None,
+        help="可選的 hash-bound TWSE temporary closure cache",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         required=True,
@@ -196,6 +211,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             expected_decision_at=args.expected_decision_at,
             expected_price_date=args.expected_price_date,
             calendar_database=args.calendar_database,
+            calendar_cache_path=args.calendar_cache_path,
+            temporary_closure_path=args.temporary_closure_path,
             output=args.output,
             audit_output=args.audit_output,
             compression_level=args.compression_level,
@@ -237,6 +254,8 @@ def _run(
     output: Path,
     audit_output: Path,
     compression_level: int,
+    calendar_cache_path: Path | None = None,
+    temporary_closure_path: Path | None = None,
 ) -> dict[str, Any]:
     _require_sha256(
         expected_parent_input_compressed_hash,
@@ -355,6 +374,8 @@ def _run(
     calendar_previous_date, calendar_evidence = _load_calendar_evidence(
         calendar_database=calendar_database.resolve(),
         expected_price_date=expected_price_date,
+        calendar_cache_path=calendar_cache_path,
+        temporary_closure_path=temporary_closure_path,
     )
     current_close, previous_close = _select_close_pair(
         official_closes,
@@ -760,6 +781,8 @@ def _load_calendar_evidence(
     *,
     calendar_database: Path,
     expected_price_date: str,
+    calendar_cache_path: Path | None = None,
+    temporary_closure_path: Path | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Resolve T-1 from the existing official calendar provider.
 
@@ -781,12 +804,54 @@ def _load_calendar_evidence(
     # A bounded lookback is enough for the recent shadow source while keeping
     # this producer from scanning an unbounded historical database.
     range_start = target_date - timedelta(days=31)
-    provider = OfficialTradingCalendar(db_path=resolved_database)
+    resolved_cache = (
+        None
+        if calendar_cache_path is None
+        else calendar_cache_path.resolve()
+    )
+    resolved_temporary_closure = (
+        None
+        if temporary_closure_path is None
+        else temporary_closure_path.resolve()
+    )
+    provider = OfficialTradingCalendar(
+        db_path=resolved_database,
+        calendar_cache_path=resolved_cache,
+        temporary_closure_path=resolved_temporary_closure,
+    )
+    calendar_years = tuple(
+        range(range_start.year, target_date.year + 1)
+    )
+    custody_snapshot: dict[str, str] | None = None
+    if resolved_cache is not None:
+        # An explicitly supplied cache is an integrity boundary.  Prevalidate
+        # every calendar year touched by the bounded lookback; otherwise a
+        # January target could silently use DB row presence for the prior
+        # December.  ``OfficialTradingCalendar`` itself may fall back to DB
+        # evidence when a cache is absent, so the fallback is rejected below
+        # as well.
+        for calendar_year in calendar_years:
+            cached_year = provider._load_cached_year_schedule(calendar_year)
+            if cached_year is None:
+                raise ValueError(
+                    "official calendar cache is unavailable or invalid: "
+                    + str(calendar_year)
+                )
+        custody_snapshot = _calendar_custody_snapshot(
+            provider,
+            calendar_years=calendar_years,
+        )
     raw_days = provider.get_trading_days_in_range(
         range_start,
         target_date,
         allow_online_probe=False,
     )
+    if custody_snapshot is not None:
+        _assert_calendar_custody_unchanged(
+            provider,
+            calendar_years=calendar_years,
+            expected=custody_snapshot,
+        )
     days: list[dict[str, Any]] = []
     by_date: dict[date, bool | None] = {}
     for raw_day in raw_days:
@@ -802,6 +867,18 @@ def _load_calendar_evidence(
             raise ValueError("official calendar returned an invalid status")
         if not isinstance(reason, str) or not reason:
             raise ValueError("official calendar returned an invalid reason")
+        if resolved_cache is not None and (
+            status is None
+            or not (
+                reason == "weekend_closed"
+                or reason == "twse_temporary_closure_official"
+                or reason.startswith("twse_holiday_schedule_cache_")
+            )
+        ):
+            raise ValueError(
+                "official calendar cache fallback detected: "
+                + date_string
+            )
         by_date[date_value] = status
         days.append(
             {
@@ -844,15 +921,87 @@ def _load_calendar_evidence(
             )
         cursor += timedelta(days=1)
 
+    # The date list is useful for the bounded selector, but it does not by
+    # itself prove that an absent weekday was a holiday.  Attach the
+    # provider's hash-bound evidence for the selected adjacent dates so the
+    # PIT proof can distinguish an official cache from a DB row-presence
+    # fallback.
+    if resolved_cache is not None:
+        selected_calendar_evidence = {
+            "previous": provider.evidence_for(previous_date),
+            "expected": provider.evidence_for(target_date),
+        }
+        selected_dates = {
+            "previous": previous_date,
+            "expected": target_date,
+        }
+        for label, selected_date in selected_dates.items():
+            selected = selected_calendar_evidence[label]
+            if (
+                not isinstance(selected, Mapping)
+                or selected.get("mode")
+                != "hash_bound_official_calendar_cache"
+                or selected.get("target_date") != selected_date.isoformat()
+                or selected.get("is_trading_day") is not True
+            ):
+                raise ValueError(
+                    "official calendar selected evidence is not cache-bound: "
+                    + label
+                )
+    else:
+        selected_calendar_evidence = {
+            date_value.isoformat(): {
+                "mode": "twstock_db_market_indices_evidence",
+                "target_date": date_value.isoformat(),
+                "is_trading_day": True,
+                "reason_code": "twstock_db_market_indices_evidence",
+            }
+            for date_value in (previous_date, target_date)
+        }
+    if custody_snapshot is not None:
+        _assert_calendar_custody_unchanged(
+            provider,
+            calendar_years=calendar_years,
+            expected=custody_snapshot,
+        )
     evidence_without_hash: dict[str, Any] = {
         "schema_version": "official-trading-calendar-evidence.v1",
         "provider": "data_module.official_trading_calendar.OfficialTradingCalendar",
-        "source": "twstock_db_market_indices_evidence",
+        "source": (
+            "hash_bound_official_calendar_cache"
+            if resolved_cache is not None
+            and all(
+                str(item.get("mode", ""))
+                == "hash_bound_official_calendar_cache"
+                for item in selected_calendar_evidence.values()
+            )
+            else "twstock_db_market_indices_evidence"
+        ),
         "database_path": str(resolved_database),
+        "calendar_cache_path": (
+            None if resolved_cache is None else str(resolved_cache)
+        ),
+        "temporary_closure_path": (
+            None
+            if resolved_temporary_closure is None
+            else str(resolved_temporary_closure)
+        ),
         "allow_online_probe": False,
         "range_start": range_start.isoformat(),
         "range_end": target_date.isoformat(),
         "selected_previous_trading_date": previous_date.isoformat(),
+        "selected_calendar_evidence": selected_calendar_evidence,
+        "calendar_custody": (
+            None
+            if custody_snapshot is None
+            else {
+                "mode": "hash_bound_official_calendar_cache",
+                "calendar_years": list(calendar_years),
+                "file_hashes": dict(sorted(custody_snapshot.items())),
+                "mid_read_revalidation": True,
+                "db_fallback_allowed": False,
+            }
+        ),
         "days": days,
     }
     evidence = {
@@ -860,6 +1009,65 @@ def _load_calendar_evidence(
         "evidence_hash": _sha256_json(evidence_without_hash),
     }
     return previous_date.isoformat(), evidence
+
+
+def _calendar_custody_snapshot(
+    provider: OfficialTradingCalendar,
+    *,
+    calendar_years: Sequence[int],
+) -> dict[str, str]:
+    """Hash every explicit calendar/closure candidate in the bounded read.
+
+    ``OfficialTradingCalendar`` caches a validated annual schedule in memory.
+    That is useful for bounded reads, but it also means a file can be replaced
+    after the first validation without changing the rows returned by the rest
+    of the scan.  Keeping the candidate path set and exact bytes hash lets the
+    repair producer reject that TOCTOU case before it publishes derived values.
+    """
+
+    candidate_paths: set[Path] = set()
+    for calendar_year in calendar_years:
+        candidates = provider._cache_candidates(calendar_year)
+        if not candidates:
+            raise ValueError(
+                "official calendar cache is unavailable during bounded read: "
+                + str(calendar_year)
+            )
+        candidate_paths.update(path.resolve() for path in candidates)
+    candidate_paths.update(
+        path.resolve() for path in provider._temporary_closure_candidates()
+    )
+    snapshot: dict[str, str] = {}
+    for path in sorted(candidate_paths, key=lambda item: str(item)):
+        try:
+            raw = path.read_bytes()
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                "official calendar custody cannot be read during bounded read"
+            ) from exc
+        snapshot[str(path)] = _sha256(raw)
+    return snapshot
+
+
+def _assert_calendar_custody_unchanged(
+    provider: OfficialTradingCalendar,
+    *,
+    calendar_years: Sequence[int],
+    expected: Mapping[str, str],
+) -> None:
+    """Fail closed if the explicit cache changed during the bounded read."""
+
+    try:
+        current = _calendar_custody_snapshot(
+            provider,
+            calendar_years=calendar_years,
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "official calendar custody changed during bounded read"
+        ) from exc
+    if current != dict(expected):
+        raise ValueError("official calendar custody changed during bounded read")
 
 
 def _select_close_pair(

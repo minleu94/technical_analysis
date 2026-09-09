@@ -21,13 +21,22 @@ def test_scheduler_registration_probe_is_query_only_and_redacts_raw_output() -> 
         calls.append((command, kwargs))
         task_name = command[3]
         wrapper = repo_root / TASK_WRAPPER_PATHS[task_name]
+        spec = next(item for item in EXPECTED_TASKS if item["name"] == task_name)
+        schedule_parts = spec["schedule"].split()
+        schedule_lines = [
+            f"Schedule Type: {schedule_parts[0].title()}\n",
+            f"Start Time: {schedule_parts[-1]}\n",
+        ]
+        if schedule_parts[0].lower() == "weekly":
+            schedule_lines.append(f"Days: {schedule_parts[1]}\n")
         return SimpleNamespace(
             returncode=0,
             stdout=(
                 f"TaskName: \\{task_name}\n"
                 f"Task To Run: cmd.exe /c \"{wrapper}\"\n"
-                "Run As User: private-user\n"
-                "Last Result: 0\n"
+                + "".join(schedule_lines)
+                + "Run As User: private-user\n"
+                + "Last Result: 0\n"
             ),
             stderr="",
         )

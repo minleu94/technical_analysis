@@ -15,4 +15,11 @@ set "PYTHONIOENCODING=utf-8"
 rem 盤後只重新建立 handoff 並讀取 08:30 前 archive；Python 入口不接受
 rem decision date/clock override，也不重新抓取同一自然日的 HTTP source。
 "%PYTHON%" "%REPO_ROOT%\scripts\scheduled\run_formal_pit_sidecar_postcutoff.py"
-exit /b %ERRORLEVEL%
+set "SIDECAR_EXIT=%ERRORLEVEL%"
+
+rem 同一個既有 18:00 Pacific task 接續執行 Paper session-open source
+rem capture；capture 失敗須使 task 顯示 degraded，避免 EOD 讀不到同次來源。
+"%PYTHON%" "%REPO_ROOT%\scripts\scheduled\run_paper_event_source_capture_daily.py"
+set "CAPTURE_EXIT=%ERRORLEVEL%"
+if not "%CAPTURE_EXIT%"=="0" exit /b %CAPTURE_EXIT%
+exit /b %SIDECAR_EXIT%

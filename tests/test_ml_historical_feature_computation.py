@@ -79,3 +79,27 @@ def test_missing_close_inside_window_is_not_compressed_into_a_different_horizon(
 
     assert dict(row.values)["close_to_ma_20d_bp"] is None
     assert dict(row.values)["trailing_volatility_20d_bp"] is None
+    assert dict(row.values)["stock_return_20d_bp"] is None
+
+
+def test_three_day_price_gap_is_consumed_as_a_feature_window_break() -> None:
+    snapshot = _snapshot()
+    prices = list(snapshot.prices)
+    prices[-2] = replace(
+        prices[-2],
+        open_price=None,
+        high_price=None,
+        low_price=None,
+        close_price=None,
+    )
+
+    row = HistoricalFeatureBuilder().compute(
+        replace(snapshot, prices=tuple(prices)),
+        industry_index_name_by_symbol={"2330": "半導體類指數"},
+    )[0]
+    values = dict(row.values)
+
+    # The latest valid day must not use day[-3] as a synthetic prior day.
+    assert values["stock_return_1d_bp"] is None
+    assert values["close_to_ma_5d_bp"] is None
+    assert values["volume_ratio_5d_bp"] is None

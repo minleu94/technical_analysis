@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from datetime import date, datetime, timezone
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any, Sequence
@@ -27,7 +28,9 @@ from data_module.official_calendar_bundle import (  # noqa: E402
     fetch_network_responses,
     load_fixture_response,
     write_candidate_bundle,
+    write_raw_response_evidence,
 )
+from data_module.prospective_formal_clock import payload_hash  # noqa: E402
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -54,6 +57,11 @@ def _parser() -> argparse.ArgumentParser:
         help="明確允許對缺少的官方年度／月份各發出一次 bounded GET。",
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--raw-output-dir",
+        type=Path,
+        help="保存當次 exact HTTP bytes/metadata 的 TEMP 目錄；省略時使用 <output stem>_raw。",
+    )
     return parser
 
 
@@ -114,6 +122,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             network_enabled=fetched,
             captured_at=datetime.now(timezone.utc),
         )
+        output_path = args.output.expanduser().resolve()
+        if output_path.exists():
+            raise OfficialCalendarBundleError(
+                "candidate bundle output already exists; choose a new path"
+            )
+        raw_output_dir = (
+            args.raw_output_dir
+            if args.raw_output_dir is not None
+            else output_path.with_name(f"{output_path.stem}_raw")
+        )
+        raw_evidence = write_raw_response_evidence(
+            raw_output_dir,
+            {
+                **{f"twse:{year}": response for year, response in twse.items()},
+                **{f"tpex:{month}": response for month, response in tpex.items()},
+            },
+        )
+        raw_manifest_path = Path(str(raw_evidence["manifest_path"])).resolve()
+        bundle["raw_evidence"] = {
+            "schema_version": raw_evidence["schema_version"],
+            "manifest_path": os.path.relpath(
+                raw_manifest_path,
+                start=output_path.parent,
+            ).replace("\\", "/"),
+            "manifest_file_hash": raw_evidence["manifest_file_hash"],
+            "manifest_hash": raw_evidence["manifest_hash"],
+            "entry_count": raw_evidence["entry_count"],
+        }
+        bundle_body = dict(bundle)
+        bundle_body.pop("bundle_hash", None)
+        bundle["bundle_hash"] = payload_hash(bundle_body)
         file_hash = write_candidate_bundle(args.output, bundle)
     except (OSError, ValueError, OfficialCalendarBundleError) as error:
         _print_blocked(f"{type(error).__name__}: {error}")
@@ -129,6 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "network_enabled": bundle["network_enabled"],
                 "bundle_hash": bundle["bundle_hash"],
                 "file_hash": file_hash,
+                "raw_evidence": bundle["raw_evidence"],
                 "candidate_only": True,
                 "formal_clock_created": False,
                 "formal_oos_allowed": False,

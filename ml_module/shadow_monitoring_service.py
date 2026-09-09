@@ -131,16 +131,19 @@ class ShadowModelMonitoringService:
         event_ids = tuple(
             _event_id(model_id, created_at, reason, event_type) for event_type in event_types
         )
-        for event_id, event_type in zip(event_ids, event_types):
-            self._lifecycle_registry.append(
-                ModelLifecycleEvent(
-                    event_id=event_id,
-                    model_id=model_id,
-                    event_type=event_type,
-                    created_at=created_at,
-                    reason=reason,
-                )
+        events = tuple(
+            ModelLifecycleEvent(
+                event_id=event_id,
+                model_id=model_id,
+                event_type=event_type,
+                created_at=created_at,
+                reason=reason,
             )
+            for event_id, event_type in zip(event_ids, event_types)
+        )
+        if len(events) != 2:
+            raise ValueError("shadow monitoring lifecycle action requires an event pair")
+        self._lifecycle_registry.append_pair((events[0], events[1]))
         return event_ids
 
 

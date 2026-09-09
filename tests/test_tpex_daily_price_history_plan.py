@@ -67,3 +67,33 @@ def test_tpex_daily_price_history_plan_reports_missing_source_date(tmp_path):
     assert plan.candidate_insert_count == 0
     assert plan.failed_dates == ("20260615",)
 
+
+def test_tpex_daily_price_history_plan_uses_official_calendar_for_holiday(
+    tmp_path,
+):
+    db_file = tmp_path / "twstock.db"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            'CREATE TABLE daily_prices ("日期" TEXT, "證券代號" TEXT, "收盤價" REAL, PRIMARY KEY ("證券代號", "日期"))'
+        )
+
+    class _Calendar:
+        def require_trading_days_in_range(self, start_date, end_date, **kwargs):
+            return [
+                {"date_str": "2026-04-06", "is_trading_day": False},
+                {"date_str": "2026-04-07", "is_trading_day": True},
+            ]
+
+    requested = []
+    plan = build_tpex_daily_price_history_plan(
+        db_file=db_file,
+        start_date="2026-04-06",
+        end_date="2026-04-07",
+        fetch_rows_for_date=lambda date_key: requested.append(date_key) or [],
+        calendar=_Calendar(),
+    )
+
+    assert plan.date_count == 1
+    assert requested == ["20260407"]
+    assert plan.failed_dates == ("20260407",)
+

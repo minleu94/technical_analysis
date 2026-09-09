@@ -12,8 +12,10 @@ from data_module.official_calendar_bundle import (
     OfficialCalendarBundleError,
     build_official_calendar_bundle,
     fetch_network_responses,
+    hash_response_bytes,
     load_fixture_response,
     write_candidate_bundle,
+    write_raw_response_evidence,
 )
 from scripts.capture_official_calendar_bundle import main
 
@@ -133,6 +135,8 @@ def test_fixture_loader_uses_raw_file_hash_and_official_source(tmp_path: Path) -
         "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule?queryYear=115"
     )
     assert response.source_hash.startswith("sha256:")
+    assert response.raw_bytes == raw
+    assert response.source_hash == hash_response_bytes(raw)
 
 
 def test_network_fetch_is_bounded_and_hashes_response() -> None:
@@ -153,6 +157,13 @@ def test_network_fetch_is_bounded_and_hashes_response() -> None:
     assert calls[1][1] == {"ym": "202609", "lang": "zh-tw"}
     assert twse[2026].source_hash == "sha256:" + hashlib.sha256(b"twse-raw").hexdigest()
     assert tpex["202609"].source_hash == "sha256:" + hashlib.sha256(b"tpex-raw").hexdigest()
+    assert twse[2026].raw_bytes == b"twse-raw"
+    assert tpex["202609"].raw_bytes == b"tpex-raw"
+    assert twse[2026].metadata["request_params"] == {"queryYear": "115"}  # type: ignore[index]
+    assert tpex["202609"].metadata["request_params"] == {  # type: ignore[index]
+        "ym": "202609",
+        "lang": "zh-tw",
+    }
 
 
 def test_cli_fixture_capture_is_create_only_and_candidate_only(tmp_path: Path) -> None:
@@ -182,6 +193,15 @@ def test_cli_fixture_capture_is_create_only_and_candidate_only(tmp_path: Path) -
     assert payload["candidate_only"] is True
     assert payload["formal_clock_created"] is False
     assert payload["network_enabled"] is False
+    assert payload["raw_evidence"]["entry_count"] == 2
+    raw_manifest = output.parent / payload["raw_evidence"]["manifest_path"]
+    manifest = json.loads(raw_manifest.read_text(encoding="utf-8"))
+    assert manifest["entry_count"] == 2
+    for entry in manifest["entries"]:
+        raw_path = raw_manifest.parent / entry["raw_file"]
+        assert hash_response_bytes(raw_path.read_bytes()) == entry["raw_file_hash"]
+        metadata_path = raw_manifest.parent / entry["metadata_file"]
+        assert metadata_path.is_file()
     assert main(
         [
             "--start-date",
@@ -225,3 +245,31 @@ def test_candidate_writer_rejects_non_temp_path(tmp_path: Path) -> None:
     )
     with pytest.raises(OfficialCalendarBundleError, match="TEMP"):
         write_candidate_bundle(Path.cwd() / "candidate-outside-test.json", bundle)
+
+
+def test_raw_evidence_writer_rejects_missing_bytes_instead_of_reserializing(
+    tmp_path: Path,
+) -> None:
+    twse, _ = _responses()
+    with pytest.raises(OfficialCalendarBundleError, match="lacks captured raw bytes"):
+        write_raw_response_evidence(tmp_path / "raw", {"twse:2026": twse[2026]})  # type: ignore[arg-type]
+
+
+def test_raw_evidence_manifest_keeps_exact_bytes_and_metadata(tmp_path: Path) -> None:
+    raw = b'{"exact": [1, 2], "whitespace": true}\r\n'
+    from data_module.official_calendar_bundle import CapturedCalendarResponse
+
+    response = CapturedCalendarResponse(
+        kind="twse",
+        key="2026",
+        source="https://example.invalid/twse",
+        source_hash=hash_response_bytes(raw),
+        payload={"exact": [1, 2], "whitespace": True},
+        raw_bytes=raw,
+        metadata={"http_status": 200, "request_params": {"queryYear": "115"}},
+    )
+    result = write_raw_response_evidence(tmp_path / "raw", {"twse:2026": response})
+    raw_path = tmp_path / "raw" / "twse_2026.response.bin"
+    assert raw_path.read_bytes() == raw
+    assert result["entry_count"] == 1
+    assert result["entries"][0]["raw_file_hash"] == hash_response_bytes(raw)  # type: ignore[index]

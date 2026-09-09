@@ -8,6 +8,7 @@ sector history，也不改變 formal promotion、alpha 或 broker gate。
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -187,6 +188,108 @@ def _maintenance_lock_state(
     ):
         return "verified", owner_pid
     return "mismatched", owner_pid
+
+
+def _direct_child_stage_projection(
+    training_output_dir: Path,
+    *,
+    maintenance_lock_state: str,
+) -> dict[str, Any]:
+    """Project the real child stage into the scheduled status read model.
+
+    The scheduled launcher can remain alive while a child has not started, so
+    its own PID is never treated as evidence that Direct or OOC computation
+    began.  ``execution_started`` therefore requires both a verified
+    maintainer lock and a currently observable child command matching the
+    stage recorded by ``v3_refresh_chain_status.json``.  Completion is a
+    separate, stricter projection from the inner chain's complete payload.
+    """
+
+    status_path = training_output_dir.resolve() / "v3_refresh_chain_status.json"
+    result: dict[str, Any] = {
+        "direct_child_stage_source": str(status_path),
+        "direct_child_stage": None,
+        "direct_child_stage_projection": "unavailable",
+        "direct_child_custody_verified": False,
+        "direct_child_process_ids": {},
+        "execution_started": False,
+        "fit_completion_verified": False,
+    }
+    try:
+        payload = _read_json(status_path)
+    except (FileNotFoundError, OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError):
+        return result
+
+    stage = str(payload.get("status") or "").strip() or None
+    result["direct_child_stage"] = stage
+    process_ids: dict[str, int] = {}
+    for label, key in (
+        ("direct", "direct_process_id"),
+        ("ooc_helper", "ooc_process_id"),
+        ("release", "release_process_id"),
+    ):
+        value = payload.get(key)
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed > 0:
+            process_ids[label] = parsed
+    result["direct_child_process_ids"] = process_ids
+
+    custody: dict[str, bool] = {}
+    expected_fragments = {
+        "direct": "build_portfolio_ml_direct_numeric_store.py",
+        "ooc_helper": "continue_ml_direct_ooc_after_store.py",
+        "release": "continue_ml_release_after_ooc.py",
+    }
+    for label, process_id in process_ids.items():
+        try:
+            process = maintenance.psutil.Process(process_id)
+            command = " ".join(process.cmdline()).casefold()
+        except (
+            maintenance.psutil.NoSuchProcess,
+            maintenance.psutil.ZombieProcess,
+            maintenance.psutil.AccessDenied,
+            OSError,
+        ):
+            custody[label] = False
+            continue
+        custody[label] = (
+            expected_fragments[label].casefold() in command
+            and str(training_output_dir.resolve()).casefold() in command
+        )
+    verified_labels = tuple(label for label, verified in custody.items() if verified)
+    result["direct_child_custody_verified"] = bool(verified_labels)
+    result["direct_child_custody_labels"] = list(verified_labels)
+
+    stage_started = stage in {
+        "direct_v3_build_starting",
+        "direct_v3_build_running",
+        "v3_downstream_started",
+        "complete",
+        "blocked",
+    }
+    if maintenance_lock_state == "verified" and stage_started and verified_labels:
+        result["execution_started"] = True
+        result["direct_child_stage_projection"] = "verified_running"
+    elif stage in {"complete", "blocked"}:
+        result["direct_child_stage_projection"] = "terminal"
+    elif stage is not None:
+        result["direct_child_stage_projection"] = "observed_unverified"
+
+    ooc_status = payload.get("ooc_status")
+    release_status = payload.get("release_status")
+    result["fit_completion_verified"] = bool(
+        stage == "complete"
+        and isinstance(ooc_status, Mapping)
+        and ooc_status.get("status") == "complete"
+        and isinstance(release_status, Mapping)
+        and release_status.get("status") == "complete"
+    )
+    return result
 
 
 def resolve_latest_raw_dataset(output_root: Path) -> tuple[Path, str]:
@@ -460,6 +563,10 @@ def _run_maintainer_with_heartbeat(
         if return_code is not None:
             return int(return_code)
         lock_state, owner_pid = _maintenance_lock_state(training_output_dir)
+        child_projection = _direct_child_stage_projection(
+            training_output_dir,
+            maintenance_lock_state=lock_state,
+        )
         _write_status(
             status_path,
             {
@@ -468,6 +575,7 @@ def _run_maintainer_with_heartbeat(
                 "heartbeat_at": datetime.now(timezone.utc).isoformat(),
                 "maintenance_lock_state": lock_state,
                 "maintenance_owner_process_id": owner_pid,
+                **child_projection,
             },
         )
         time.sleep(poll_seconds)
@@ -626,6 +734,10 @@ def main(argv: list[str] | None = None) -> int:
         final_lock_state, final_owner_pid = _maintenance_lock_state(
             training_output_dir
         )
+        child_projection = _direct_child_stage_projection(
+            training_output_dir,
+            maintenance_lock_state=final_lock_state,
+        )
         _write_status(
             status_path,
             {
@@ -637,6 +749,7 @@ def main(argv: list[str] | None = None) -> int:
                 ],
                 "maintenance_lock_state": final_lock_state,
                 "maintenance_owner_process_id": final_owner_pid,
+                **child_projection,
                 "finished_at": datetime.now(timezone.utc).isoformat(),
             },
         )

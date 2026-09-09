@@ -40,8 +40,8 @@ def test_dedicated_paper_portfolio_registration_is_one_task_and_dst_guarded() ->
         f"returncode={result.returncode}\nstdout={result.stdout}\nstderr={result.stderr}"
     )
     assert PAPER_TASK in result.stdout
-    assert "Schedule: DAILY 16:30 Pacific local time" in result.stdout
-    assert "Taipei mapping: 07:30 PDT / 08:30 PST" in result.stdout
+    assert "Schedule: DAILY 16:15 Pacific local time" in result.stdout
+    assert "Taipei mapping: 07:15 PDT / 08:15 PST" in result.stdout
     assert "adapter waits for Taipei 08:30" in result.stdout
     assert "Execution policy: existing principal/settings preserved" in result.stdout
     assert "run_paper_portfolio_daily.cmd" in result.stdout
@@ -82,7 +82,7 @@ def test_dedicated_paper_portfolio_registration_register_calls_only_paper_task(
     )
     assert (
         '/Create /TN "baldr-paper-portfolio-daily" '
-        "/SC DAILY /ST 16:30"
+        "/SC DAILY /ST 16:15"
     ) in result.stdout
     create_call = next(
         line for line in result.stdout.splitlines() if "/Create /TN" in line
@@ -114,7 +114,7 @@ def test_existing_paper_portfolio_task_uses_change_and_preserves_other_settings(
     )
     assert (
         '/Change /TN "baldr-paper-portfolio-daily" '
-        "/ST 16:30"
+        "/ST 16:15"
     ) in result.stdout
     assert '/Create /TN "baldr-paper-portfolio-daily"' not in result.stdout
     assert "Existing task found; updating only trigger and action." in result.stdout

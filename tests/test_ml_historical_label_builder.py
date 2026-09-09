@@ -7,6 +7,9 @@ from data_module.ml_historical_snapshot_provider import (
     HistoricalIndexObservation,
     HistoricalPriceObservation,
 )
+from data_module.ml_price_availability_contract import (
+    build_price_unavailable_research_contract,
+)
 from ml_module.feature_registry import CORE_LONG_HISTORY_FEATURE_REGISTRY
 from ml_module.historical_contracts import HistoricalFeatureRow
 from ml_module.historical_label_builder import (
@@ -96,6 +99,63 @@ def test_uses_market_calendar_and_does_not_compress_a_missing_stock_day() -> Non
 
     assert result.labels == ()
     assert result.excluded_diagnostics == {"price_gap_in_label_window": 1}
+
+
+def test_price_unavailable_contract_blocks_label_window_without_bridging() -> None:
+    contract = build_price_unavailable_research_contract(
+        symbol="2330",
+        date_iso="2024-01-10",
+        raw_row={
+            "symbol": "2330",
+            "open": "--",
+            "high": "--",
+            "low": "--",
+            "close": "--",
+            "volume": 100,
+        },
+        feature_window_dates=("2024-01-10",),
+        label_window_dates=tuple(
+            f"2024-01-{day:02d}" for day in range(1, 22)
+        ),
+    )
+    result = HistoricalLabelBuilder().build(
+        feature_rows=(_feature("2330"),),
+        prices=_prices("2330", 2),
+        market=_market(),
+        label_as_of="2024-01-21",
+        corporate_action_by_row=_gates("2330"),
+        mode="strict",
+        price_unavailable_contracts=(contract,),
+    )
+
+    assert result.labels == ()
+    assert result.excluded_diagnostics == {
+        "price_unavailable_in_label_window": 1
+    }
+
+
+def test_label_builder_auto_contracts_in_row_price_gap() -> None:
+    prices = list(_prices("2330", 2))
+    prices[9] = replace(
+        prices[9],
+        open_price=None,
+        high_price=None,
+        low_price=None,
+        close_price=None,
+    )
+    result = HistoricalLabelBuilder().build(
+        feature_rows=(_feature("2330"),),
+        prices=tuple(prices),
+        market=_market(),
+        label_as_of="2024-01-21",
+        corporate_action_by_row=_gates("2330"),
+        mode="strict",
+    )
+
+    assert result.labels == ()
+    assert result.excluded_diagnostics == {
+        "price_unavailable_in_label_window": 1
+    }
 
 
 def test_immature_window_is_diagnostic_and_does_not_read_after_label_as_of() -> None:

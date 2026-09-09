@@ -22,7 +22,13 @@ set "ML_PROMOTION_AUTHORITY_TASK=baldr-ml-promotion-authority-daily"
 set "DECISION_EVIDENCE_TASK=baldr-decision-evidence-capture-daily"
 set "PAPER_PORTFOLIO_TASK=baldr-paper-portfolio-daily"
 set "PAPER_EXECUTION_TASK=baldr-paper-execution-eod-replay-daily"
+set "PIT_PREOPEN_TASK=baldr-pit-sector-membership-preopen-capture-daily"
+set "FORMAL_PIT_SIDECAR_TASK=baldr-formal-pit-sidecar-postcutoff-daily"
 set "FORMAL_INPUT_TASK=baldr-formal-input-producer-daily"
+rem The forward task uses a pinned UTF-16 XML definition and is intentionally
+rem excluded from this generic aggregate registration path.  Its dedicated
+rem task registration plan is baldr-ml-allocation-forward-daily and its action
+rem is scripts\scheduled\run_ml_allocation_forward_daily.cmd.
 set "UPDATE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_daily_data_update_quick.cmd"
 set "OFFICIAL_EVENTS_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_official_market_event_backfill.cmd"
 set "FRESH_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_daily_data_freshness_check.cmd"
@@ -36,6 +42,8 @@ set "ML_PROMOTION_AUTHORITY_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_ml_promotio
 set "DECISION_EVIDENCE_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_decision_evidence_capture.cmd"
 set "PAPER_PORTFOLIO_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_paper_portfolio_daily.cmd"
 set "PAPER_EXECUTION_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_paper_execution_daily_isolated.cmd"
+set "PIT_PREOPEN_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_pit_sector_membership_preopen_capture.cmd"
+set "FORMAL_PIT_SIDECAR_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_formal_pit_sidecar_postcutoff.cmd"
 set "FORMAL_INPUT_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_formal_input_producer_daily.cmd"
 set "UPDATE_ACTION=cmd.exe /c ""%UPDATE_SCRIPT%"""
 set "OFFICIAL_EVENTS_ACTION=cmd.exe /c ""%OFFICIAL_EVENTS_SCRIPT%"""
@@ -50,6 +58,8 @@ set "ML_PROMOTION_AUTHORITY_ACTION=cmd.exe /c ""%ML_PROMOTION_AUTHORITY_SCRIPT%"
 set "DECISION_EVIDENCE_ACTION=cmd.exe /c ""%DECISION_EVIDENCE_SCRIPT%"""
 set "PAPER_PORTFOLIO_ACTION=cmd.exe /c ""%PAPER_PORTFOLIO_SCRIPT%"""
 set "PAPER_EXECUTION_ACTION=cmd.exe /c ""%PAPER_EXECUTION_SCRIPT%"""
+set "PIT_PREOPEN_ACTION=cmd.exe /c ""%PIT_PREOPEN_SCRIPT%"""
+set "FORMAL_PIT_SIDECAR_ACTION=cmd.exe /c ""%FORMAL_PIT_SIDECAR_SCRIPT%"""
 set "FORMAL_INPUT_ACTION=cmd.exe /c ""%FORMAL_INPUT_SCRIPT%"""
 set "WEEKLY_TASK=baldr-v2-2-weekly-collection"
 set "WEEKLY_SCRIPT=%REPO_ROOT%\scripts\scheduled\run_v2_2_weekly_collection.cmd"
@@ -59,9 +69,6 @@ if /I "%MODE%"=="dryrun" set "CHECK_WEEKLY=1"
 if /I "%MODE%"=="register-all" set "CHECK_WEEKLY=1"
 
 echo Mode: %MODE%
-echo Task: %PAPER_EXECUTION_TASK%
-echo   Schedule: DAILY 00:05
-echo   Action: %PAPER_EXECUTION_ACTION%
 echo Task: %UPDATE_TASK%
 echo   Schedule: DAILY 04:20
 echo   Action: %UPDATE_ACTION%
@@ -74,9 +81,6 @@ echo   Action: %FRESH_ACTION%
 echo Task: %ML_RAW_PIT_REFRESH_TASK%
 echo   Schedule: DAILY 05:05
 echo   Action: %ML_RAW_PIT_REFRESH_ACTION%
-echo Task: %ML_DIRECT_CHAIN_MAINTAINER_TASK%
-echo   Schedule: DAILY 05:30
-echo   Action: %ML_DIRECT_CHAIN_MAINTAINER_ACTION%
 echo Task: %RECOMMENDATION_TASK%
 echo   Schedule: DAILY 05:10
 echo   Action: %RECOMMENDATION_ACTION%
@@ -95,13 +99,31 @@ echo   Action: %ML_COPILOT_ACTION%
 echo Task: %DECISION_EVIDENCE_TASK%
 echo   Schedule: DAILY 05:25
 echo   Action: %DECISION_EVIDENCE_ACTION%
+echo Task: %ML_DIRECT_CHAIN_MAINTAINER_TASK%
+echo   Schedule: DAILY 05:30
+echo   Action: %ML_DIRECT_CHAIN_MAINTAINER_ACTION%
+echo Task: %PAPER_EXECUTION_TASK%
+echo   Schedule: DAILY 06:00 Pacific local time (after update/freshness dependency gate)
+echo   Taipei mapping: 21:00 PDT / 22:00 PST
+echo   Action: %PAPER_EXECUTION_ACTION%
+echo Task: %PIT_PREOPEN_TASK%
+echo   Schedule: DAILY 16:00 Pacific local time
+echo   Taipei mapping: 07:00 PDT / 08:00 PST; both before 08:30
+echo   Action: %PIT_PREOPEN_ACTION%
 echo Task: %PAPER_PORTFOLIO_TASK%
-echo   Schedule: DAILY 16:30 Pacific local time
-echo   Taipei mapping: 07:30 PDT / 08:30 PST; adapter waits for Taipei 08:30
+echo   Schedule: DAILY 16:15 Pacific local time
+echo   Taipei mapping: 07:15 PDT / 08:15 PST; adapter waits for Taipei 08:30
 echo   Action: %PAPER_PORTFOLIO_ACTION%
+echo Task: %FORMAL_PIT_SIDECAR_TASK%
+echo   Schedule: DAILY 18:00 Pacific local time
+echo   Taipei mapping: 09:00 PDT / 10:00 PST; both after 08:30
+echo   Action: %FORMAL_PIT_SIDECAR_ACTION%
 echo Task: %FORMAL_INPUT_TASK%
 echo   Schedule: DAILY 21:25
 echo   Action: %FORMAL_INPUT_ACTION%
+echo Task: baldr-ml-allocation-forward-daily
+echo   Schedule: DAILY 16:15 Pacific (dedicated XML registration; aggregate leaves it unchanged)
+echo   Action: cmd.exe /c "scripts\scheduled\run_ml_allocation_forward_daily.cmd"
 if /I "%MODE%"=="dryrun" (
   echo Task: %WEEKLY_TASK%
   echo   Schedule: WEEKLY SUN 18:00
@@ -134,6 +156,8 @@ call :check_wrapper "%ML_COPILOT_SCRIPT%"
 call :check_wrapper "%DECISION_EVIDENCE_SCRIPT%"
 call :check_wrapper "%PAPER_PORTFOLIO_SCRIPT%"
 call :check_wrapper "%PAPER_EXECUTION_SCRIPT%"
+call :check_wrapper "%PIT_PREOPEN_SCRIPT%"
+call :check_wrapper "%FORMAL_PIT_SIDECAR_SCRIPT%"
 call :check_wrapper "%FORMAL_INPUT_SCRIPT%"
 if "%CHECK_WEEKLY%"=="1" call :check_wrapper "%WEEKLY_SCRIPT%"
 if "%WRAPPER_MISSING%"=="1" (
@@ -184,7 +208,14 @@ rem principal/settings；不存在時才由它建立，不在 aggregate 路徑�
 call "%SCRIPT_DIR%register_paper_portfolio_task.cmd" register
 if errorlevel 1 exit /b %ERRORLEVEL%
 
-schtasks.exe /Create /TN "%PAPER_EXECUTION_TASK%" /SC DAILY /ST 00:05 /TR "%PAPER_EXECUTION_ACTION%" /F
+rem Paper EOD dedicated wrapper gates same-day update/freshness and changes
+rem only the trigger/action on an existing task, preserving its principal/settings.
+call "%SCRIPT_DIR%register_paper_execution_task.cmd" register
+if errorlevel 1 exit /b %ERRORLEVEL%
+
+rem PIT preopen/sidecar are existing daily tasks owned by their dedicated
+rem registration path; it preserves each task's principal and power settings.
+call "%SCRIPT_DIR%register_pit_sector_handoff_tasks.cmd" register
 if errorlevel 1 exit /b %ERRORLEVEL%
 
 schtasks.exe /Create /TN "%FORMAL_INPUT_TASK%" /SC DAILY /ST 21:25 /TR "%FORMAL_INPUT_ACTION%" /F
@@ -222,6 +253,10 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%PAPER_PORTFOLIO_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%PAPER_EXECUTION_TASK%" /V /FO LIST
+if errorlevel 1 exit /b %ERRORLEVEL%
+schtasks.exe /Query /TN "%PIT_PREOPEN_TASK%" /V /FO LIST
+if errorlevel 1 exit /b %ERRORLEVEL%
+schtasks.exe /Query /TN "%FORMAL_PIT_SIDECAR_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%
 schtasks.exe /Query /TN "%FORMAL_INPUT_TASK%" /V /FO LIST
 if errorlevel 1 exit /b %ERRORLEVEL%

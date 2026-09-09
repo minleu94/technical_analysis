@@ -2,7 +2,12 @@ from datetime import date
 import sqlite3
 from unittest.mock import MagicMock, patch
 
-from data_module.official_trading_calendar import OfficialTradingCalendar
+import pytest
+
+from data_module.official_trading_calendar import (
+    OfficialTradingCalendar,
+    OfficialTradingCalendarError,
+)
 
 
 def test_official_trading_calendar_uses_market_indices_evidence(tmp_path):
@@ -148,3 +153,39 @@ def test_malformed_official_schedule_fails_closed(tmp_path):
         ).is_official_trading_day(date(2026, 7, 29))
 
     assert result == (None, "twse_holiday_schedule_unavailable")
+
+
+def test_require_trading_days_fails_closed_on_unresolved_calendar(tmp_path):
+    with patch(
+        "data_module.official_trading_calendar.safe_request",
+        side_effect=RuntimeError("service unavailable"),
+    ):
+        calendar = OfficialTradingCalendar(tmp_path / "missing.db")
+        with pytest.raises(OfficialTradingCalendarError):
+            calendar.require_trading_days_in_range(
+                date(2026, 7, 29),
+                date(2026, 7, 30),
+            )
+
+
+def test_recent_official_sessions_skip_holiday_and_weekend(tmp_path):
+    with patch(
+        "data_module.official_trading_calendar.safe_request",
+        return_value=_official_response(
+            [
+                {
+                    "Name": "和平紀念日補假",
+                    "Date": "1150302",
+                    "Description": "停止交易。",
+                }
+            ]
+        ),
+    ):
+        calendar = OfficialTradingCalendar(tmp_path / "missing.db")
+        records = calendar.get_recent_official_trading_days(
+            date(2026, 3, 2),
+            1,
+        )
+
+    assert [record["date_str"] for record in records] == ["2026-02-27"]
+    assert records[0]["evidence"]["reason_code"] == "twse_holiday_schedule_open"

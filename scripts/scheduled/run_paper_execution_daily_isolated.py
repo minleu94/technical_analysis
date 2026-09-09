@@ -16,7 +16,7 @@ observable discovery blocker，不把失敗視為休市或正式 credit。
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -36,6 +36,16 @@ from data_module.paper_daily_execution_producer import (  # noqa: E402
     PaperExecutionPaths,
     persist_operational_receipt,
     run_paper_execution_daily_from_queue,
+)
+from data_module.paper_event_source_capture import (  # noqa: E402
+    PaperEventSourceCaptureError,
+    bind_paper_candidate_file_to_capture,
+    resolve_persisted_twse_event_source_capture_for_recommendation,
+)
+from data_module.formal_runtime_config import (  # noqa: E402
+    FORMAL_RUNTIME_CONFIG_ENV,
+    FormalRuntimeConfigError,
+    load_optional_formal_runtime_config,
 )
 from data_module.official_trading_calendar import OfficialTradingCalendar  # noqa: E402
 from data_module.official_trading_calendar_cache import (  # noqa: E402
@@ -61,6 +71,7 @@ STATE_DB = PAPER_STATE_ROOT / "paper_portfolio.sqlite"
 STATE_SEED_MANIFEST = PAPER_STATE_ROOT / "state_seed_manifest.json"
 MARKET_DB = DEFAULT_DATA_ROOT / "sqlite" / "twstock.db"
 RECOMMENDATION_ROOT = DEFAULT_DATA_ROOT / "output" / "recommendation" / "runs"
+EVENT_CAPTURE_ROOT = OPERATIONAL_ROOT / "event_captures"
 # v2 使用新檔名，保留先前 D state scope manifest 作為歷史證據，避免以
 # 可變覆寫將舊 scope 靜默改成 repository state scope。
 SCOPE_MANIFEST = OPERATIONAL_ROOT / "scope_manifest_v2.json"
@@ -242,6 +253,7 @@ def _expected_scope() -> dict[str, object]:
             "receipt_root": str(_resolved(RECEIPT_ROOT)),
             "ledger_db": str(_resolved(LEDGER_DB)),
             "scope_manifest": str(_resolved(SCOPE_MANIFEST)),
+            "event_capture_root": str(_resolved(EVENT_CAPTURE_ROOT)),
             "ledger_mode": "append_only_research_paper_only",
         },
         "read_only": {
@@ -274,6 +286,7 @@ def _validate_write_scope() -> dict[str, Path]:
     receipt = _resolved(RECEIPT_ROOT)
     ledger = _resolved(LEDGER_DB)
     scope_manifest = _resolved(SCOPE_MANIFEST)
+    event_capture = _resolved(EVENT_CAPTURE_ROOT)
     state = _resolved(STATE_DB)
     state_root = _resolved(PAPER_STATE_ROOT)
 
@@ -308,6 +321,7 @@ def _validate_write_scope() -> dict[str, Path]:
         "receipt_root": receipt,
         "ledger_db": ledger,
         "scope_manifest": scope_manifest,
+        "event_capture_root": event_capture,
     }
     for name, target in write_targets.items():
         if not _is_under(target, operation):
@@ -502,7 +516,343 @@ def _scope_preflight() -> dict[str, object]:
     }
 
 
-def _paths() -> PaperExecutionPaths:
+def _pit_archive_root() -> Path:
+    """Return the repository-owned durable PIT archive root.
+
+    The scheduler resolves one exact manifest below this root and passes its
+    path plus file hash to the Paper producer.  The ML archive consumer still
+    receives the exact manifest; this helper never asks it to choose a latest
+    entry on behalf of the producer.
+    """
+
+    return _resolved(ROOT / "output" / "formal_daily_publications" / "pit_candidate_archive")
+
+
+def _resolve_pit_sector_manifest(
+    observed: datetime,
+) -> tuple[Path | None, str | None, dict[str, object]]:
+    """Select one custody-verified PIT archive for the pending EOD queue.
+
+    Selection is bounded to the durable archive's natural-day entries and is
+    based on the archive consumer's final readback, including ``available_at``.
+    The returned path and manifest hash are frozen inputs for the subsequent
+    queue/producer call; no archive file is copied or rewritten.
+    """
+
+    root = _pit_archive_root()
+    projection: dict[str, object] = {
+        "root": str(root),
+        "mode": "durable_pit_archive_exact_manifest_resolution",
+        "observed_at": observed.isoformat(),
+        "selected": False,
+        "attempts": [],
+    }
+
+    if not root.is_dir() or root.is_symlink():
+        projection["status"] = "archive_root_missing"
+        return None, None, projection
+    local_date = observed.astimezone(TAIPEI).date()
+    try:
+        manifests = sorted(root.glob("*/*/archive_manifest.json"))
+    except OSError as error:
+        projection["status"] = "archive_root_unreadable"
+        projection["reason"] = f"{type(error).__name__}:{error}"
+        return None, None, projection
+    verified: list[tuple[date, datetime, datetime, Path, str, dict[str, object]]] = []
+    for manifest in manifests:
+        attempt: dict[str, object] = {
+            "manifest_path": str(manifest),
+            "selected": False,
+        }
+        try:
+            relative = manifest.resolve().relative_to(root)
+            if (
+                len(relative.parts) != 3
+                or relative.name != "archive_manifest.json"
+                or date.fromisoformat(relative.parts[0]).isoformat() != relative.parts[0]
+            ):
+                raise ValueError("manifest path is outside natural-day archive shape")
+            raw = manifest.read_bytes()
+            payload = json.loads(raw.decode("utf-8"))
+            if not isinstance(payload, Mapping):
+                raise ValueError("archive manifest is not an object")
+            effective = date.fromisoformat(str(payload.get("effective_from")))
+            if effective > local_date:
+                raise ValueError("archive effective_from is after observed Taipei date")
+            # Let the ML consumer validate every archive role, current-code
+            # attestation and immutable raw custody.  The scheduler only
+            # records its returned availability and freezes the exact path.
+            from ml_module.pit_archive_consumer import (  # noqa: PLC0415
+                consume_pit_candidate_archive,
+            )
+
+            file_hash = _file_hash(manifest)
+            consumed = consume_pit_candidate_archive(
+                archive_root=root,
+                manifest_path=manifest,
+                expected_manifest_file_hash=file_hash,
+                decision_at=observed,
+                now=observed,
+            )
+            available_text = consumed.get("available_at")
+            captured_text = consumed.get("captured_at")
+            archived_text = consumed.get("archived_at")
+            if (
+                not isinstance(available_text, str)
+                or not isinstance(captured_text, str)
+                or not isinstance(archived_text, str)
+            ):
+                raise ValueError("archive consumer did not return complete clocks")
+            available_at = datetime.fromisoformat(available_text)
+            captured_at = datetime.fromisoformat(captured_text)
+            archived_at = datetime.fromisoformat(archived_text)
+            if available_at.tzinfo is None or captured_at.tzinfo is None or archived_at.tzinfo is None:
+                raise ValueError("archive clocks must be timezone aware")
+            available_at = available_at.astimezone(timezone.utc)
+            captured_at = captured_at.astimezone(timezone.utc)
+            archived_at = archived_at.astimezone(timezone.utc)
+            attempt.update(
+                {
+                    "status": consumed.get("status"),
+                    "effective_from": effective.isoformat(),
+                    "available_at": available_at.isoformat(),
+                    "captured_at": captured_at.isoformat(),
+                    "archived_at": archived_at.isoformat(),
+                    "manifest_file_hash": file_hash,
+                    "archive_manifest_hash": consumed.get("archive_manifest_hash"),
+                    "current_code_hash_match": consumed.get(
+                        "current_code_hash_match"
+                    ),
+                    "code_hash_compatibility": consumed.get(
+                        "code_hash_compatibility"
+                    ),
+                    "legacy_code_hash_compatibility_verified": consumed.get(
+                        "legacy_code_hash_compatibility_verified"
+                    ),
+                }
+            )
+            verified.append(
+                (
+                    effective,
+                    available_at,
+                    captured_at,
+                    manifest.resolve(),
+                    file_hash,
+                    consumed,
+                )
+            )
+        except Exception as error:  # noqa: BLE001 - one bad archive cannot mask another
+            attempt["status"] = "rejected"
+            attempt["reason"] = f"{type(error).__name__}:{str(error).splitlines()[0][:220]}"
+        attempts = projection["attempts"]
+        if isinstance(attempts, list):
+            attempts.append(attempt)
+    if not verified:
+        projection["status"] = "no_verified_archive"
+        return None, None, projection
+    selected = max(verified, key=lambda item: (item[0], item[1], item[2], str(item[3])))
+    selected_date, selected_available, selected_captured, selected_path, selected_hash, consumed = selected
+    projection.update(
+        {
+            "status": "selected",
+            "selected": True,
+            "manifest_path": str(selected_path),
+            "manifest_file_hash": selected_hash,
+            "archive_manifest_hash": consumed.get("archive_manifest_hash"),
+            "archive_id": consumed.get("archive_id"),
+            "current_code_hash_match": consumed.get("current_code_hash_match"),
+            "code_hash_compatibility": consumed.get("code_hash_compatibility"),
+            "legacy_code_hash_compatibility_verified": consumed.get(
+                "legacy_code_hash_compatibility_verified"
+            ),
+            "effective_from": selected_date.isoformat(),
+            "available_at": selected_available.isoformat(),
+            "captured_at": selected_captured.isoformat(),
+            "archived_at": consumed.get("archived_at"),
+            "row_count": consumed.get("row_count"),
+            "source_ids": consumed.get("source_ids"),
+        }
+    )
+    return selected_path, selected_hash, projection
+
+
+def _validate_runtime_paper_paths(
+    runtime_config: Mapping[str, object] | None,
+) -> None:
+    """確認 active runtime config 與本 wrapper 的 canonical Paper state 相同。"""
+
+    if runtime_config is None:
+        return
+    publication_value = runtime_config.get("publication_paths")
+    if not isinstance(publication_value, Mapping):
+        raise RuntimeError("runtime_config publication_paths missing")
+    expected = {
+        "paper_snapshot": _resolved(STATE_DB),
+        "paper_fill_ledger": _resolved(LEDGER_DB),
+    }
+    for field, expected_path in expected.items():
+        configured = publication_value.get(field)
+        if not isinstance(configured, str) or not configured.strip():
+            raise RuntimeError(f"runtime_config {field} path missing")
+        if _resolved(Path(configured)) != expected_path:
+            raise RuntimeError(
+                f"runtime_config {field} does not match canonical Paper path"
+            )
+
+
+def _paper_event_source_blocked(
+    result: Mapping[str, object],
+    *,
+    execution_date: str,
+    reason: str,
+) -> dict[str, object]:
+    """保留 Paper ledger 結果，但阻止未綁 source 進 Formal。"""
+
+    blocked = dict(result)
+    blocker_value = result.get("blockers")
+    blockers = (
+        [item for item in blocker_value if isinstance(item, str)]
+        if isinstance(blocker_value, list)
+        else []
+    )
+    blockers.append(reason)
+    blocked.update(
+        {
+            "status": "blocked",
+            "blockers": blockers,
+            "retryable": False,
+            "execution_date": execution_date,
+            "execution_event_time_proven": False,
+            "formal_eligible": False,
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "formal_credit": False,
+            "candidate_only": True,
+            "research_only": True,
+            "paper_event_source_binding": {
+                "status": "blocked",
+                "required": True,
+                "formal_eligible": False,
+                "reason": reason,
+            },
+        }
+    )
+    return blocked
+
+
+def _bind_paper_result_to_event_capture(
+    result: Mapping[str, object],
+    *,
+    observed: datetime,
+) -> dict[str, object]:
+    """由 EOD writer 消費同一 recommendation 的 durable event capture。"""
+
+    candidate_value = result.get("candidate_path")
+    recommendation_value = result.get("recommendation")
+    execution_value = result.get("execution_date")
+    if (
+        not isinstance(candidate_value, str)
+        or not candidate_value.strip()
+        or not isinstance(recommendation_value, Mapping)
+        or not isinstance(execution_value, str)
+    ):
+        # Queue waiting/skipped records do not contain a frozen candidate; the
+        # queue receipt remains the source of truth for that state.
+        return dict(result)
+    try:
+        execution_date = date.fromisoformat(execution_value)
+        candidate_path = Path(candidate_value).expanduser().resolve()
+        if not _is_under(candidate_path, _resolved(CANDIDATE_ROOT)):
+            raise PaperEventSourceCaptureError(
+                "Paper candidate path escaped controlled candidate root"
+            )
+        recommendation_path_value = recommendation_value.get("path")
+        if not isinstance(recommendation_path_value, str) or not recommendation_path_value.strip():
+            raise PaperEventSourceCaptureError(
+                "Paper recommendation path missing"
+            )
+        capture = resolve_persisted_twse_event_source_capture_for_recommendation(
+            recommendation_path=Path(recommendation_path_value),
+            execution_date=execution_date,
+            durable_root=EVENT_CAPTURE_ROOT,
+            observed=observed,
+            allowed_durable_root=OPERATIONAL_ROOT,
+        )
+    except (
+        PaperEventSourceCaptureError,
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+    ) as error:
+        return _paper_event_source_blocked(
+            result,
+            execution_date=execution_value,
+            reason=(
+                "paper_event_source_capture_invalid:"
+                f"{type(error).__name__}:{error}"
+            ),
+        )
+    if capture is None:
+        return _paper_event_source_blocked(
+            result,
+            execution_date=execution_value,
+            reason="paper_event_source_capture_missing_durable_manifest",
+        )
+    manifest_value = capture.get("manifest_path")
+    if not isinstance(manifest_value, str) or not manifest_value.strip():
+        return _paper_event_source_blocked(
+            result,
+            execution_date=execution_value,
+            reason="paper_event_source_capture_manifest_path_missing",
+        )
+    bound_path = candidate_path.with_name("paper_execution_candidate_bound.json")
+    try:
+        bound = bind_paper_candidate_file_to_capture(
+            candidate_path,
+            capture_manifest_path=Path(manifest_value),
+            output_path=bound_path,
+            allowed_output_root=_resolved(ROOT / "output"),
+        )
+    except (PaperEventSourceCaptureError, OSError, TypeError, ValueError) as error:
+        return _paper_event_source_blocked(
+            result,
+            execution_date=execution_value,
+            reason=(
+                "paper_event_source_binding_failed:"
+                f"{type(error).__name__}:{error}"
+            ),
+        )
+    merged = {**dict(result), **bound}
+    merged["paper_event_source_binding"] = {
+        "status": "bound",
+        "required": True,
+        "formal_eligible": False,
+        "capture_manifest_path": manifest_value,
+        "capture_manifest_file_hash": capture.get("manifest_file_hash"),
+        "capture_raw_response_hash": capture.get("raw_response_hash"),
+        "recommendation_file_hash": recommendation_value.get("file_hash"),
+        "execution_date": execution_value,
+        "readback_verified": bound.get("bound_candidate_readback_verified") is True,
+        "credit_policy": "formal_credit_remains_false_until_three_source_handoff",
+    }
+    # The binding helper sets formal_consumer_compatible only after rows and
+    # prices are rebuilt from durable raw bytes. Formal credit remains false.
+    merged["formal_credit"] = False
+    merged["formal_ready"] = False
+    return merged
+
+
+def _paths(
+    observed: datetime | None = None,
+    *,
+    sector_resolution: tuple[Path | None, str | None, dict[str, object]] | None = None,
+) -> PaperExecutionPaths:
+    selected = sector_resolution
+    if selected is None:
+        selected = _resolve_pit_sector_manifest(
+            observed or datetime.now(timezone.utc)
+        )
     return PaperExecutionPaths(
         recommendation_json=RECOMMENDATION_ROOT / "__queue_selection__.json",
         state_db=STATE_DB,
@@ -510,6 +860,8 @@ def _paths() -> PaperExecutionPaths:
         output_root=_new_candidate_root(),
         ledger_db=LEDGER_DB,
         controlled_output_root=CANDIDATE_ROOT,
+        sector_membership_path=selected[0],
+        sector_membership_file_hash=selected[1],
     )
 
 
@@ -579,10 +931,72 @@ def _write_scope_blocked_result(
     )
 
 
-def run_isolated() -> dict[str, object]:
-    observed = datetime.now(timezone.utc)
+def run_isolated(*, now: datetime | None = None) -> dict[str, object]:
+    """執行一次完整 EOD writer；``now`` 僅供隔離測試固定觀測時刻。"""
+
+    observed = now.astimezone(timezone.utc) if now is not None else datetime.now(timezone.utc)
+    runtime_config: dict[str, object] | None = None
+    try:
+        runtime_config = load_optional_formal_runtime_config(
+            role="paper_eod_wrapper",
+            observed=observed,
+        )
+    except FormalRuntimeConfigError as error:
+        return {
+            "schema_version": PAPER_EXECUTION_SCHEMA_VERSION,
+            "producer": "scripts.scheduled.run_paper_execution_daily_isolated",
+            "observed_at": observed.isoformat(),
+            "status": "blocked",
+            "blockers": [f"runtime_config_invalid:{error}"],
+            "runtime_config": {
+                "status": "invalid",
+                "environment_variable": FORMAL_RUNTIME_CONFIG_ENV,
+            },
+            "candidate_only": True,
+            "formal_ready": False,
+            "formal_credit": False,
+            "broker_execution": False,
+            "writes_market_database": False,
+        }
+    if runtime_config is not None and runtime_config.get("activation_status") != "active":
+        return {
+            "schema_version": PAPER_EXECUTION_SCHEMA_VERSION,
+            "producer": "scripts.scheduled.run_paper_execution_daily_isolated",
+            "observed_at": observed.isoformat(),
+            "status": "waiting_for_runtime_config",
+            "blockers": [
+                "runtime_config_waiting_for_activation:"
+                f"{runtime_config.get('activation_trading_day')}"
+            ],
+            "runtime_config": runtime_config,
+            "candidate_only": True,
+            "formal_ready": False,
+            "formal_credit": False,
+            "broker_execution": False,
+            "writes_market_database": False,
+        }
+    try:
+        _validate_runtime_paper_paths(runtime_config)
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        return {
+            "schema_version": PAPER_EXECUTION_SCHEMA_VERSION,
+            "producer": "scripts.scheduled.run_paper_execution_daily_isolated",
+            "observed_at": observed.isoformat(),
+            "status": "blocked",
+            "blockers": [
+                f"runtime_config_canonical_paper_path_failed:{type(error).__name__}:{error}"
+            ],
+            "runtime_config": runtime_config,
+            "candidate_only": True,
+            "formal_ready": False,
+            "formal_consumer_compatible": False,
+            "formal_credit": False,
+            "broker_execution": False,
+            "writes_market_database": False,
+        }
     scope_manifest_path, scope_manifest_file_hash = _write_or_verify_scope_manifest()
-    paths = _paths()
+    sector_resolution = _resolve_pit_sector_manifest(observed)
+    paths = _paths(observed, sector_resolution=sector_resolution)
     try:
         source_observation = _scope_preflight()
     except (OSError, RuntimeError, sqlite3.Error, ValueError) as error:
@@ -593,6 +1007,7 @@ def run_isolated() -> dict[str, object]:
             scope_manifest_path=scope_manifest_path,
             scope_manifest_file_hash=scope_manifest_file_hash,
         )
+    source_observation["sector_membership_source"] = sector_resolution[2]
     calendar_refresh = _refresh_calendar_cache(observed)
     temporary_closure_refresh = _refresh_temporary_closure_events(observed)
     refresh_receipt_path = _write_calendar_refresh_receipt(
@@ -608,6 +1023,14 @@ def run_isolated() -> dict[str, object]:
         "path": str(refresh_receipt_path),
         "file_sha256": _file_hash(refresh_receipt_path),
     }
+    source_observation["formal_runtime_config"] = (
+        runtime_config
+        if runtime_config is not None
+        else {
+            "status": "absent",
+            "environment_variable": FORMAL_RUNTIME_CONFIG_ENV,
+        }
+    )
     calendar = OfficialTradingCalendar(
         db_path=MARKET_DB,
         calendar_cache_path=_calendar_cache_root(),
@@ -617,11 +1040,20 @@ def run_isolated() -> dict[str, object]:
         paths,
         recommendation_root=RECOMMENDATION_ROOT,
         receipt_root=RECEIPT_ROOT,
+        now=observed,
         calendar=calendar,
         confirm_append=True,
+        persist_receipt=False,
+    )
+    result = _bind_paper_result_to_event_capture(result, observed=observed)
+    persisted_result = persist_operational_receipt(
+        result,
+        RECEIPT_ROOT,
+        observed=observed,
     )
     return {
-        **result,
+        **persisted_result,
+        "runtime_config": runtime_config,
         "isolated_scope": {
             "scope_manifest_path": str(scope_manifest_path),
             "scope_manifest_file_hash": scope_manifest_file_hash,
@@ -630,6 +1062,7 @@ def run_isolated() -> dict[str, object]:
             "append_target_is_d_source": False,
             "repository_state_db": str(_resolved(STATE_DB)),
             "source_state_db": str(_resolved(SOURCE_STATE_DB)),
+            "event_capture_root": str(_resolved(EVENT_CAPTURE_ROOT)),
             "repository_state_read_mode": "sqlite_uri_mode_ro_and_query_only",
             "environment_path_overrides_ignored": True,
             "formal_credit": False,

@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from data_module import portfolio_ml_dataset_assembler as assembler_module
 from data_module.ml_pit_year_shard_exporter import (
     PITYearShardBuildRequest,
     PITYearShardExporter,
@@ -26,6 +27,7 @@ from data_module.portfolio_ml_dataset_assembler import (
     _CurrentFeatureCache,
     _Label,
     _advance_current_features,
+    _base_feature_definitions,
     _build_cash_only_portfolio_state_replay,
     _build_label_spool,
     _current_values,
@@ -178,6 +180,30 @@ def _raw_publication(tmp_path: Path):
         PITYearShardBuildRequest(
             database_path=database,
             output_root=tmp_path / "raw",
+            decision_at="2024-09-01T08:30:00+08:00",
+            history_start_date="2024-01-01",
+            symbols=None,
+            years=(2024,),
+            batch_size=31,
+        )
+    )
+
+
+def _raw_publication_with_partial_price_gap(tmp_path: Path):
+    database = tmp_path / "source-partial-gap.db"
+    _database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            UPDATE daily_prices
+            SET 最高價=NULL
+            WHERE 日期='20240110' AND 證券代號='2330'
+            """
+        )
+    return PITYearShardExporter().build(
+        PITYearShardBuildRequest(
+            database_path=database,
+            output_root=tmp_path / "raw-partial-gap",
             decision_at="2024-09-01T08:30:00+08:00",
             history_start_date="2024-01-01",
             symbols=None,
@@ -609,6 +635,161 @@ def test_assembler_emits_direct_training_jsonl_with_strict_pit_and_folds(
         blocker.startswith("actual_db_dataset_assembly_not_performed")
         for blocker in trained["blockers"]
     )
+
+
+def test_assembler_consumes_shard_price_contract_without_bridging_labels(
+    tmp_path: Path,
+) -> None:
+    raw = _raw_publication_with_partial_price_gap(tmp_path)
+    raw_manifest = json.loads(
+        raw.dataset_manifest_paths["all_field_enriched"].read_text(
+            encoding="utf-8"
+        )
+    )
+    raw_shard = (
+        raw.dataset_manifest_paths["all_field_enriched"].parent.parent
+        / raw_manifest["shards"][0]["path"]
+    )
+    raw_rows = _records(raw_shard)
+    source_row = next(
+        row
+        for row in raw_rows
+        if row["source_table"] == "daily_prices"
+        and row["entity_id"] == "2330"
+        and row["event_at"].startswith("2024-01-10")
+        and "price_availability_contract" in row
+    )
+    assert source_row["price_availability_contract"]["status"] == (
+        "price_unavailable"
+    )
+
+    publication = PortfolioMLDatasetAssembler().build(
+        PortfolioMLDatasetAssemblyRequest(
+            dataset_manifest_path=raw.dataset_manifest_paths[
+                "all_field_enriched"
+            ],
+            output_root=tmp_path / "training-partial-gap",
+            training_as_of="2024-09-01T08:30:00+08:00",
+            benchmark_entity_id="TAIEX",
+            minimum_train_dates=65,
+            test_date_count=21,
+            purge_trading_days=60,
+            embargo_trading_days=5,
+            batch_size=29,
+        )
+    )
+    manifest = json.loads(
+        publication.manifest_path.read_text(encoding="utf-8")
+    )
+    assert manifest["price_availability"]["gap_count"] == 1
+    assert manifest["price_availability"]["formal_training_allowed"] is False
+    assert manifest["safety"]["price_availability_contract_verified"] is True
+    assert manifest["safety"]["price_gap_horizons_are_not_bridged"] is True
+
+    records = _records(publication.shard_paths[0])
+    samples = [
+        record["sample"]
+        for record in records
+        if record["record_type"] == "sample"
+        and record["sample"]["row"]["symbol"] == "2330"
+    ]
+    decisions = {
+        sample["row"]["decision_at"][:10]
+        for sample in samples
+    }
+    assert not decisions.intersection(
+        {f"2024-01-{day:02d}" for day in range(6, 11)}
+    )
+    resumed = next(
+        sample
+        for sample in samples
+        if sample["row"]["decision_at"].startswith("2024-01-11")
+    )
+    feature_by_id = {
+        feature["feature_id"]: feature
+        for feature in resumed["row"]["features"]
+    }
+    # The assembler consumes the partial shard row at the T-1 feature cutoff,
+    # preserving the missing field instead of filling it from an older day.
+    assert feature_by_id["daily_prices.最高價"]["observed"] is False
+    assert feature_by_id["daily_prices.最高價"]["value_int"] is None
+    assert {label["horizon_trading_days"] for label in resumed["horizon_labels"]} == {
+        5,
+        10,
+        20,
+        60,
+    }
+
+
+def test_assembler_rejects_research_only_raw_source_quality(
+    tmp_path: Path,
+) -> None:
+    raw = _raw_publication(tmp_path)
+    manifest_path = raw.dataset_manifest_paths["all_field_enriched"]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["source_quality"] = {
+        "research_only": True,
+        "formal_training_allowed": False,
+    }
+    manifest.pop("manifest_hash")
+    manifest["manifest_hash"] = _manifest_hash(manifest)
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    request = PortfolioMLDatasetAssemblyRequest(
+        dataset_manifest_path=manifest_path,
+        output_root=tmp_path / "training-research-only",
+        training_as_of="2024-09-01T08:30:00+08:00",
+        benchmark_entity_id="TAIEX",
+        minimum_train_dates=65,
+        test_date_count=21,
+        purge_trading_days=60,
+        embargo_trading_days=5,
+    )
+
+    with pytest.raises(ValueError, match="research-only"):
+        PortfolioMLDatasetAssembler().build(request)
+
+
+def test_training_loader_rejects_research_only_source_quality(
+    tmp_path: Path,
+) -> None:
+    raw = _raw_publication(tmp_path)
+    publication = PortfolioMLDatasetAssembler().build(
+        PortfolioMLDatasetAssemblyRequest(
+            dataset_manifest_path=raw.dataset_manifest_paths[
+                "all_field_enriched"
+            ],
+            output_root=tmp_path / "training-loader-research-only",
+            training_as_of="2024-09-01T08:30:00+08:00",
+            benchmark_entity_id="TAIEX",
+            minimum_train_dates=65,
+            test_date_count=21,
+            purge_trading_days=60,
+            embargo_trading_days=5,
+        )
+    )
+    shard_path = publication.shard_paths[0]
+    records = _records(shard_path)
+    records[0]["source_quality"] = {
+        "research_only": True,
+        "formal_training_allowed": False,
+    }
+    with gzip.open(shard_path, "wt", encoding="utf-8", newline="\n") as stream:
+        for record in records:
+            stream.write(
+                json.dumps(
+                    record,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+
+    with pytest.raises(ValueError, match="research-only"):
+        _load_frozen_shard(shard_path)
 
 
 def test_corporate_action_manifest_binds_identity_and_excludes_samples(
@@ -1055,6 +1236,103 @@ def test_label_spool_progress_callback_reports_persisted_batches() -> None:
     _horizon_poison_labels(progress_events=events, batch_size=1)
 
     assert "label_spool_labels_batch_written" in events
+
+
+def test_raw_spool_progress_callback_reports_time_interval(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.fixtures.portfolio_ml_ooc_support import _long_raw_publication
+
+    raw = _long_raw_publication(tmp_path)
+    raw_manifest_path = raw.dataset_manifest_paths["all_field_enriched"]
+    manifest = json.loads(raw_manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest, dict)
+    events: list[str] = []
+    monotonic_value = 0
+
+    def fake_monotonic_ns() -> int:
+        nonlocal monotonic_value
+        monotonic_value += 1
+        return monotonic_value
+
+    # This test isolates assembler telemetry; Direct tests keep the
+    # production constants so its dependency fingerprint remains meaningful.
+    monkeypatch.setattr(
+        assembler_module,
+        "_RAW_SPOOL_PROGRESS_INTERVAL",
+        1_000_000,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "_RAW_SPOOL_PROGRESS_CHECK_INTERVAL",
+        64,
+    )
+    monkeypatch.setattr(
+        assembler_module,
+        "_RAW_SPOOL_PROGRESS_MAX_SILENCE_NS",
+        1,
+    )
+    monkeypatch.setattr(assembler_module, "monotonic_ns", fake_monotonic_ns)
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    try:
+        _initialize_spool(connection)
+        raw_rows, raw_values = assembler_module.PortfolioMLDatasetAssembler()._spool_raw_observations(
+            connection=connection,
+            dataset_manifest_path=raw_manifest_path,
+            manifest=manifest,
+            definitions=_base_feature_definitions(manifest),
+            source_digest=hashlib.sha256(),
+            batch_size=61,
+            progress_callback=events.append,
+        )
+    finally:
+        connection.close()
+
+    assert raw_rows > 0
+    assert raw_values > 0
+    assert any(event.endswith("rows_64_processed") for event in events)
+
+
+def test_assembly_progress_callback_reports_same_decision_multiple_samples(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.fixtures.portfolio_ml_ooc_support import _long_raw_publication
+
+    raw = _long_raw_publication(tmp_path)
+    events: list[str] = []
+    monkeypatch.setattr(assembler_module, "_ASSEMBLY_PROGRESS_INTERVAL", 1)
+    publication = PortfolioMLDatasetAssembler().build(
+        PortfolioMLDatasetAssemblyRequest(
+            dataset_manifest_path=(
+                raw.dataset_manifest_paths["all_field_enriched"]
+            ),
+            output_root=tmp_path / "training",
+            training_as_of="2026-04-01T08:30:00+08:00",
+            benchmark_entity_id="TAIEX",
+            minimum_train_dates=65,
+            test_date_count=65,
+            purge_trading_days=60,
+            embargo_trading_days=5,
+            batch_size=29,
+            capacity_callback=events.append,
+        )
+    )
+
+    assert publication.sample_count > 0
+    assembly_events = [
+        event
+        for event in events
+        if event.startswith("assembly_decision_")
+    ]
+    decision_dates = [
+        event.removeprefix("assembly_decision_").split("_rows_", 1)[0]
+        for event in assembly_events
+    ]
+    assert len(assembly_events) > len(set(decision_dates))
+    assert "assembly_samples_complete" in events
 
 
 def test_later_horizon_gap_does_not_discard_valid_short_horizon_label() -> None:

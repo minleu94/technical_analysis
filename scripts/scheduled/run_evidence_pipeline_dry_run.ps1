@@ -4,7 +4,12 @@ param(
     [string]$DataRoot = $env:DATA_ROOT,
     [string]$OutputRoot = $env:OUTPUT_ROOT,
     [string]$DbPath = "",
-    [string]$Sources = "all"
+    [string]$Sources = "all",
+    [string]$PaperEvidenceOperationRoot = "",
+    [string]$PaperEvidenceLedgerDb = "",
+    [string]$PaperEvidenceHealthStatusPath = "",
+    [string]$PaperEvidenceHealthBaseline = "",
+    [string]$PaperEvidenceStatusPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +22,21 @@ if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
 }
 if ([string]::IsNullOrWhiteSpace($DbPath)) {
     $DbPath = Join-Path $DataRoot "sqlite\twstock.db"
+}
+if ([string]::IsNullOrWhiteSpace($PaperEvidenceOperationRoot)) {
+    $PaperEvidenceOperationRoot = Join-Path $RepoRoot "output\paper_execution_eod_replay"
+}
+if ([string]::IsNullOrWhiteSpace($PaperEvidenceHealthBaseline)) {
+    $PaperEvidenceHealthBaseline = Join-Path $OutputRoot "position_health\latest.json"
+}
+if ([string]::IsNullOrWhiteSpace($PaperEvidenceLedgerDb)) {
+    $PaperEvidenceLedgerDb = Join-Path $PaperEvidenceOperationRoot "paper_trade_ledger.sqlite"
+}
+if ([string]::IsNullOrWhiteSpace($PaperEvidenceHealthStatusPath)) {
+    $PaperEvidenceHealthStatusPath = Join-Path $PaperEvidenceOperationRoot "scheduled\paper_portfolio_isolated\latest_status.json"
+}
+if ([string]::IsNullOrWhiteSpace($PaperEvidenceStatusPath)) {
+    $PaperEvidenceStatusPath = Join-Path $PaperEvidenceOperationRoot "scheduled\paper_portfolio_daily\latest_status.json"
 }
 
 $RunRoot = Join-Path $OutputRoot "scheduled\evidence_pipeline_dry_run"
@@ -53,7 +73,13 @@ $Args = @(
     "--output-root", $OutputRoot,
     "--sources", $Sources,
     "--report-output", $ReportPath,
-    "--json-output"
+    "--json-output",
+    "--refresh-paper-health",
+    "--paper-evidence-operation-root", $PaperEvidenceOperationRoot,
+    "--paper-evidence-ledger-db", $PaperEvidenceLedgerDb,
+    "--paper-evidence-health-status-path", $PaperEvidenceHealthStatusPath,
+    "--paper-evidence-health-baseline", $PaperEvidenceHealthBaseline,
+    "--paper-evidence-status-path", $PaperEvidenceStatusPath
 )
 
 $Output = & $Python @Args 2>&1

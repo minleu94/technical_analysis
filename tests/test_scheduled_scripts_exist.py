@@ -17,6 +17,10 @@ REQUIRED_FILES = (
     "run_daily_data_freshness_check.ps1",
     "run_evidence_pipeline_dry_run.ps1",
     "run_evidence_working_copy_smoke.ps1",
+    "paper_execution_dependency_gate.py",
+    "paper_execution_retry_runner.py",
+    "register_paper_execution_task.cmd",
+    "register_pit_sector_handoff_tasks.cmd",
     "register_baldr_scheduled_tasks.ps1",
     "unregister_baldr_scheduled_tasks.ps1",
     "README.md",
@@ -48,8 +52,14 @@ def test_register_and_unregister_support_dry_run_modes() -> None:
     assert "baldr-ml-allocation-copilot-daily" in register_text
     assert "baldr-decision-evidence-capture-daily" in register_text
     assert "baldr-paper-portfolio-daily" in register_text
+    assert "baldr-paper-execution-eod-replay-daily" in register_text
+    assert "baldr-pit-sector-membership-preopen-capture-daily" in register_text
+    assert "baldr-formal-pit-sidecar-postcutoff-daily" in register_text
     assert "baldr-v2-2-weekly-collection" in register_text
     assert "baldr-official-market-events-daily" in unregister_text
+    assert "baldr-paper-execution-eod-replay-daily" in unregister_text
+    assert "baldr-pit-sector-membership-preopen-capture-daily" in unregister_text
+    assert "baldr-formal-pit-sidecar-postcutoff-daily" in unregister_text
     assert "baldr-ml-raw-pit-refresh-daily" in unregister_text
     assert "baldr-ml-promotion-evidence-daily" in unregister_text
     assert "baldr-ml-promotion-authority-daily" in unregister_text

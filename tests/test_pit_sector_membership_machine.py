@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -87,6 +87,30 @@ def test_machine_pit_producer_rebuilds_official_raw_and_writes_receipt(
     assert consumed["candidate_only"] is True
     assert consumed["formal_consumer_compatible"] is False
     assert consumed["formal_oos_allowed"] is False
+
+
+def test_machine_pit_readback_accepts_capture_before_taipei_midnight(
+    tmp_path: Path,
+) -> None:
+    """Readback after Taipei midnight keeps the immutable capture-day identity."""
+
+    captured_at = datetime(2026, 9, 8, 15, 0, tzinfo=timezone.utc)
+    output = tmp_path / "publication"
+    output.mkdir()
+    publication = build_machine_pit_publication(
+        raw_payloads=_raw_payloads(),
+        output_dir=output,
+        captured_at=captured_at,
+        now=captured_at + timedelta(seconds=1),
+    )
+
+    validation = validate_machine_pit_publication(
+        publication.publication_path,
+        now=datetime(2026, 9, 8, 16, 0, tzinfo=timezone.utc),
+    )
+
+    assert validation.effective_from == "2026-09-08"
+    assert datetime.fromisoformat(validation.captured_at) == captured_at
 
 
 def test_machine_pit_consumer_rejects_tampered_raw_custody(tmp_path: Path) -> None:

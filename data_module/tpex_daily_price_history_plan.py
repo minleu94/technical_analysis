@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 import sqlite3
 from typing import Callable, Mapping, Any
 
 from data_module.tpex_daily_price_backfill import normalize_tpex_daily_price_rows
+from data_module.official_trading_calendar import OfficialTradingCalendar
 
 
 @dataclass(frozen=True)
@@ -48,9 +49,10 @@ def build_tpex_daily_price_history_plan(
     end_date: str,
     fetch_rows_for_date: Callable[[str], list[Mapping[str, Any]]],
     delay_seconds: int = 4,
+    calendar: OfficialTradingCalendar | None = None,
 ) -> TpexDailyPriceHistoryPlan:
     db_file = Path(db_file)
-    date_keys = tuple(_iter_weekday_date_keys(start_date, end_date))
+    date_keys = tuple(_iter_weekday_date_keys(start_date, end_date, calendar=calendar, db_file=db_file))
     source_row_count = 0
     existing_count = 0
     candidate_insert_count = 0
@@ -95,18 +97,38 @@ def build_tpex_daily_price_history_plan(
     )
 
 
-def _iter_weekday_date_keys(start_date: str, end_date: str) -> list[str]:
+def _iter_weekday_date_keys(
+    start_date: str,
+    end_date: str,
+    *,
+    calendar: OfficialTradingCalendar | None = None,
+    db_file: Path | None = None,
+) -> list[str]:
+    """Compatibility name backed by the shared official calendar."""
+
     start = datetime.strptime(_date_key(start_date), "%Y%m%d")
     end = datetime.strptime(_date_key(end_date), "%Y%m%d")
     if start > end:
         raise ValueError("start_date must be <= end_date")
-    values: list[str] = []
-    current = start
-    while current <= end:
-        if current.weekday() < 5:
-            values.append(current.strftime("%Y%m%d"))
-        current += timedelta(days=1)
-    return values
+    resolver = calendar or OfficialTradingCalendar(
+        db_path=db_file,
+        calendar_cache_path=(
+            Path(__file__).resolve().parents[1]
+            / "output"
+            / "paper_execution_eod_replay"
+            / "calendar_cache"
+        ),
+    )
+    records = resolver.require_trading_days_in_range(
+        start.date(),
+        end.date(),
+        allow_online_probe=True,
+    )
+    return [
+        str(record["date_str"]).replace("-", "")
+        for record in records
+        if record.get("is_trading_day") is True
+    ]
 
 
 def _date_key(value: str) -> str:

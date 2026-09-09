@@ -341,6 +341,33 @@ def test_formal_runner_defaults_to_isolated_paper_ledger_path(
     assert "FA_Data" not in str(paths.paper_trade_ledger_db_path)
 
 
+def test_pinned_portfolio_clock_path_is_stable_across_natural_days(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """daily Rule source may roll, while the cumulative portfolio clock stays pinned."""
+
+    pinned = tmp_path / "clock_candidate_archive" / "2026-09-09" / "clock" / "manifest.json"
+    pinned.parent.mkdir(parents=True)
+    pinned.write_text("pinned clock", encoding="utf-8")
+    monkeypatch.setenv("FORMAL_DAILY_PORTFOLIO_CLOCK_MANIFEST", str(pinned))
+
+    first = runner._build_paths(
+        source_paths={},
+        publication_root=tmp_path / "publication",
+        observed=datetime(2026, 9, 9, 4, 25, tzinfo=timezone.utc),
+    )
+    second = runner._build_paths(
+        source_paths={},
+        publication_root=tmp_path / "publication",
+        observed=datetime(2026, 9, 10, 4, 25, tzinfo=timezone.utc),
+    )
+
+    assert first.portfolio_clock_manifest == pinned.resolve()
+    assert second.portfolio_clock_manifest == pinned.resolve()
+    assert first.portfolio_clock_manifest == second.portfolio_clock_manifest
+
+
 def test_configured_candidate_parents_create_unique_empty_roots_each_run(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

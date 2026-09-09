@@ -14,11 +14,20 @@ from data_module.ml_storage_capacity import (
     acquire_heavy_chain_reservation,
     release_heavy_chain_reservation,
 )
+from data_module.pit_sector_machine_publisher import (
+    consume_machine_pit_operational_candidate,
+    publish_machine_pit_operational_candidate,
+)
+from data_module.pit_sector_membership_machine import (
+    build_machine_pit_publication,
+    write_machine_pit_receipt,
+)
 from scripts import run_daily_ml_allocation_derived_shadow as shadow
 
 
 TAIPEI = ZoneInfo("Asia/Taipei")
 DECISION_AT = datetime(2026, 7, 31, 8, 30, tzinfo=TAIPEI)
+MACHINE_DECISION_AT = DECISION_AT.astimezone(ZoneInfo("UTC"))
 
 
 class _Calendar:
@@ -113,6 +122,69 @@ def _release_evidence_fixture(release: SimpleNamespace) -> dict[str, object]:
     }
 
 
+def _machine_operational_candidate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """建立真正由 controlled publisher 簽章的 current-day candidate。"""
+
+    monkeypatch.setenv(
+        "RULE_CHAMPION_CONTROLLED_STORE_HMAC_KEY",
+        "test-controlled-key",
+    )
+    monkeypatch.setenv(
+        "RULE_CHAMPION_CONTROLLED_STORE_ID",
+        "machine-pit-wrapper-test-store",
+    )
+    machine_output = tmp_path / "machine"
+    machine_output.mkdir()
+    publication = build_machine_pit_publication(
+        raw_payloads={
+            "twse": json.dumps(
+                [
+                    {
+                        "公司代號": "1101",
+                        "產業別": "01",
+                        "出表日期": "20260731",
+                    }
+                ],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+            "tpex": json.dumps(
+                [
+                    {
+                        "SecuritiesCompanyCode": "5501",
+                        "SecuritiesIndustryCode": "03",
+                        "Date": "2026-07-31",
+                    }
+                ],
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8"),
+        },
+        output_dir=machine_output,
+        captured_at=datetime(2026, 7, 31, 0, 0, tzinfo=ZoneInfo("UTC")),
+        now=datetime(2026, 7, 31, 0, 10, tzinfo=ZoneInfo("UTC")),
+    )
+    receipt_path = tmp_path / "machine-receipt.json"
+    write_machine_pit_receipt(
+        publication.publication_path,
+        receipt_path=receipt_path,
+        now=datetime(2026, 7, 31, 0, 20, tzinfo=ZoneInfo("UTC")),
+    )
+    operational_path = tmp_path / "machine-operational.json"
+    publish_machine_pit_operational_candidate(
+        receipt_path,
+        output_path=operational_path,
+        decision_at=MACHINE_DECISION_AT,
+        now=datetime(2026, 7, 31, 0, 40, tzinfo=ZoneInfo("UTC")),
+    )
+    return operational_path
+
+
 def test_release_receipt_preserves_first_observation_across_capture_times(
     tmp_path: Path,
 ) -> None:
@@ -165,8 +237,10 @@ def test_forward_late_capture_is_blocked_before_daily_consumer(
     release = _release_fixture(tmp_path)
     database = tmp_path / "twstock.db"
     paper = tmp_path / "paper.sqlite"
+    late_machine_path = tmp_path / "late-machine-operational.json"
     database.write_bytes(b"readonly-db")
     paper.write_bytes(b"readonly-paper")
+    late_machine_path.write_bytes(b"candidate-arrived-after-window")
     monkeypatch.setattr(shadow, "preflight_capacity", lambda **_: _preflight())
     monkeypatch.setattr(
         shadow.AllocationReleaseAdapter,
@@ -198,6 +272,7 @@ def test_forward_late_capture_is_blocked_before_daily_consumer(
                 date(2026, 7, 30): (True, "open"),
             }
         ),
+        pit_machine_operational_path=late_machine_path,
         lock_path=tmp_path / "shared.lock",
     )
 
@@ -221,6 +296,7 @@ def test_research_capture_delegates_with_bounded_budget_and_rule_comparison(
     database.write_bytes(b"readonly-db")
     paper.write_bytes(b"readonly-paper")
     output_root = tmp_path / "output"
+    machine_path = _machine_operational_candidate(tmp_path, monkeypatch)
     observation_path = (
         output_root
         / "scheduled"
@@ -284,6 +360,12 @@ def test_research_capture_delegates_with_bounded_budget_and_rule_comparison(
 
     def fake_daily_run(**kwargs: Any) -> dict[str, object]:
         captured.update(kwargs)
+        machine_readback = consume_machine_pit_operational_candidate(
+            Path(kwargs["pit_machine_operational_path"]),
+            decision_at=kwargs["decision_at"],
+            now=kwargs["decision_at"],
+        )
+        captured["machine_readback"] = machine_readback
         return {
             "status": "passed_rule_only",
             "orchestration_status": "completed",
@@ -309,6 +391,7 @@ def test_research_capture_delegates_with_bounded_budget_and_rule_comparison(
                 date(2026, 7, 30): (True, "open"),
             }
         ),
+        pit_machine_operational_path=machine_path,
         lock_path=tmp_path / "shared.lock",
     )
 
@@ -328,6 +411,14 @@ def test_research_capture_delegates_with_bounded_budget_and_rule_comparison(
     assert cast(dict[str, Any], cost_performance["equal_weight_comparison"])[
         "status"
     ] == "deferred"
+    assert captured["pit_machine_operational_path"] == machine_path.resolve()
+    machine_readback = cast(dict[str, Any], captured["machine_readback"])
+    assert machine_readback["status"] == "machine_verified"
+    assert machine_readback["available_at"] == "2026-07-31T00:00:00+00:00"
+    assert machine_readback["effective_from"] == "2026-07-31"
+    assert machine_readback["candidate_only"] is True
+    assert machine_readback["formal_oos_allowed"] is False
+    assert machine_readback["production_action_allowed"] is False
     budget = captured["capacity_budget"]
     assert isinstance(budget, MLStorageCapacityBudget)
     assert budget.persistent_new_bytes_budget is not None
@@ -349,6 +440,79 @@ def test_research_capture_delegates_with_bounded_budget_and_rule_comparison(
     recovered = acquire_heavy_chain_reservation(tmp_path / "shared.lock")
     assert recovered is not None
     release_heavy_chain_reservation(recovered)
+
+
+def test_research_capture_forwards_exact_archive_contract_to_daily(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release = _release_fixture(tmp_path)
+    database = tmp_path / "twstock.db"
+    paper = tmp_path / "paper.sqlite"
+    database.write_bytes(b"readonly-db")
+    paper.write_bytes(b"readonly-paper")
+    output_root = tmp_path / "output"
+    archive_root = tmp_path / "pit_candidate_archive"
+    archive_root.mkdir()
+    manifest = archive_root / "2026-07-30" / "archive-key" / "archive_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("frozen-manifest", encoding="utf-8")
+    frozen_hash = shadow._file_hash(manifest)
+    monkeypatch.setattr(shadow, "preflight_capacity", lambda **_: _preflight())
+    monkeypatch.setattr(
+        shadow.AllocationReleaseAdapter,
+        "load",
+        lambda _self, _root: release,
+    )
+    monkeypatch.setattr(
+        shadow,
+        "_release_evidence",
+        lambda **_: _release_evidence_fixture(release),
+    )
+    monkeypatch.setattr(
+        shadow,
+        "_source_date_evidence",
+        lambda **_: {"status": "completed", "strict_t_minus_one_rows_by_symbol": {}},
+    )
+    captured: dict[str, Any] = {}
+
+    def fake_daily_run(**kwargs: Any) -> dict[str, object]:
+        captured.update(kwargs)
+        return {
+            "status": "passed_rule_only",
+            "orchestration_status": "completed",
+            "shadow_observation_recorded": True,
+            "strict_t_minus_one": "2026-07-30",
+            "production_blend_alpha_bp": 0,
+            "formal_oos_allowed": False,
+            "broker_order_allowed": False,
+        }
+
+    monkeypatch.setattr(shadow.daily, "run", fake_daily_run)
+    result = shadow.run(
+        database_path=database,
+        output_root=output_root,
+        release_root=release.release_root,
+        paper_state_db_path=paper,
+        mode=shadow.RESEARCH_MODE,
+        now=datetime(2026, 7, 31, 10, 0, tzinfo=TAIPEI),
+        calendar=_Calendar(
+            {
+                date(2026, 7, 31): (True, "open"),
+                date(2026, 7, 30): (True, "open"),
+            }
+        ),
+        pit_machine_archive_root=archive_root,
+        pit_machine_archive_manifest=manifest,
+        pit_machine_archive_manifest_file_hash=frozen_hash,
+        lock_path=tmp_path / "shared.lock",
+    )
+
+    assert cast(dict[str, Any], result)["status"] == "completed"
+    assert captured["pit_machine_operational_path"] is None
+    assert captured["pit_machine_archive_root"] == archive_root.resolve()
+    assert captured["pit_machine_archive_manifest"] == manifest.resolve()
+    assert captured["pit_machine_archive_manifest_file_hash"] == frozen_hash
 
 
 def test_missing_paper_input_is_persisted_without_daily_call(
@@ -394,3 +558,30 @@ def test_missing_paper_input_is_persisted_without_daily_call(
     assert payload["status"] == "blocked_missing_input"
     assert "paper_state_db" in cast(list[str], payload["missing_inputs"])
     assert Path(str(payload["record_path"])).is_file()
+
+
+def test_main_preserves_outer_block_when_inner_orchestration_completed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        shadow,
+        "run",
+        lambda **_: {
+            "status": "blocked_capacity_post_run",
+            "daily_orchestration": {
+                "status": "passed_rule_only",
+                "orchestration_status": "completed",
+                "natural_forward_completion_clock": {
+                    "within_forward_completion_window": True,
+                },
+            },
+        },
+    )
+
+    assert shadow.main([]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "blocked_capacity_post_run"
+    assert payload["daily_orchestration"]["orchestration_status"] == (
+        "completed"
+    )

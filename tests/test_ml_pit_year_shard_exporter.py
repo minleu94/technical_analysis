@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import date, timedelta
 import gzip
 import hashlib
@@ -10,6 +11,7 @@ from typing import Any
 
 import pytest
 
+import data_module.ml_pit_year_shard_exporter as exporter_module
 from data_module.ml_pit_year_shard_exporter import (
     PITYearShardBuildRequest,
     PITYearShardExporter,
@@ -158,6 +160,73 @@ def _build_database(path: Path) -> None:
         )
 
 
+def _build_price_gap_database(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE daily_prices (
+                日期 TEXT NOT NULL,
+                證券代號 TEXT NOT NULL,
+                證券名稱 TEXT,
+                成交股數 INTEGER,
+                開盤價 TEXT,
+                最高價 TEXT,
+                最低價 TEXT,
+                收盤價 TEXT
+            )
+            """
+        )
+        rows = (
+            ("20240101", "2330", "台積電", 1000, "100", "101", "99", "100"),
+            ("20240102", "2330", "台積電", 1200, "--", "--", "--", "--"),
+            ("20240103", "2330", "台積電", 1100, "102", "103", "101", "102"),
+        )
+        connection.executemany(
+            "INSERT INTO daily_prices VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows
+        )
+
+
+def _write_price_gap_csv(
+    directory: Path,
+    *,
+    date_key: str,
+    open_value: str,
+    high_value: str,
+    low_value: str,
+    close_value: str,
+    volume: str,
+) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{date_key}.csv"
+    with path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=(
+                "證券代號",
+                "證券名稱",
+                "開盤價",
+                "最高價",
+                "最低價",
+                "收盤價",
+                "成交股數",
+            ),
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "證券代號": "2330",
+                "證券名稱": "台積電",
+                "開盤價": open_value,
+                "最高價": high_value,
+                "最低價": low_value,
+                "收盤價": close_value,
+                "成交股數": volume,
+            }
+        )
+    return path
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -240,6 +309,134 @@ def _assert_no_float(value: object) -> None:
     elif isinstance(value, list):
         for nested in value:
             _assert_no_float(nested)
+
+
+def test_source_quality_exception_allows_only_full_missing_price_count() -> None:
+    allowed = {
+        "candidate_count": 100,
+        "research_price_unavailable_count": 100,
+        "research_price_invalid_count": 0,
+        "classification_counts": {
+            "sqlite_row_invalid_requires_quarantine": 100
+        },
+        # The sample is intentionally truncated; the aggregate count is the
+        # boundary used by the exception.
+        "candidate_sample_count": 64,
+    }
+    assert exporter_module._source_quality_is_price_unavailable_only(allowed)
+
+    invalid_value = dict(allowed)
+    invalid_value["research_price_invalid_count"] = 1
+    assert not exporter_module._source_quality_is_price_unavailable_only(
+        invalid_value
+    )
+    mixed_classifications = dict(allowed)
+    mixed_classifications["classification_counts"] = {
+        "sqlite_row_invalid_requires_quarantine": 99,
+        "sqlite_row_missing_price_against_canonical_daily_csv": 1,
+    }
+    assert not exporter_module._source_quality_is_price_unavailable_only(
+        mixed_classifications
+    )
+
+
+def test_exporter_persists_price_availability_contract_on_raw_observation(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "price_gap.db"
+    _build_price_gap_database(database)
+    publication = PITYearShardExporter().build(
+        PITYearShardBuildRequest(
+            database_path=database,
+            output_root=tmp_path / "shards",
+            decision_at="2024-02-15T08:30:00+08:00",
+            history_start_date="2024-01-01",
+            symbols=("2330",),
+            years=(2024,),
+        )
+    )
+    manifest = _json(publication.dataset_manifest_paths["all_field_enriched"])
+    shard = publication.publication_directory / manifest["shards"][0]["path"]
+    rows = _read_jsonl_gzip(shard)
+    gap_rows = [
+        row
+        for row in rows
+        if row["source_table"] == "daily_prices"
+        and row["event_at"].startswith("2024-01-02")
+    ]
+    assert gap_rows
+    contract = gap_rows[0]["price_availability_contract"]
+    assert contract["status"] == "price_unavailable"
+    assert contract["raw_row"]["open"] == "--"
+    assert contract["missing_mask"] == {
+        "open": True,
+        "high": True,
+        "low": True,
+        "close": True,
+    }
+    assert contract["affected_window"]["horizon_expansion_required"] is True
+    assert contract["affected_window"]["surrounding_rows_may_not_be_bridged"] is True
+    assert contract["disposition"]["zero_fill"] is False
+
+
+def test_exporter_allows_only_identically_missing_canonical_price_row(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "price_gap.db"
+    _build_price_gap_database(database)
+    source_root = tmp_path / "daily_price"
+    _write_price_gap_csv(
+        source_root,
+        date_key="20240101",
+        open_value="100",
+        high_value="101",
+        low_value="99",
+        close_value="100",
+        volume="1,000",
+    )
+    _write_price_gap_csv(
+        source_root,
+        date_key="20240102",
+        open_value="--",
+        high_value="--",
+        low_value="--",
+        close_value="--",
+        volume="1,200",
+    )
+    _write_price_gap_csv(
+        source_root,
+        date_key="20240103",
+        open_value="102",
+        high_value="103",
+        low_value="101",
+        close_value="102",
+        volume="1,100",
+    )
+    source_quality_report = tmp_path.parent / "price_gap_source_quality.json"
+
+    publication = PITYearShardExporter().build(
+        PITYearShardBuildRequest(
+            database_path=database,
+            output_root=tmp_path / "shards",
+            decision_at="2024-02-15T08:30:00+08:00",
+            history_start_date="2024-01-01",
+            symbols=("2330",),
+            years=(2024,),
+            daily_price_source_dir=source_root,
+            source_quality_report_path=source_quality_report,
+        )
+    )
+
+    manifest = _json(publication.manifest_path)
+    assert manifest["source_quality"]["research_only"] is True
+    assert manifest["source_quality"]["candidate_count"] == 1
+    assert manifest["source_quality"]["research_price_unavailable_count"] == 1
+    child_manifest = _json(
+        publication.dataset_manifest_paths["all_field_enriched"]
+    )
+    assert child_manifest["source_quality"]["research_only"] is True
+    assert child_manifest["source_quality"]["formal_training_allowed"] is False
+    assert source_quality_report.is_file()
 
 
 def test_exporter_streams_bounded_formal_and_shadow_shards_without_db_write(
@@ -414,6 +611,63 @@ def test_atr_adx_are_causally_recomputed_from_ordered_prefix_and_fail_closed(
     assert atr_feature["source_id"] == "derived:daily_prices.ohlc"
     assert atr_feature["derivation_policy"]["warmup_fail_closed"] is True
     assert atr_feature["derivation_policy"]["raw_null_or_existing_value_used"] is False
+
+
+def test_missing_technical_input_resets_prefix_state_before_later_rows(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = tmp_path / "source.db"
+    _build_database(database)
+    original_selector = exporter_module._select_technical_input
+
+    def selector_with_middle_gap(
+        *, row: sqlite3.Row, input_groups: tuple[tuple[str, str, str], ...]
+    ) -> tuple[tuple[str, str, str], object, object, object] | None:
+        if str(row["__event_at"]).replace("-", "").startswith("20240115"):
+            return None
+        return original_selector(row=row, input_groups=input_groups)
+
+    monkeypatch.setattr(
+        exporter_module, "_select_technical_input", selector_with_middle_gap
+    )
+    publication = PITYearShardExporter().build(
+        PITYearShardBuildRequest(
+            database_path=database,
+            output_root=tmp_path / "shards",
+            decision_at="2024-02-15T08:30:00+08:00",
+            history_start_date="2024-01-01",
+            symbols=("2330",),
+            years=(2024,),
+            batch_size=2,
+        )
+    )
+    enriched_manifest = _json(
+        publication.dataset_manifest_paths["all_field_enriched"]
+    )
+    shard_path = (
+        publication.publication_directory
+        / enriched_manifest["shards"][0]["path"]
+    )
+    rows = [
+        row
+        for row in _read_jsonl_gzip(shard_path)
+        if row["source_table"] == "daily_prices"
+        and row["source_id"] == "derived:daily_prices.ohlc"
+    ]
+    atr_by_date = {
+        row["event_at"][:10]: next(
+            value
+            for value in row["values"]
+            if value["feature_id"] == "technical_indicators.ATR"
+        )
+        for row in rows
+    }
+
+    assert atr_by_date["2024-01-14"]["value_int"] == 40_000
+    assert atr_by_date["2024-01-15"]["value_int"] is None
+    assert atr_by_date["2024-01-16"]["value_int"] is None
+    assert atr_by_date["2024-01-29"]["value_int"] == 40_000
 
 
 def test_all_universe_and_atomic_replay_keep_old_publication_pointer_safe(

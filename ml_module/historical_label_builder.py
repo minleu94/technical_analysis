@@ -5,11 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_EVEN
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from data_module.ml_historical_snapshot_provider import (
     HistoricalIndexObservation,
     HistoricalPriceObservation,
+)
+from data_module.ml_price_availability_contract import (
+    build_price_unavailable_research_contract,
+    validate_price_unavailable_research_contract,
 )
 from ml_module.historical_contracts import HistoricalFeatureRow, HistoricalLabelRow
 from ml_module.label_registry import CORE_LONG_HISTORY_LABEL_REGISTRY, LabelRegistry
@@ -95,6 +99,7 @@ class HistoricalLabelBuilder:
             tuple[str, str], CorporateActionLabelEligibility
         ],
         mode: Literal["strict", "research"],
+        price_unavailable_contracts: tuple[Mapping[str, Any], ...] = (),
     ) -> HistoricalLabelBuildResult:
         if mode not in {"strict", "research"}:
             raise ValueError("mode must be strict or research")
@@ -104,10 +109,37 @@ class HistoricalLabelBuilder:
             for row in market
             if row.index_name == "market" and row.trading_date <= as_of
         }
+        blocked_price_dates = _validated_price_unavailable_dates(
+            price_unavailable_contracts
+        )
         price_by_symbol: dict[str, dict[str, Decimal | None]] = {}
         for row in prices:
             if row.trading_date <= as_of:
                 price_by_symbol.setdefault(row.symbol, {})[row.trading_date] = row.close_price
+                if any(
+                    value is None
+                    for value in (
+                        row.open_price,
+                        row.high_price,
+                        row.low_price,
+                        row.close_price,
+                    )
+                ):
+                    contract = build_price_unavailable_research_contract(
+                        symbol=row.symbol,
+                        date_iso=row.trading_date,
+                        raw_row={
+                            "symbol": row.symbol,
+                            "open": row.open_price,
+                            "high": row.high_price,
+                            "low": row.low_price,
+                            "close": row.close_price,
+                            "volume": row.volume,
+                        },
+                    )
+                    blocked_price_dates.setdefault(row.symbol, set()).add(
+                        str(contract["date"])
+                    )
         diagnostics: dict[str, int] = {}
         blockers: set[str] = set()
         candidates: list[_Candidate] = []
@@ -124,6 +156,12 @@ class HistoricalLabelBuilder:
                 _increment(diagnostics, "immature_label_window")
                 continue
             window_dates = calendar[:21]
+            if any(
+                trading_date in blocked_price_dates.get(feature.symbol, set())
+                for trading_date in window_dates
+            ):
+                _increment(diagnostics, "price_unavailable_in_label_window")
+                continue
             eligibility = corporate_action_by_row.get(
                 (feature.symbol, feature.decision_date)
             )
@@ -235,3 +273,15 @@ def _return_bp(start: Decimal, end: Decimal) -> int:
 
 def _increment(counts: dict[str, int], key: str) -> None:
     counts[key] = counts.get(key, 0) + 1
+
+
+def _validated_price_unavailable_dates(
+    contracts: tuple[Mapping[str, Any], ...],
+) -> dict[str, set[str]]:
+    blocked: dict[str, set[str]] = {}
+    for contract in contracts:
+        symbol, _anchor_date, affected_dates = (
+            validate_price_unavailable_research_contract(contract)
+        )
+        blocked.setdefault(symbol, set()).update(affected_dates)
+    return blocked

@@ -31,6 +31,7 @@ from data_module.rule_champion_snapshot_service import (
     RuleChampionSnapshotService,
 )
 from development_module.manual_rule_only_decision import (
+    ReadOnlyDailyPriceWindow,
     RULE_POLICY_VERSION,
     RULE_STRATEGY_VERSION,
     TAIPEI_TIME_ZONE,
@@ -86,6 +87,7 @@ def produce_prospective_rule_only_decision(
     owner_acceptance_json: str | Path,
     now: datetime | None = None,
     allow_post_activation: bool = False,
+    source_window: ReadOnlyDailyPriceWindow | None = None,
 ) -> dict[str, object]:
     """Create one real activation-time prospective Rule-only source.
 
@@ -108,10 +110,26 @@ def produce_prospective_rule_only_decision(
             Path(owner_acceptance_json), clock
         )
         symbols = _load_clock_symbols(Path(universe_symbols_json))
-        window = load_read_only_daily_price_window(
-            market_db,
-            decision_session=observed.date(),
-        )
+        # A machine-revalidated v3 Rule bundle carries the exact immutable
+        # T-1 window captured before the session.  The daily consumer must use
+        # those records directly: reopening SQLite here would allow a later
+        # edit to an already-captured row to silently change the decision.
+        # ``None`` deliberately preserves the legacy v2 live revalidation
+        # path; its caller must validate the live window before reaching here.
+        window = source_window
+        if window is None:
+            window = load_read_only_daily_price_window(
+                market_db,
+                decision_session=observed.date(),
+            )
+        elif not isinstance(window, ReadOnlyDailyPriceWindow):
+            raise ProspectiveRuleOnlyDecisionError(
+                "captured_source_window_type_invalid"
+            )
+        if window.data_as_of_date >= observed.date().isoformat():
+            raise ProspectiveRuleOnlyDecisionError(
+                "captured_source_window_not_t_minus_one"
+            )
         max_available = datetime.fromisoformat(window.max_available_timestamp)
         if max_available > observed.astimezone(timezone.utc):
             raise ProspectiveRuleOnlyDecisionError(
